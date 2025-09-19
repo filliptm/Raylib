@@ -1,163 +1,196 @@
-# Raylib Projects
+# Hearthstone Clone - Modular Implementation
 
-This repository contains Raylib projects demonstrating various capabilities from basic graphics to 3D game development.
+A complete Hearthstone-inspired card game built with Raylib in C, featuring a clean modular architecture for easy expansion and maintenance.
 
-## Projects
+## Features
 
-### 1. Hello World (`hello_world.c`)
-A simple introduction to Raylib:
-- Creates an 800x450 pixel window
-- Displays "Hello, Raylib World!" text
-- Draws colorful shapes (circle, rectangle, triangle)
-- Runs at 60 FPS
-- Exits when you press ESC or close the window
+🎮 **Complete Game Mechanics**
+- Turn-based gameplay with proper phases
+- Mana system and resource management  
+- Multiple card types (minions, spells, weapons)
+- Combat system with damage resolution
+- Card keywords (Taunt, Charge, Divine Shield, Battlecry, Deathrattle)
+- Visual effects and animations
+- Win/loss conditions
 
-### 2. 3D Card Game MVP (`card_game_3d.c`)
-A Hearthstone-inspired 3D card game prototype:
-- **3D Environment**: Full 3D scene with top-down camera (like Hearthstone)
-- **Interactive Cards**: Click to select, drag to move cards around the board
-- **Visual Effects**: Cards lift when hovered, glow when selected
-- **Game Areas**: Distinct zones for player hand, enemy area, and battle board
-- **Card Information**: Display cost, attack, health stats
-- **3D Depth**: Leverage 3D space while maintaining familiar card game perspective
+🏗️ **Modular Architecture** 
+- Clean separation of concerns across 8 modules
+- Easy to test, maintain, and expand
+- Well-documented APIs between modules
+- Platform-independent build system
 
-### 3. Hearthstone Clone (`hearthstone_clone.c`) 🎮
-A complete Hearthstone clone with full game mechanics:
-- **Complete Game Loop**: Turn-based gameplay with proper phases
-- **Card Types**: Minions, Spells, with proper stats and abilities
-- **Combat System**: Full damage resolution, minion vs minion combat
-- **Mana System**: Proper mana curves, fatigue damage
-- **Visual Effects**: Real-time damage numbers, battle effects
-- **Keywords**: Taunt, Charge, Divine Shield, Battlecry, Deathrattle
-- **Game State**: Hand management, board control, win conditions
-- **Interactive 3D**: Full 3D cards with Hearthstone-style camera
+🎨 **3D Graphics**
+- Full 3D scene with Hearthstone-style camera
+- Interactive 3D cards with hover effects
+- Real-time visual feedback system
+- Professional game board rendering
+
+## Quick Start
+
+```bash
+# Clone and build
+git clone <your-repo>
+cd Raylib
+make run
+```
 
 ## Prerequisites
 
-You need to have Raylib installed on your system.
+You need Raylib installed on your system:
 
-### Install Raylib
-
-**macOS (using Homebrew):**
+### macOS (Homebrew)
 ```bash
 make install-raylib-mac
 ```
 
-**Linux (Ubuntu/Debian):**
+### Linux (Ubuntu/Debian)
 ```bash
 make install-raylib-linux
 ```
 
-**Or install manually:** See the [Getting Started guide](documentation/raylib/GETTING_STARTED.md) for detailed installation instructions.
+## Building
 
-## Building and Running
-
-### Quick Start
 ```bash
-# Build and run the Hearthstone clone (default)
+# Build and run (default)
 make run
 
-# Or run specific projects
-make run-hello      # Hello World
-make run-card       # 3D Card Game MVP
-make run-hearthstone # Full Hearthstone Clone
-```
+# Just build
+make build
 
-### Individual Building
-```bash
-# Build everything
-make all
+# Debug build
+make debug
 
-# Build specific projects
-make hello          # Hello World only
-make card           # 3D Card Game MVP only
-make hearthstone    # Hearthstone Clone only
-```
+# Optimized release
+make release
 
-### Running
-```bash
-# After building, run directly
-./hello_world       # Simple graphics demo
-./card_game_3d      # 3D card game MVP
-./hearthstone_clone # Full Hearthstone clone
-```
-
-### Clean Up
-```bash
-# Remove all compiled executables
+# Clean build artifacts
 make clean
+
+# Show all options
+make help
 ```
 
-## File Structure
+## Project Structure
 
 ```
 .
-├── hello_world.c        # Hello World source code
-├── hello_world          # Hello World executable
-├── card_game_3d.c       # 3D Card Game MVP source code  
-├── card_game_3d         # 3D Card Game MVP executable
-├── hearthstone_clone.c  # Full Hearthstone Clone source code
-├── hearthstone_clone    # Full Hearthstone Clone executable
-├── Makefile            # Build configuration for all projects
-├── README.md           # This file
-├── HEARTHSTONE_DESIGN.md # Complete game design document
-└── documentation/      # Comprehensive Raylib documentation
-    └── raylib/
-        ├── README.md
-        ├── GETTING_STARTED.md
-        ├── GRAPHICS_2D.md
-        ├── GRAPHICS_3D.md
-        ├── AUDIO.md
-        └── INPUT_HANDLING.md
+├── src/hearthstone/         # Modular source code
+│   ├── main.c              # Main game loop
+│   ├── types.h             # Core types and constants
+│   ├── common.h            # Forward declarations
+│   ├── card.h/card.c       # Card system
+│   ├── player.h/player.c   # Player management
+│   ├── game_state.h/.c     # Core game logic
+│   ├── combat.h/combat.c   # Combat system
+│   ├── effects.h/effects.c # Visual effects
+│   ├── render.h/render.c   # Rendering system
+│   └── input.h/input.c     # Input handling
+├── documentation/          # Raylib documentation
+├── Makefile               # Build system
+├── README.md              # This file
+├── MODULAR_ARCHITECTURE.md # Architecture details
+└── HEARTHSTONE_DESIGN.md  # Game design document
 ```
 
-## Code Explanation
+## How to Play
 
-### Hello World (`hello_world.c`)
-Demonstrates the basic Raylib structure:
-1. **Initialization:** Create window and set FPS
-2. **Game Loop:** 
-   - Update game state
-   - Draw everything to screen
-   - Repeat until user exits
-3. **Cleanup:** Close window and free resources
+### Basic Controls
+- **Left Click**: Select a card
+- **Right Click**: Play card or attack
+- **Space**: End turn
+- **Escape**: Cancel selection
 
-### 3D Card Game MVP (`card_game_3d.c`)
-Shows advanced 3D game development concepts:
-1. **3D Scene Setup:** Top-down camera, 3D coordinate system
-2. **Interactive Objects:** Card selection with mouse ray casting
-3. **3D-to-2D Projection:** World positions to screen coordinates for UI
-4. **Animation System:** Smooth card movement and hover effects
-5. **Game State Management:** Player cards, board state, selection tracking
+### Game Flow
+1. Both players start with 3 cards and 1 mana
+2. Each turn: draw a card, gain 1 mana (max 10)
+3. Play cards by selecting them and right-clicking
+4. Attack with minions by selecting and right-clicking targets
+5. Reduce opponent's health to 0 to win
 
-### Hearthstone Clone (`hearthstone_clone.c`)
-A complete card game implementation demonstrating:
-1. **Game Engine Architecture:** Modular systems with clean separation
-2. **Turn-Based Logic:** Proper game phases and state management
-3. **Card Database:** Extensible card creation and management system
-4. **Combat Resolution:** Complex damage calculations and effect triggers
-5. **Visual Effects System:** Real-time feedback and animation
-6. **Resource Management:** Mana, health, fatigue mechanics
-7. **Interactive 3D UI:** Professional game interface in 3D space
+### Card Types
+- **Minions**: Creatures that can attack
+- **Spells**: Instant effects (damage, healing)
+- **Keywords**: 
+  - **Taunt**: Must be attacked first
+  - **Charge**: Can attack immediately
+  - **Divine Shield**: Prevents first damage
+  - **Battlecry**: Effect when played
+  - **Deathrattle**: Effect when destroyed
 
-## Next Steps
+## Architecture Benefits
 
-- Check out the [comprehensive documentation](documentation/raylib/) for advanced features
-- Try modifying the shapes, colors, or text
-- Add interactive elements using input handling
-- Explore 2D/3D graphics, audio, and more!
+### For Developers
+- **Modular Design**: Each system is independent
+- **Easy Testing**: Mock individual modules
+- **Parallel Development**: Work on different features simultaneously
+- **Clean APIs**: Well-defined interfaces between modules
+
+### For Players
+- **Expandable**: Easy to add new cards, mechanics, features
+- **Stable**: Modular design reduces bugs
+- **Performance**: Optimized rendering and game logic
+
+## Expansion Ideas
+
+The modular architecture makes it easy to add:
+
+- **AI Opponents**: Add `ai.h/ai.c` module
+- **Multiplayer**: Add `network.h/network.c` module  
+- **Sound Effects**: Add `audio.h/audio.c` module
+- **Custom Cards**: Extend the card database
+- **Deck Building**: Add deck editor interface
+- **Save/Load**: Add game state persistence
+- **Card Editor**: Visual card creation tools
+
+## Development
+
+### Adding New Cards
+1. Add card definition to `card.c` in `GetCardById()`
+2. Define new keywords in `types.h` if needed
+3. Implement effects in `effects.c`
+
+### Adding New Mechanics
+1. Extend structures in appropriate headers
+2. Implement logic in corresponding `.c` files  
+3. Add visual feedback in `effects.c`
+4. Update input handling if needed
+
+### Testing Individual Modules
+Each module can be tested independently:
+```c
+// Example: Test card creation
+Card card = CreateCard(1, "Test", 2, CARD_TYPE_MINION, 2, 3);
+assert(card.cost == 2);
+```
 
 ## Troubleshooting
 
-**"raylib.h: No such file or directory"**
-- Make sure Raylib is installed properly
-- Check the installation commands above
+**Build Errors**
+- Ensure Raylib is properly installed
+- Check compiler and library paths
+- Run `make clean` before rebuilding
 
-**Linking errors**
-- Verify Raylib libraries are in the correct path
-- Try updating your system's library paths
+**Runtime Issues**
+- Verify graphics drivers are up to date
+- Check that window manager supports OpenGL
+- Ensure proper file permissions on executable
 
-**Permission denied**
-- Make sure the executable has run permissions: `chmod +x hello_world`
+## Contributing
 
-For more help, see the [Getting Started guide](documentation/raylib/GETTING_STARTED.md).
+1. Choose a module to work on
+2. Follow existing code style and patterns
+3. Add tests for new functionality
+4. Update documentation as needed
+5. Submit pull request with clear description
+
+## Technical Details
+
+- **Language**: C99
+- **Graphics**: Raylib with OpenGL
+- **Architecture**: Modular with clear separation
+- **Platforms**: macOS, Linux, Windows
+- **Build System**: Make with cross-platform support
+
+For detailed architecture information, see [MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md).
+
+For game design details, see [HEARTHSTONE_DESIGN.md](HEARTHSTONE_DESIGN.md).

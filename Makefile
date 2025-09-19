@@ -1,4 +1,5 @@
-# Raylib Hello World Makefile
+# Hearthstone Clone - Modular Implementation
+# Makefile for building the modular Hearthstone card game
 
 # Compiler
 CC = gcc
@@ -7,14 +8,20 @@ CC = gcc
 CFLAGS = -Wall -std=c99 -D_DEFAULT_SOURCE -Wno-missing-braces
 
 # Source files
-HELLO_SRC = hello_world.c
-CARD_SRC = card_game_3d.c
-HEARTHSTONE_SRC = hearthstone_clone.c
+HEARTHSTONE_DIR = src/hearthstone
+HEARTHSTONE_SRCS = $(HEARTHSTONE_DIR)/main.c \
+                   $(HEARTHSTONE_DIR)/card.c \
+                   $(HEARTHSTONE_DIR)/player.c \
+                   $(HEARTHSTONE_DIR)/game_state.c \
+                   $(HEARTHSTONE_DIR)/combat.c \
+                   $(HEARTHSTONE_DIR)/effects.c \
+                   $(HEARTHSTONE_DIR)/render.c \
+                   $(HEARTHSTONE_DIR)/input.c
 
-# Output executables
-HELLO_TARGET = hello_world
-CARD_TARGET = card_game_3d
-HEARTHSTONE_TARGET = hearthstone_clone
+HEARTHSTONE_OBJS = $(HEARTHSTONE_SRCS:.c=.o)
+
+# Output executable
+TARGET = hearthstone
 
 # Platform detection
 UNAME_S := $(shell uname -s)
@@ -45,44 +52,36 @@ endif
 ifeq ($(OS),Windows_NT)
     INCLUDES = -I./include
     LIBS = -L./lib -lraylib -lopengl32 -lgdi32 -lwinmm
-    TARGET = hello_world.exe
+    TARGET = hearthstone.exe
 endif
 
 # Default target
-all: $(HELLO_TARGET) $(CARD_TARGET) $(HEARTHSTONE_TARGET)
+all: $(TARGET)
 
-# Build targets
-$(HELLO_TARGET): $(HELLO_SRC)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(HELLO_TARGET) $(HELLO_SRC) $(LIBS)
+# Build object files
+$(HEARTHSTONE_DIR)/%.o: $(HEARTHSTONE_DIR)/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
 
-$(CARD_TARGET): $(CARD_SRC)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(CARD_TARGET) $(CARD_SRC) $(LIBS)
-
-$(HEARTHSTONE_TARGET): $(HEARTHSTONE_SRC)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $(HEARTHSTONE_TARGET) $(HEARTHSTONE_SRC) $(LIBS)
-
-# Individual build targets
-hello: $(HELLO_TARGET)
-card: $(CARD_TARGET)
-hearthstone: $(HEARTHSTONE_TARGET)
+# Build main executable
+$(TARGET): $(HEARTHSTONE_OBJS)
+	$(CC) $(CFLAGS) $(INCLUDES) -o $(TARGET) $(HEARTHSTONE_OBJS) $(LIBS)
 
 # Clean target
 clean:
-	rm -f $(HELLO_TARGET) $(CARD_TARGET) $(HEARTHSTONE_TARGET)
+	rm -f $(TARGET) $(HEARTHSTONE_OBJS)
 
-# Run targets
-run-hello: $(HELLO_TARGET)
-	./$(HELLO_TARGET)
+# Default run
+run: $(TARGET)
+	./$(TARGET)
 
-run-card: $(CARD_TARGET)
-	./$(CARD_TARGET)
+# Development targets
+build: $(TARGET)
 
-run-hearthstone: $(HEARTHSTONE_TARGET)
-	./$(HEARTHSTONE_TARGET)
+debug: CFLAGS += -g -DDEBUG
+debug: $(TARGET)
 
-# Default run (hearthstone clone)
-run: $(HEARTHSTONE_TARGET)
-	./$(HEARTHSTONE_TARGET)
+release: CFLAGS += -O2 -DNDEBUG
+release: clean $(TARGET)
 
 # Install raylib (macOS with Homebrew)
 install-raylib-mac:
@@ -98,19 +97,22 @@ install-raylib-linux:
 
 # Help target
 help:
+	@echo "Hearthstone Clone - Modular Implementation"
+	@echo "=========================================="
+	@echo ""
 	@echo "Available targets:"
-	@echo "  all              - Build all executables (hello_world, card_game_3d, hearthstone_clone)"
-	@echo "  hello            - Build only hello_world"
-	@echo "  card             - Build only card_game_3d"
-	@echo "  hearthstone      - Build only hearthstone_clone"
-	@echo "  clean            - Remove all executables"
-	@echo "  run              - Build and run the hearthstone clone (default)"
-	@echo "  run-hello        - Build and run hello_world"
-	@echo "  run-card         - Build and run card_game_3d"
-	@echo "  run-hearthstone  - Build and run hearthstone_clone"
+	@echo "  all                  - Build the game (default)"
+	@echo "  build                - Same as 'all'"
+	@echo "  run                  - Build and run the game"
+	@echo "  debug                - Build with debug symbols"
+	@echo "  release              - Build optimized release version"
+	@echo "  clean                - Remove all build artifacts"
 	@echo "  install-raylib-mac   - Install raylib via Homebrew (macOS)"
 	@echo "  install-raylib-linux - Install raylib from source (Linux)"
-	@echo "  help             - Show this help message"
+	@echo "  help                 - Show this help message"
+	@echo ""
+	@echo "Quick start:"
+	@echo "  make run             - Build and play the game"
 
 # Phony targets
-.PHONY: all hello card hearthstone clean run run-hello run-card run-hearthstone install-raylib-mac install-raylib-linux help
+.PHONY: all build run clean debug release install-raylib-mac install-raylib-linux help
