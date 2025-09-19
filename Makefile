@@ -16,9 +16,22 @@ HEARTHSTONE_SRCS = $(HEARTHSTONE_DIR)/main.c \
                    $(HEARTHSTONE_DIR)/combat.c \
                    $(HEARTHSTONE_DIR)/effects.c \
                    $(HEARTHSTONE_DIR)/render.c \
-                   $(HEARTHSTONE_DIR)/input.c
+                   $(HEARTHSTONE_DIR)/input.c \
+                   $(HEARTHSTONE_DIR)/errors.c \
+                   $(HEARTHSTONE_DIR)/config.c \
+                   $(HEARTHSTONE_DIR)/resources.c \
+                   $(HEARTHSTONE_DIR)/animation.c \
+                   $(HEARTHSTONE_DIR)/audio.c
 
-HEARTHSTONE_OBJS = $(HEARTHSTONE_SRCS:.c=.o)
+# Render module source files
+RENDER_SRCS = $(HEARTHSTONE_DIR)/render/board_renderer.c \
+              $(HEARTHSTONE_DIR)/render/card_renderer.c \
+              $(HEARTHSTONE_DIR)/render/ui_renderer.c \
+              $(HEARTHSTONE_DIR)/render/effect_renderer.c
+
+# All source files
+ALL_SRCS = $(HEARTHSTONE_SRCS) $(RENDER_SRCS)
+HEARTHSTONE_OBJS = $(ALL_SRCS:.c=.o)
 
 # Output executable
 TARGET = hearthstone
@@ -58,8 +71,12 @@ endif
 # Default target
 all: $(TARGET)
 
-# Build object files
+# Build object files for main directory
 $(HEARTHSTONE_DIR)/%.o: $(HEARTHSTONE_DIR)/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
+
+# Build object files for render subdirectory
+$(HEARTHSTONE_DIR)/render/%.o: $(HEARTHSTONE_DIR)/render/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
 
 # Build main executable
@@ -69,6 +86,7 @@ $(TARGET): $(HEARTHSTONE_OBJS)
 # Clean target
 clean:
 	rm -f $(TARGET) $(HEARTHSTONE_OBJS)
+	rm -f $(HEARTHSTONE_DIR)/render/*.o
 
 # Default run
 run: $(TARGET)
@@ -113,6 +131,10 @@ help:
 	@echo ""
 	@echo "Quick start:"
 	@echo "  make run             - Build and play the game"
+	@echo ""
+	@echo "Advanced Development:"
+	@echo "  For advanced build options and unit tests, use:"
+	@echo "  cd src/hearthstone && make help"
 
 # Phony targets
 .PHONY: all build run clean debug release install-raylib-mac install-raylib-linux help

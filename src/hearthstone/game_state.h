@@ -75,7 +75,6 @@ void ProcessActionQueue(GameState* game);
 
 // Camera management
 void InitializeCamera(GameState* game);
-void UpdateGameCamera(GameState* game, float deltaTime);
 void ShakeCamera(GameState* game, float intensity);
 
 #endif // GAME_STATE_H

@@ -239,19 +239,6 @@ void InitializeCamera(GameState* game) {
     game->cameraShake = 0.0f;
 }
 
-// Update camera (with shake effect)
-void UpdateGameCamera(GameState* game, float deltaTime) {
-    if (game->cameraShake > 0) {
-        float shakeX = (rand() % 100 - 50) / 100.0f * game->cameraShake;
-        float shakeZ = (rand() % 100 - 50) / 100.0f * game->cameraShake;
-        
-        game->camera.position.x = shakeX;
-        game->camera.position.z = 8.0f + shakeZ;
-    } else {
-        game->camera.position.x = 0.0f;
-        game->camera.position.z = 8.0f;
-    }
-}
 
 // Apply camera shake effect
 void ShakeCamera(GameState* game, float intensity) {
