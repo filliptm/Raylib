@@ -145,7 +145,6 @@ void HandleCardDrop(GameState* game) {
         
     } else if (droppedCard->onBoard) {
         // ATTACKING WITH A MINION
-        
         if (dropTarget && CanAttack(droppedCard)) {
             // Attack the target
             HandleAttack(game, droppedCard, dropTarget);
@@ -255,18 +254,18 @@ void HandleAttack(GameState* game, Card* attacker, void* target) {
         AddVisualEffect(game, EFFECT_DAMAGE, attacker->position, "Can't attack!");
         return;
     }
-    
+
     // Check if we clicked on an enemy
     Card* targetCard = NULL;
     Player* targetPlayer = NULL;
-    
+
     // Try to identify the target
     for (int p = 0; p < 2; p++) {
         if (&game->players[p] == target) {
             targetPlayer = &game->players[p];
             break;
         }
-        
+
         for (int i = 0; i < game->players[p].boardCount; i++) {
             if (&game->players[p].board[i] == target) {
                 targetCard = &game->players[p].board[i];
@@ -385,14 +384,14 @@ Card* GetCardUnderMouse(GameState* game, Ray mouseRay) {
 
 // Get any valid target under mouse
 void* GetTargetUnderMouse(GameState* game, Ray mouseRay) {
-    // First check for cards
-    Card* card = GetCardUnderMouse(game, mouseRay);
-    if (card) return card;
-    
-    // Check for player portraits
+    // Check for player portraits FIRST to prioritize them over cards
     Player* player = GetPlayerUnderMouse(game, mouseRay);
     if (player) return player;
-    
+
+    // Then check for cards
+    Card* card = GetCardUnderMouse(game, mouseRay);
+    if (card) return card;
+
     return NULL;
 }
 
@@ -403,17 +402,25 @@ bool IsPlayerTurn(GameState* game, int playerId) {
 
 // Check if a ray hits a player portrait
 bool CheckPlayerPortraitHit(Player* player, Ray ray) {
+    // Use EXACT same coordinates as the visual green cube in DrawPlayerPortrait
     Vector3 portraitPos = (Vector3){
-        7.0f, 
-        0.2f, 
+        7.0f,
+        0.2f,
         player->playerId == 0 ? 6.0f : -6.0f
     };
-    Vector3 portraitSize = (Vector3){2.0f, 0.2f, 2.0f};
-    
-    BoundingBox portraitBox = {
-        Vector3Subtract(portraitPos, Vector3Scale(portraitSize, 0.5f)),
-        Vector3Add(portraitPos, Vector3Scale(portraitSize, 0.5f))
+
+    // Make the hit box MUCH larger and easier to click
+    Vector3 clickableSize = (Vector3){
+        4.0f,     // Double width
+        3.0f,     // Very tall
+        4.0f      // Double depth
     };
+
+    BoundingBox portraitBox = {
+        Vector3Subtract(portraitPos, Vector3Scale(clickableSize, 0.5f)),
+        Vector3Add(portraitPos, Vector3Scale(clickableSize, 0.5f))
+    };
+
     RayCollision collision = GetRayCollisionBox(ray, portraitBox);
     return collision.hit;
 }

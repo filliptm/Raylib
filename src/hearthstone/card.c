@@ -1,6 +1,7 @@
 #include "card.h"
 #include <string.h>
 #include <math.h>
+#include <stdio.h>
 
 // Create a basic card with default values
 Card CreateCard(int id, const char* name, int cost, CardType type, int attack, int health) {
@@ -165,13 +166,19 @@ void UpdateCard(Card* card, float deltaTime) {
 
 // Check if a ray hits the card
 bool CheckCardHit(Card* card, Ray ray) {
+    // Only check cards that are actually in hand or on board
     if (!card->inHand && !card->onBoard) return false;
-    
+
+    // Exclude hero power cards from collision detection
+    if (card->type == CARD_TYPE_HERO_POWER) return false;
+
     BoundingBox cardBox = {
         Vector3Subtract(card->position, Vector3Scale(card->size, 0.5f)),
         Vector3Add(card->position, Vector3Scale(card->size, 0.5f))
     };
     RayCollision collision = GetRayCollisionBox(ray, cardBox);
+
+
     return collision.hit;
 }
 

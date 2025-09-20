@@ -21,7 +21,15 @@ HEARTHSTONE_SRCS = $(HEARTHSTONE_DIR)/main.c \
                    $(HEARTHSTONE_DIR)/config.c \
                    $(HEARTHSTONE_DIR)/resources.c \
                    $(HEARTHSTONE_DIR)/animation.c \
-                   $(HEARTHSTONE_DIR)/audio.c
+                   $(HEARTHSTONE_DIR)/audio.c \
+                   $(HEARTHSTONE_DIR)/gameplay.c \
+                   $(HEARTHSTONE_DIR)/ai.c \
+                   $(HEARTHSTONE_DIR)/game_ai.c \
+                   $(HEARTHSTONE_DIR)/network.c \
+                   $(HEARTHSTONE_DIR)/game_network.c \
+                   $(HEARTHSTONE_DIR)/performance.c \
+                   $(HEARTHSTONE_DIR)/polish.c \
+                   $(HEARTHSTONE_DIR)/game_polish.c
 
 # Render module source files
 RENDER_SRCS = $(HEARTHSTONE_DIR)/render/board_renderer.c \
@@ -29,8 +37,17 @@ RENDER_SRCS = $(HEARTHSTONE_DIR)/render/board_renderer.c \
               $(HEARTHSTONE_DIR)/render/ui_renderer.c \
               $(HEARTHSTONE_DIR)/render/effect_renderer.c
 
+# Core module source files
+CORE_SRCS = $(HEARTHSTONE_DIR)/core/data_manager.c \
+            $(HEARTHSTONE_DIR)/core/rules_engine.c \
+            $(HEARTHSTONE_DIR)/core/save_system.c \
+            $(HEARTHSTONE_DIR)/core/event_system.c
+
+# Utils module source files
+UTILS_SRCS = $(HEARTHSTONE_DIR)/utils/logging.c
+
 # All source files
-ALL_SRCS = $(HEARTHSTONE_SRCS) $(RENDER_SRCS)
+ALL_SRCS = $(HEARTHSTONE_SRCS) $(RENDER_SRCS) $(CORE_SRCS) $(UTILS_SRCS)
 HEARTHSTONE_OBJS = $(ALL_SRCS:.c=.o)
 
 # Output executable
@@ -77,6 +94,14 @@ $(HEARTHSTONE_DIR)/%.o: $(HEARTHSTONE_DIR)/%.c
 
 # Build object files for render subdirectory
 $(HEARTHSTONE_DIR)/render/%.o: $(HEARTHSTONE_DIR)/render/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
+
+# Build object files for core subdirectory
+$(HEARTHSTONE_DIR)/core/%.o: $(HEARTHSTONE_DIR)/core/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
+
+# Build object files for utils subdirectory
+$(HEARTHSTONE_DIR)/utils/%.o: $(HEARTHSTONE_DIR)/utils/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
 
 # Build main executable
