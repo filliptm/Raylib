@@ -47,6 +47,15 @@ SOURCES = main.c \
           animation.c \
           audio.c
 
+# Core module sources
+CORE_SOURCES = core/data_manager.c \
+               core/rules_engine.c \
+               core/save_system.c \
+               core/event_system.c
+
+# Utils module sources
+UTILS_SOURCES = utils/logging.c
+
 # Render module sources
 RENDER_SOURCES = $(RENDER_DIR)/board_renderer.c \
                  $(RENDER_DIR)/card_renderer.c \
@@ -56,15 +65,21 @@ RENDER_SOURCES = $(RENDER_DIR)/board_renderer.c \
 # Test sources
 TEST_SOURCES = $(TEST_DIR)/test_errors.c \
                $(TEST_DIR)/test_config.c \
-               $(TEST_DIR)/test_animation.c
+               $(TEST_DIR)/test_animation.c \
+               $(TEST_DIR)/test_data_manager.c \
+               $(TEST_DIR)/test_save_system_simple.c \
+               $(TEST_DIR)/test_logging.c \
+               $(TEST_DIR)/test_event_system.c
 
 # Object files
 OBJECTS = $(SOURCES:%.c=$(OBJ_DIR)/%.o)
+CORE_OBJECTS = $(CORE_SOURCES:core/%.c=$(OBJ_DIR)/%.o)
+UTILS_OBJECTS = $(UTILS_SOURCES:utils/%.c=$(OBJ_DIR)/%.o)
 RENDER_OBJECTS = $(RENDER_SOURCES:$(RENDER_DIR)/%.c=$(OBJ_DIR)/%.o)
 TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(TEST_OBJ_DIR)/%.o)
 
-# Library objects (everything except main.c)
-LIB_SOURCES = $(filter-out main.c, $(SOURCES))
+# Library objects (everything except main.c and raylib-dependent modules)
+LIB_SOURCES = $(filter-out main.c render.c input.c resources.c audio.c game_state.c effects.c, $(SOURCES))
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJ_DIR)/%.o)
 
 # Target executable
@@ -79,11 +94,19 @@ debug: CFLAGS += $(DEBUG_FLAGS)
 debug: $(TARGET)
 
 # Main executable
-$(TARGET): $(OBJECTS) $(RENDER_OBJECTS)
-	$(CC) $(OBJECTS) $(RENDER_OBJECTS) -o $@ $(RAYLIB_FLAGS)
+$(TARGET): $(OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS)
+	$(CC) $(OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) -o $@ $(RAYLIB_FLAGS)
 
 # Object files for main sources
 $(OBJ_DIR)/%.o: %.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Object files for core sources
+$(OBJ_DIR)/%.o: core/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Object files for utils sources
+$(OBJ_DIR)/%.o: utils/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Object files for render sources
@@ -98,8 +121,8 @@ $(TEST_OBJ_DIR)/%.o: $(TEST_DIR)/%.c
 test: $(TEST_TARGET)
 	$(TEST_TARGET)
 
-$(TEST_TARGET): $(TEST_OBJECTS) $(LIB_OBJECTS) $(RENDER_OBJECTS)
-	$(CC) $(TEST_OBJECTS) $(LIB_OBJECTS) $(RENDER_OBJECTS) -o $@ -lm
+$(TEST_TARGET): $(TEST_OBJECTS) $(LIB_OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS)
+	$(CC) $(TEST_OBJECTS) $(LIB_OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) -o $@ -lm
 
 # Individual test executables
 test_errors: $(TEST_OBJ_DIR)/test_errors.o $(OBJ_DIR)/errors.o
@@ -111,6 +134,22 @@ test_config: $(TEST_OBJ_DIR)/test_config.o $(OBJ_DIR)/config.o $(OBJ_DIR)/errors
 	$(BUILD_DIR)/$@
 
 test_animation: $(TEST_OBJ_DIR)/test_animation.o $(OBJ_DIR)/animation.o $(OBJ_DIR)/errors.o
+	$(CC) $^ -o $(BUILD_DIR)/$@ -lm
+	$(BUILD_DIR)/$@
+
+test_data_manager: $(TEST_OBJ_DIR)/test_data_manager.o $(OBJ_DIR)/data_manager.o $(OBJ_DIR)/errors.o
+	$(CC) $^ -o $(BUILD_DIR)/$@ -lm
+	$(BUILD_DIR)/$@
+
+test_save_system: $(TEST_OBJ_DIR)/test_save_system_simple.o $(OBJ_DIR)/save_system.o $(OBJ_DIR)/errors.o
+	$(CC) $^ -o $(BUILD_DIR)/$@ -lm
+	$(BUILD_DIR)/$@
+
+test_logging: $(TEST_OBJ_DIR)/test_logging.o $(OBJ_DIR)/logging.o $(OBJ_DIR)/errors.o
+	$(CC) $^ -o $(BUILD_DIR)/$@ -lm
+	$(BUILD_DIR)/$@
+
+test_event_system: $(TEST_OBJ_DIR)/test_event_system.o $(OBJ_DIR)/event_system.o $(OBJ_DIR)/errors.o
 	$(CC) $^ -o $(BUILD_DIR)/$@ -lm
 	$(BUILD_DIR)/$@
 
@@ -172,7 +211,7 @@ help:
 	@echo "  help         - Show this help message"
 
 # Phony targets
-.PHONY: all debug test clean clean-all format analyze docs help install-raylib test_errors test_config test_animation
+.PHONY: all debug test clean clean-all format analyze docs help install-raylib test_errors test_config test_animation test_data_manager test_save_system test_logging test_event_system
 
 # Dependencies (simplified - in a real project you'd use automatic dependency generation)
 $(OBJ_DIR)/main.o: main.c game_state.h render.h input.h

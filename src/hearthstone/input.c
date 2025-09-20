@@ -3,6 +3,7 @@
 #include "combat.h"
 #include "effects.h"
 #include <stddef.h>
+#include <stdio.h>
 
 // Main input handling function
 void HandleInput(GameState* game) {
@@ -128,14 +129,14 @@ void HandleCardDrop(GameState* game) {
         // Check if dropped on valid play area (board zone)
         bool droppedOnBoard = (droppedCard->position.z > -1 && droppedCard->position.z < 1);
         
-        if (droppedCard->type == CARD_TYPE_MINION && droppedOnBoard) {
-            // Play minion to board
+        if (droppedCard->type == CARD_TYPE_MINION && droppedCard->hasBattlecry && dropTarget) {
+            // Battlecry minion with target - cast battlecry on target
+            HandlePlayCard(game, droppedCard, dropTarget);
+        } else if (droppedCard->type == CARD_TYPE_MINION && droppedOnBoard) {
+            // Regular minion or battlecry minion without target - play to board
             HandlePlayCard(game, droppedCard, NULL);
         } else if (droppedCard->type == CARD_TYPE_SPELL && dropTarget) {
             // Cast spell on target
-            HandlePlayCard(game, droppedCard, dropTarget);
-        } else if (droppedCard->type == CARD_TYPE_MINION && droppedCard->hasBattlecry && dropTarget) {
-            // Cast battlecry on target
             HandlePlayCard(game, droppedCard, dropTarget);
         } else {
             // Invalid drop - return to hand
@@ -229,7 +230,7 @@ void HandlePlayCard(GameState* game, Card* card, void* target) {
                 CreateSummonEffect(game, boardCard->position);
                 
                 // Execute battlecry if applicable
-                if (boardCard->hasBattlecry && target) {
+                if (boardCard->hasBattlecry) {
                     ExecuteBattlecry(game, boardCard, target);
                 }
             }
@@ -300,6 +301,11 @@ void HandleAttack(GameState* game, Card* attacker, void* target) {
                 AddVisualEffect(game, EFFECT_DAMAGE, attacker->position, "Can't attack player!");
             }
         }
+    } else if (targetPlayer) {
+        // Trying to attack own player - show debug info
+        char debugMsg[64];
+        sprintf(debugMsg, "Own player! Target:%d Attacker:%d", targetPlayer->playerId, attacker->ownerPlayer);
+        AddVisualEffect(game, EFFECT_DAMAGE, attacker->position, debugMsg);
     } else {
         // No valid target, start targeting mode
         StartTargeting(game, attacker);
