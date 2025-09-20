@@ -3,9 +3,26 @@
 #include "render.h"
 #include "input.h"
 #include "network.h"
+#include "editor/editor.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+
+// External editor functions
+extern EditorState* g_editor;
+extern bool IsEditorMode(void);
+extern void DrawEditorUI(void);
+
+// External game drawing functions
+extern void DrawGameBoard(void);
+extern void DrawPlayerHand(Player* player, Camera3D camera);
+extern void DrawPlayerBoard(Player* player, Camera3D camera);
+extern void DrawPlayerPortrait(Player* player, Camera3D camera);
+extern void DrawDragFeedback(GameState* game);
+extern void DrawGameUI(GameState* game);
+extern void DrawVisualEffects(GameState* game);
+extern void DrawAllCardStats(GameState* game);
+extern void DrawGameEndScreen(GameState* game);
 
 int main(int argc, char* argv[]) {
     // Initialization
@@ -45,23 +62,46 @@ int main(int argc, char* argv[]) {
         printf("Starting default AI game (medium difficulty)\n");
         InitializeGameWithAI(&game, 1);
     }
+
+    // Initialize editor after game state is ready
+    InitEditor(&game);
     
     // Main game loop
     while (!WindowShouldClose()) {
-        // Input
-        HandleInput(&game);
-        
+        // Input (editor handles F12 toggle and editor-specific input)
+        UpdateEditor(&game);
+
+        // Only handle game input if not in editor mode
+        if (!IsEditorMode()) {
+            HandleInput(&game);
+        }
+
         // Update
         UpdateGame(&game);
-        
+
         // Draw
         BeginDrawing();
             ClearBackground(DARKGREEN);
+
+            // Always draw the base game
             DrawGame(&game);
+
+            // If in editor mode, draw editor overlays on top
+            if (IsEditorMode()) {
+                // Draw 3D editor tools using the same camera as the game
+                BeginMode3D(game.camera);
+                    DrawEditor(&game);
+                EndMode3D();
+
+                // Draw 2D editor UI on top
+                DrawEditorUI();
+            }
+
         EndDrawing();
     }
     
     // Cleanup
+    CleanupEditor();
     CleanupGame(&game);
     CloseWindow();
     

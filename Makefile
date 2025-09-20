@@ -46,8 +46,12 @@ CORE_SRCS = $(HEARTHSTONE_DIR)/core/data_manager.c \
 # Utils module source files
 UTILS_SRCS = $(HEARTHSTONE_DIR)/utils/logging.c
 
+# Editor module source files
+EDITOR_SRCS = $(HEARTHSTONE_DIR)/editor/editor.c \
+              $(HEARTHSTONE_DIR)/editor/config.c
+
 # All source files
-ALL_SRCS = $(HEARTHSTONE_SRCS) $(RENDER_SRCS) $(CORE_SRCS) $(UTILS_SRCS)
+ALL_SRCS = $(HEARTHSTONE_SRCS) $(RENDER_SRCS) $(CORE_SRCS) $(UTILS_SRCS) $(EDITOR_SRCS)
 HEARTHSTONE_OBJS = $(ALL_SRCS:.c=.o)
 
 # Output executable
@@ -102,6 +106,10 @@ $(HEARTHSTONE_DIR)/core/%.o: $(HEARTHSTONE_DIR)/core/%.c
 
 # Build object files for utils subdirectory
 $(HEARTHSTONE_DIR)/utils/%.o: $(HEARTHSTONE_DIR)/utils/%.c
+	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
+
+# Build object files for editor subdirectory
+$(HEARTHSTONE_DIR)/editor/%.o: $(HEARTHSTONE_DIR)/editor/%.c
 	$(CC) $(CFLAGS) $(INCLUDES) -I$(HEARTHSTONE_DIR) -c $< -o $@
 
 # Build main executable

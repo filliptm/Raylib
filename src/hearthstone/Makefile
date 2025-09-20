@@ -71,6 +71,11 @@ RENDER_SOURCES = $(RENDER_DIR)/board_renderer.c \
                  $(RENDER_DIR)/ui_renderer.c \
                  $(RENDER_DIR)/effect_renderer.c
 
+# Editor module sources
+EDITOR_DIR = editor
+EDITOR_SOURCES = $(EDITOR_DIR)/editor.c \
+                 $(EDITOR_DIR)/config.c
+
 # Test sources
 TEST_SOURCES = $(TEST_DIR)/test_errors.c \
                $(TEST_DIR)/test_config.c \
@@ -85,6 +90,7 @@ OBJECTS = $(SOURCES:%.c=$(OBJ_DIR)/%.o)
 CORE_OBJECTS = $(CORE_SOURCES:core/%.c=$(OBJ_DIR)/%.o)
 UTILS_OBJECTS = $(UTILS_SOURCES:utils/%.c=$(OBJ_DIR)/%.o)
 RENDER_OBJECTS = $(RENDER_SOURCES:$(RENDER_DIR)/%.c=$(OBJ_DIR)/%.o)
+EDITOR_OBJECTS = $(OBJ_DIR)/editor.o $(OBJ_DIR)/editor_config.o
 TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(TEST_OBJ_DIR)/%.o)
 
 # Library objects (everything except main.c and raylib-dependent modules)
@@ -107,8 +113,8 @@ run: $(TARGET)
 	./$(TARGET)
 
 # Main executable
-$(TARGET): $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS)
-	$(CC) $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) -o $@ $(RAYLIB_FLAGS)
+$(TARGET): $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) $(EDITOR_OBJECTS)
+	$(CC) $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) $(EDITOR_OBJECTS) -o $@ $(RAYLIB_FLAGS)
 
 # Object files for main sources
 $(OBJ_DIR)/%.o: %.c
@@ -124,6 +130,13 @@ $(OBJ_DIR)/%.o: utils/%.c
 
 # Object files for render sources
 $(OBJ_DIR)/%.o: $(RENDER_DIR)/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Object files for editor sources
+$(OBJ_DIR)/editor.o: $(EDITOR_DIR)/editor.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(OBJ_DIR)/editor_config.o: $(EDITOR_DIR)/config.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Test object files
