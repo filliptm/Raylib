@@ -12,6 +12,7 @@ struct VisualEffect {
     Vector3 position;
     float duration;
     float timer;
+    float lifetime;   // Added for performance optimization
     Color color;
     bool active;
     char text[64];
@@ -31,6 +32,7 @@ void CreateSummonEffect(GameState* game, Vector3 position);
 void CreateSpellEffect(GameState* game, Vector3 position, const char* spellName);
 void CreateBattlecryEffect(GameState* game, Vector3 position);
 void CreateDeathrattleEffect(GameState* game, Vector3 position);
+void CreateAITurnEffect(GameState* game, Vector3 position);
 
 // Card ability effects
 void ExecuteBattlecry(GameState* game, Card* card, void* target);

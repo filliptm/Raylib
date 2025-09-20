@@ -41,6 +41,9 @@ struct Player {
     int turnCount;
     int fatigueDamage;
     bool isAlive;
+
+    // Polish features
+    bool isTargeted;
 };
 
 // Player management functions

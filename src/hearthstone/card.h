@@ -52,6 +52,11 @@ struct Card {
     bool onBoard;
     int boardPosition;
     int ownerPlayer;
+
+    // Performance optimization fields
+    bool isVisible;
+    bool isTargeted;
+    int lodLevel;
     
     // Effects
     bool hasBattlecry;

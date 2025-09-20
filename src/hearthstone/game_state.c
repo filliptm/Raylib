@@ -1,8 +1,13 @@
 #include "game_state.h"
 #include "combat.h"
+#include "effects.h"
+#include "game_ai.h"
+#include "game_network.h"
+#include "game_polish.h"
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 // Initialize the game state
 void InitializeGame(GameState* game) {
@@ -26,6 +31,11 @@ void InitializeGame(GameState* game) {
     game->turnTimer = 0.0f;
     game->winner = -1;
     game->gameEnded = false;
+    game->vsAI = false;
+    game->aiPlayer = NULL;
+    game->isNetworkGame = false;
+    game->networkSystem = NULL;
+    game->polishSystem = NULL;
     
     // Initialize camera
     InitializeCamera(game);
@@ -45,11 +55,41 @@ void InitializeGame(GameState* game) {
         }
     }
     
+    // Initialize polish system
+    InitializeGamePolish(game);
+
     // Set first player as active
     game->players[0].isActivePlayer = true;
-    
+
     // Start first turn
     StartTurn(game);
+}
+
+// Initialize game with AI opponent
+void InitializeGameWithAI(GameState* game, int aiDifficulty) {
+    // Initialize normal game first
+    InitializeGame(game);
+
+    // Initialize AI
+    InitializeGameAI(game, aiDifficulty);
+}
+
+// Initialize game as network server
+void InitializeGameAsServer(GameState* game, int port) {
+    // Initialize normal game first
+    InitializeGame(game);
+
+    // Initialize network as server
+    InitializeGameNetworkAsServer(game, port);
+}
+
+// Initialize game as network client
+void InitializeGameAsClient(GameState* game, const char* address, int port) {
+    // Initialize normal game first
+    InitializeGame(game);
+
+    // Initialize network as client
+    InitializeGameNetworkAsClient(game, address, port);
 }
 
 // Update the game state
@@ -87,15 +127,30 @@ void UpdateGame(GameState* game) {
     
     // Update visual effects
     UpdateEffects(game, deltaTime);
-    
+
+    // Update AI if enabled
+    UpdateGameAI(game, deltaTime);
+
+    // Update network if enabled
+    UpdateGameNetwork(game, deltaTime);
+
+    // Update polish systems
+    UpdateGamePolishSystems(game, deltaTime);
+
     // Process action queue if any
     ProcessActionQueue(game);
 }
 
 // Cleanup game resources
 void CleanupGame(GameState* game) {
-    // Currently nothing to cleanup as we're not using dynamic memory
-    // This function is here for future use if needed
+    // Clean up AI memory
+    CleanupGameAI(game);
+
+    // Clean up network
+    CleanupGameNetwork(game);
+
+    // Clean up polish system
+    CleanupGamePolish(game);
 }
 
 // Start a new turn
@@ -123,10 +178,14 @@ void StartTurn(GameState* game) {
     
     game->turnPhase = TURN_PHASE_MAIN;
     game->turnTimer = 0.0f;
-    
+
+    // Reset AI turn state if it's AI's turn
+    ResetGameAITurn(game);
+
     // Add turn start visual effect
-    AddVisualEffect(game, EFFECT_TURN_START, (Vector3){0, 2, 0}, 
-                   TextFormat("%s's Turn", player->name));
+    char turnText[64];
+    snprintf(turnText, sizeof(turnText), "%s's Turn", player->name);
+    AddVisualEffect(game, EFFECT_TURN_START, (Vector3){0, 2, 0}, turnText);
 }
 
 // End the current turn

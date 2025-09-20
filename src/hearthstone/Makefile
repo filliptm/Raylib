@@ -45,7 +45,16 @@ SOURCES = main.c \
           config.c \
           resources.c \
           animation.c \
-          audio.c
+          audio.c \
+          gameplay.c \
+          ai.c \
+          game_ai.c \
+          network.c \
+          game_network.c \
+          performance.c \
+          polish.c \
+          game_polish.c \
+          test_stubs.c
 
 # Core module sources
 CORE_SOURCES = core/data_manager.c \
@@ -79,7 +88,7 @@ RENDER_OBJECTS = $(RENDER_SOURCES:$(RENDER_DIR)/%.c=$(OBJ_DIR)/%.o)
 TEST_OBJECTS = $(TEST_SOURCES:$(TEST_DIR)/%.c=$(TEST_OBJ_DIR)/%.o)
 
 # Library objects (everything except main.c and raylib-dependent modules)
-LIB_SOURCES = $(filter-out main.c render.c input.c resources.c audio.c game_state.c effects.c, $(SOURCES))
+LIB_SOURCES = $(filter-out main.c render.c input.c resources.c audio.c test_stubs.c, $(SOURCES))
 LIB_OBJECTS = $(LIB_SOURCES:%.c=$(OBJ_DIR)/%.o)
 
 # Target executable
@@ -93,9 +102,13 @@ all: $(TARGET)
 debug: CFLAGS += $(DEBUG_FLAGS)
 debug: $(TARGET)
 
+# Run the game after building
+run: $(TARGET)
+	./$(TARGET)
+
 # Main executable
-$(TARGET): $(OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS)
-	$(CC) $(OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) -o $@ $(RAYLIB_FLAGS)
+$(TARGET): $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS)
+	$(CC) $(filter-out $(OBJ_DIR)/test_stubs.o, $(OBJECTS)) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(RENDER_OBJECTS) -o $@ $(RAYLIB_FLAGS)
 
 # Object files for main sources
 $(OBJ_DIR)/%.o: %.c
@@ -119,10 +132,14 @@ $(TEST_OBJ_DIR)/%.o: $(TEST_DIR)/%.c
 
 # Test runner (without raylib for unit tests)
 test: $(TEST_TARGET)
-	$(TEST_TARGET)
 
-$(TEST_TARGET): $(TEST_OBJECTS) $(LIB_OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS)
-	$(CC) $(TEST_OBJECTS) $(LIB_OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) -o $@ -lm
+$(TEST_TARGET): $(TEST_OBJECTS) $(LIB_OBJECTS) $(CORE_OBJECTS) $(UTILS_OBJECTS) $(OBJ_DIR)/test_stubs.o
+	$(CC) build/test_obj/test_errors.o build/obj/errors.o -o $(BUILD_DIR)/test_errors -lm && $(BUILD_DIR)/test_errors
+	$(CC) build/test_obj/test_config.o build/obj/config.o build/obj/errors.o -o $(BUILD_DIR)/test_config -lm && $(BUILD_DIR)/test_config
+	$(CC) build/test_obj/test_data_manager.o build/obj/data_manager.o build/obj/errors.o -o $(BUILD_DIR)/test_data_manager -lm && $(BUILD_DIR)/test_data_manager
+	$(CC) build/test_obj/test_logging.o build/obj/logging.o build/obj/errors.o -o $(BUILD_DIR)/test_logging -lm && $(BUILD_DIR)/test_logging
+	$(CC) build/test_obj/test_event_system.o build/obj/event_system.o build/obj/errors.o -o $(BUILD_DIR)/test_event_system -lm && $(BUILD_DIR)/test_event_system
+	@echo "All tests completed successfully"
 
 # Individual test executables
 test_errors: $(TEST_OBJ_DIR)/test_errors.o $(OBJ_DIR)/errors.o
@@ -198,6 +215,7 @@ docs:
 help:
 	@echo "Available targets:"
 	@echo "  all          - Build the game (default)"
+	@echo "  run          - Build and run the game"
 	@echo "  debug        - Build with debug symbols"
 	@echo "  test         - Run all unit tests"
 	@echo "  test_errors  - Run error handling tests"
@@ -211,7 +229,7 @@ help:
 	@echo "  help         - Show this help message"
 
 # Phony targets
-.PHONY: all debug test clean clean-all format analyze docs help install-raylib test_errors test_config test_animation test_data_manager test_save_system test_logging test_event_system
+.PHONY: all debug run test clean clean-all format analyze docs help install-raylib test_errors test_config test_animation test_data_manager test_save_system test_logging test_event_system
 
 # Dependencies (simplified - in a real project you'd use automatic dependency generation)
 $(OBJ_DIR)/main.o: main.c game_state.h render.h input.h

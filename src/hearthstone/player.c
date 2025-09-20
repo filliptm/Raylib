@@ -6,7 +6,7 @@
 // Initialize a player with default values
 void InitializePlayer(Player* player, int playerId, const char* name) {
     memset(player, 0, sizeof(Player));
-    
+
     player->playerId = playerId;
     strncpy(player->name, name, sizeof(player->name) - 1);
     player->health = 30;
@@ -23,6 +23,26 @@ void InitializePlayer(Player* player, int playerId, const char* name) {
     player->isAlive = true;
     player->heroPowerUsed = false;
     player->hasWeapon = false;
+
+    // Set hero class and create hero power
+    player->heroClass = playerId == 0 ? CLASS_MAGE : CLASS_PALADIN;
+
+    // Initialize hero power based on class
+    switch (player->heroClass) {
+        case CLASS_MAGE:
+            player->heroPower = CreateCard(200, "Fireblast", 2, CARD_TYPE_HERO_POWER, 0, 0);
+            player->heroPower.spellDamage = 1;
+            strncpy(player->heroPower.description, "Deal 1 damage.", sizeof(player->heroPower.description) - 1);
+            break;
+        case CLASS_PALADIN:
+            player->heroPower = CreateCard(201, "Reinforce", 2, CARD_TYPE_HERO_POWER, 0, 0);
+            strncpy(player->heroPower.description, "Summon a 1/1 Silver Hand Recruit.", sizeof(player->heroPower.description) - 1);
+            break;
+        default:
+            player->heroPower = CreateCard(202, "Armor Up", 2, CARD_TYPE_HERO_POWER, 0, 0);
+            strncpy(player->heroPower.description, "Gain 2 Armor.", sizeof(player->heroPower.description) - 1);
+            break;
+    }
 }
 
 // Draw a card from the deck to hand
@@ -84,15 +104,59 @@ void SpendMana(Player* player, int amount) {
     }
 }
 
-// Initialize a player's deck with random cards
+// Initialize a player's deck with balanced cards
 void InitializePlayerDeck(Player* player) {
-    // Create basic deck for testing
-    int deckCards[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                       1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
-                       1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
-    
+    // Create balanced deck based on hero class
+    int deckCards[30];
+    int cardIndex = 0;
+
+    if (player->heroClass == CLASS_MAGE) {
+        // Mage deck - focus on spells and spell damage
+        int mageCards[] = {
+            1, 1,     // Elven Archer x2
+            2, 2,     // Boulderfist Ogre x2
+            3, 3,     // Chillwind Yeti x2
+            5, 5,     // Stormpike Commando x2
+            6, 6,     // Ironforge Rifleman x2
+            7, 7,     // Lord of the Arena x2
+            8, 8,     // Wolfrider x2
+            9, 9,     // Fireball x2
+            10, 10,   // Healing Potion x2
+            11, 11,   // Divine Shield Knight x2
+            12,       // Windfury Harpy x1
+            13, 13,   // Poisonous Spider x2
+            14,       // Lifesteal Vampire x1
+            15, 15,   // Loot Hoarder x2
+            2, 3, 4   // Fill remaining slots
+        };
+        for (int i = 0; i < 30; i++) {
+            deckCards[i] = mageCards[i];
+        }
+    } else {
+        // Paladin deck - focus on minions and buffs
+        int paladinCards[] = {
+            1, 1,     // Elven Archer x2
+            2, 2,     // Boulderfist Ogre x2
+            3, 3, 3,  // Chillwind Yeti x3
+            4, 4,     // War Golem x2
+            7, 7, 7,  // Lord of the Arena x3 (taunt synergy)
+            8, 8,     // Wolfrider x2
+            10, 10,   // Healing Potion x2
+            11, 11, 11, // Divine Shield Knight x3
+            12,       // Windfury Harpy x1
+            13,       // Poisonous Spider x1
+            14, 14,   // Lifesteal Vampire x2
+            15, 15,   // Loot Hoarder x2
+            6, 6,     // Ironforge Rifleman x2
+            5         // Stormpike Commando x1
+        };
+        for (int i = 0; i < 30; i++) {
+            deckCards[i] = paladinCards[i];
+        }
+    }
+
     player->deckCount = 30;
-    
+
     for (int i = 0; i < 30; i++) {
         player->deck[i] = GetCardById(deckCards[i]);
         player->deck[i].ownerPlayer = player->playerId;

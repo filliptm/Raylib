@@ -2,6 +2,7 @@
 #include "game_state.h"
 #include "combat.h"
 #include <string.h>
+#include <stdio.h>
 
 // Initialize the effects system
 void InitializeEffects(GameState* game) {
@@ -60,11 +61,15 @@ void ClearEffects(GameState* game) {
 
 // Create specific effect types
 void CreateDamageEffect(GameState* game, Vector3 position, int damage) {
-    AddVisualEffect(game, EFFECT_DAMAGE, position, TextFormat("-%d", damage));
+    char text[32];
+    snprintf(text, sizeof(text), "-%d", damage);
+    AddVisualEffect(game, EFFECT_DAMAGE, position, text);
 }
 
 void CreateHealEffect(GameState* game, Vector3 position, int healing) {
-    AddVisualEffect(game, EFFECT_HEAL, position, TextFormat("+%d", healing));
+    char text[32];
+    snprintf(text, sizeof(text), "+%d", healing);
+    AddVisualEffect(game, EFFECT_HEAL, position, text);
 }
 
 void CreateDeathEffect(GameState* game, Vector3 position) {
@@ -87,6 +92,11 @@ void CreateDeathrattleEffect(GameState* game, Vector3 position) {
     AddVisualEffect(game, EFFECT_DEATHRATTLE, position, "Deathrattle!");
 }
 
+// Create AI turn indicator effect
+void CreateAITurnEffect(GameState* game, Vector3 position) {
+    AddVisualEffect(game, EFFECT_AI_TURN, position, "AI Thinking...");
+}
+
 // Execute battlecry effect
 void ExecuteBattlecry(GameState* game, Card* card, void* target) {
     if (!card->hasBattlecry) return;
@@ -102,11 +112,25 @@ void ExecuteBattlecry(GameState* game, Card* card, void* target) {
 // Execute deathrattle effect
 void ExecuteDeathrattle(GameState* game, Card* card) {
     if (!card->hasDeathrattle) return;
-    
+
     CreateDeathrattleEffect(game, card->position);
-    
-    // Simple deathrattle implementation
-    // This would be expanded with specific deathrattle effects
+    Player* owner = &game->players[card->ownerPlayer];
+
+    // Process specific deathrattle effects
+    switch (card->id) {
+        case 15: // Loot Hoarder - draw card
+            DrawCardFromDeck(owner);
+            break;
+        default:
+            // Generic deathrattle based on deathrattleValue
+            if (card->deathrattleValue > 0) {
+                // Could be damage, healing, card draw, etc.
+                if (card->deathrattleValue == 1) {
+                    DrawCardFromDeck(owner);
+                }
+            }
+            break;
+    }
 }
 
 // Get the color for an effect type
@@ -122,6 +146,7 @@ Color GetEffectColor(int effectType) {
         case EFFECT_SPELL:        return PINK;
         case EFFECT_HEAL:         return LIME;
         case EFFECT_TURN_START:   return GOLD;
+        case EFFECT_AI_TURN:      return SKYBLUE;
         default:                  return WHITE;
     }
 }
@@ -131,6 +156,7 @@ float GetEffectDuration(int effectType) {
     switch (effectType) {
         case EFFECT_TURN_START:   return 3.0f;
         case EFFECT_DEATH:        return 2.5f;
+        case EFFECT_AI_TURN:      return 2.5f;
         default:                  return 2.0f;
     }
 }

@@ -1,6 +1,7 @@
 #include "render.h"
 #include "game_state.h"
 #include "input.h"
+#include "game_polish.h"
 #include <stdlib.h>
 
 // Main game rendering function
@@ -40,8 +41,9 @@ void DrawGame(GameState* game) {
     if (game->gameEnded) {
         DrawGameEndScreen(game);
     }
-    
-    DrawFPS(GetScreenWidth() - 80, 10);
+
+    // Draw polish systems (performance overlay, debug info, etc.)
+    DrawGamePolishSystems(game);
 }
 
 // Update game camera

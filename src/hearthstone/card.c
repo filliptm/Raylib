@@ -99,6 +99,49 @@ Card GetCardById(int id) {
             strncpy(card.description, "Restore 3 Health.", sizeof(card.description) - 1);
             return card;
         }
+        case 11: {
+            Card card = CreateCard(11, "Divine Shield Knight", 2, CARD_TYPE_MINION, 2, 3);
+            card.divineShield = true;
+            card.color = YELLOW;
+            strncpy(card.description, "Divine Shield", sizeof(card.description) - 1);
+            return card;
+        }
+        case 12: {
+            Card card = CreateCard(12, "Windfury Harpy", 3, CARD_TYPE_MINION, 4, 5);
+            card.windfury = true;
+            card.color = SKYBLUE;
+            strncpy(card.description, "Windfury", sizeof(card.description) - 1);
+            return card;
+        }
+        case 13: {
+            Card card = CreateCard(13, "Poisonous Spider", 1, CARD_TYPE_MINION, 1, 1);
+            card.poisonous = true;
+            card.color = GREEN;
+            strncpy(card.description, "Poisonous", sizeof(card.description) - 1);
+            return card;
+        }
+        case 14: {
+            Card card = CreateCard(14, "Lifesteal Vampire", 3, CARD_TYPE_MINION, 3, 4);
+            card.lifesteal = true;
+            card.color = DARKPURPLE;
+            strncpy(card.description, "Lifesteal", sizeof(card.description) - 1);
+            return card;
+        }
+        case 15: {
+            Card card = CreateCard(15, "Loot Hoarder", 1, CARD_TYPE_MINION, 2, 1);
+            card.hasDeathrattle = true;
+            card.deathrattleValue = 1; // Draw a card
+            card.color = BROWN;
+            strncpy(card.description, "Deathrattle: Draw a card.", sizeof(card.description) - 1);
+            return card;
+        }
+        case 100: {
+            // Special card for Paladin hero power
+            Card card = CreateCard(100, "Silver Hand Recruit", 0, CARD_TYPE_MINION, 1, 1);
+            card.color = LIGHTGRAY;
+            strncpy(card.description, "A loyal soldier.", sizeof(card.description) - 1);
+            return card;
+        }
         default: {
             Card card = CreateCard(0, "Unknown Card", 1, CARD_TYPE_MINION, 1, 1);
             card.color = LIGHTGRAY;

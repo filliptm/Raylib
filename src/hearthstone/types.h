@@ -80,7 +80,8 @@ typedef enum {
     EFFECT_SUMMON,
     EFFECT_SPELL,
     EFFECT_HEAL,
-    EFFECT_TURN_START
+    EFFECT_TURN_START,
+    EFFECT_AI_TURN
 } EffectType;
 
 #endif // TYPES_H
