@@ -36,11 +36,19 @@ Requires raylib 5.5+ (`brew install raylib`).
 
 ## What's implemented
 
-**Aim-and-release shooting.** Holding the fire button draws the actual shot on the
-ground — the spread cone for direct-fire weapons, a landing circle and flight arc for
-lobbed ones, a lunge line for the dash. The preview is clipped by walls, so you can see
-exactly where a shot dies before you commit to it. A quick tap instead fires an
-auto-aimed shot with target leading, standing in for mobile's tap-to-shoot.
+**Aim-and-release shooting.** Holding the fire button draws the actual shot on the ground
+as a solid shape, matched to how the weapon behaves:
+
+- **A filled cone** for spread weapons, opening to the real spread angle.
+- **A thick beam** for single-shot weapons like the sniper, and for the dash charge.
+- **A filled disc** for lobbed shots, one per shell, sitting where the splash will land —
+  plus a dotted arc showing the flight path over any wall in between.
+
+Every rib of the cone and both edges of the beam are raycast separately, so the shape is
+clipped flat against whatever wall it runs into rather than passing through it: you can
+read exactly where a shot dies before committing. Supers preview in gold, ordinary shots
+in blue. A quick tap instead fires an auto-aimed shot with target leading, standing in
+for mobile's tap-to-shoot.
 
 **Turn-and-fire.** An auto-aimed shot snaps the brawler around to face its target,
 holds that facing for a beat, then eases back to whichever way it is running. The shot

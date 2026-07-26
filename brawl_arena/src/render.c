@@ -503,11 +503,82 @@ static float RayGroundDistance(World *w, Vector3 from, float angle, float maxDis
     return maxDist;
 }
 
-static void DrawGroundLine(Vector3 from, float angle, float dist, float thickness, Color color)
+#define AIM_Y 0.08f     // sits just clear of the floor and its grid lines
+
+// A thick ground segment, used for the outlines of the aim shapes below.
+static void DrawGroundEdge(Vector3 a, Vector3 b, float thickness, Color color)
 {
-    Vector3 a = { from.x, 0.07f, from.z };
-    Vector3 b = { from.x + sinf(angle)*dist, 0.07f, from.z + cosf(angle)*dist };
-    DrawCylinderEx(a, b, thickness, thickness, 6, color);
+    DrawCylinderEx((Vector3){ a.x, AIM_Y, a.z }, (Vector3){ b.x, AIM_Y, b.z },
+                   thickness, thickness, 6, color);
+}
+
+// Filled cone for spread weapons. Every rib is raycast separately, so the shape is
+// clipped by whatever wall it runs into rather than passing through it.
+static void DrawAimCone(World *w, Vector3 origin, float centerAngle, float halfSpread,
+                        float range, Color fill, Color edge)
+{
+    const int SEG = 26;
+    Vector3 pts[SEG + 1];
+
+    for (int i = 0; i <= SEG; i++)
+    {
+        float angle = centerAngle - halfSpread + (i/(float)SEG)*halfSpread*2.0f;
+        float d = RayGroundDistance(w, origin, angle, range);
+        pts[i] = (Vector3){ origin.x + sinf(angle)*d, AIM_Y, origin.z + cosf(angle)*d };
+    }
+
+    Vector3 apex = { origin.x, AIM_Y, origin.z };
+
+    // Culling is off because the winding flips depending on which way you are facing.
+    rlDisableBackfaceCulling();
+    for (int i = 0; i < SEG; i++) DrawTriangle3D(apex, pts[i], pts[i + 1], fill);
+    rlEnableBackfaceCulling();
+
+    for (int i = 0; i < SEG; i++) DrawGroundEdge(pts[i], pts[i + 1], 0.055f, edge);
+    DrawGroundEdge(apex, pts[0], 0.05f, edge);
+    DrawGroundEdge(apex, pts[SEG], 0.05f, edge);
+}
+
+// Single thick beam, for weapons that fire one shot down a line.
+static void DrawAimBeam(World *w, Vector3 origin, float angle, float range,
+                        float halfWidth, Color fill, Color edge)
+{
+    float d = RayGroundDistance(w, origin, angle, range);
+    float fx = sinf(angle), fz = cosf(angle);
+    float px = cosf(angle), pz = -sinf(angle);      // perpendicular in the ground plane
+
+    Vector3 nearL = { origin.x + px*halfWidth, AIM_Y, origin.z + pz*halfWidth };
+    Vector3 nearR = { origin.x - px*halfWidth, AIM_Y, origin.z - pz*halfWidth };
+    Vector3 farL  = { nearL.x + fx*d, AIM_Y, nearL.z + fz*d };
+    Vector3 farR  = { nearR.x + fx*d, AIM_Y, nearR.z + fz*d };
+
+    rlDisableBackfaceCulling();
+    DrawTriangle3D(nearL, nearR, farR, fill);
+    DrawTriangle3D(nearL, farR, farL, fill);
+    rlEnableBackfaceCulling();
+
+    DrawGroundEdge(nearL, farL, 0.055f, edge);
+    DrawGroundEdge(nearR, farR, 0.055f, edge);
+    DrawGroundEdge(farL, farR, 0.055f, edge);
+}
+
+// Filled disc, for the splash of a lobbed shot.
+static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge)
+{
+    const int SEG = 32;
+    Vector3 middle = { center.x, AIM_Y, center.z };
+    Vector3 prev = { center.x, AIM_Y, center.z + radius };
+
+    rlDisableBackfaceCulling();
+    for (int i = 1; i <= SEG; i++)
+    {
+        float a = (i/(float)SEG)*PI*2.0f;
+        Vector3 p = { center.x + sinf(a)*radius, AIM_Y, center.z + cosf(a)*radius };
+        DrawTriangle3D(middle, prev, p, fill);
+        DrawGroundEdge(prev, p, 0.06f, edge);
+        prev = p;
+    }
+    rlEnableBackfaceCulling();
 }
 
 static void DrawAimPreview(World *w, Assets *a)
@@ -522,76 +593,69 @@ static void DrawAimPreview(World *w, Assets *a)
     float range     = super ? def->sRange : def->range;
     float spreadDeg = super ? def->sSpreadDeg : def->spreadDeg;
     int pellets     = super ? def->sPellets : def->pellets;
+    float radius    = super ? def->sProjRadius : def->projRadius;
 
-    Color tint = super ? (Color){ 255, 214, 92, 190 } : (Color){ 120, 200, 255, 170 };
-    Color edge = super ? (Color){ 255, 240, 170, 230 } : (Color){ 190, 230, 255, 230 };
+    // Supers read gold, ordinary shots read cool blue.
+    Color fill = super ? (Color){ 255, 206, 92, 62 } : (Color){ 96, 178, 255, 58 };
+    Color edge = super ? (Color){ 255, 238, 170, 210 } : (Color){ 176, 224, 255, 205 };
 
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
 
+    // The dash charge previews as the lane it will carve.
     if (super && def->sDash)
     {
-        float d = RayGroundDistance(w, b->position, b->aimAngle, w->tune.dashSpeed*0.45f);
-        DrawGroundLine(b->position, b->aimAngle, d, 0.45f, tint);
-        Vector3 tip = { b->position.x + sinf(b->aimAngle)*d, 0.0f, b->position.z + cosf(b->aimAngle)*d };
+        DrawAimBeam(w, b->position, b->aimAngle, w->tune.dashSpeed*0.45f,
+                    BRAWLER_RADIUS*1.1f, fill, edge);
         rlEnableDepthMask();
         EndBlendMode();
-        DrawGroundGlow(a, tip, 1.1f, edge);
         return;
     }
 
+    // Lobbed shots: the splash disc where each shell lands, plus its flight path.
     if (def->arcing)
     {
         float aimDist = Clamp(w->aimDist, 1.5f, range);
-        Vector3 land = {
-            b->position.x + sinf(b->aimAngle)*aimDist, 0.0f,
-            b->position.z + cosf(b->aimAngle)*aimDist
-        };
-        float radius = super ? def->sProjRadius : def->projRadius;
+        float half = (spreadDeg*DEG2RAD)*0.5f;
 
-        Vector3 start = { b->position.x, 0.8f, b->position.z };
-        float height = Vector3Distance(start, land)*0.42f + 1.0f;
-        for (int i = 1; i <= 16; i++)
+        for (int i = 0; i < pellets; i++)
         {
-            float t = i/16.0f;
-            Vector3 pt = Vector3Lerp(start, land, t);
-            pt.y = sinf(t*PI)*height;
-            if (i % 2 == 0) DrawBillboard(w->camera, a->texGlow, pt, 0.34f, edge);
+            // Mirror how WeaponsFire fans multiple shells, so the preview matches.
+            float t = (pellets == 1) ? 0.5f : (i/(float)(pellets - 1));
+            float angle = b->aimAngle + (t - 0.5f)*half*2.0f;
+
+            Vector3 land = { b->position.x + sinf(angle)*aimDist, 0.0f,
+                             b->position.z + cosf(angle)*aimDist };
+
+            DrawAimDisc(land, radius, fill, edge);
+
+            if (i == pellets/2)
+            {
+                Vector3 start = { b->position.x, 0.8f, b->position.z };
+                float height = Vector3Distance(start, land)*0.42f + 1.0f;
+                for (int k = 1; k <= 16; k++)
+                {
+                    float p = k/16.0f;
+                    Vector3 pt = Vector3Lerp(start, land, p);
+                    pt.y = sinf(p*PI)*height;
+                    if (k % 2 == 0) DrawBillboard(w->camera, a->texGlow, pt, 0.32f, edge);
+                }
+            }
         }
 
         rlEnableDepthMask();
         EndBlendMode();
-        DrawGroundGlow(a, land, radius, tint);
         return;
     }
 
-    float half = (spreadDeg*DEG2RAD)*0.5f;
-    float center = RayGroundDistance(w, b->position, b->aimAngle, range);
-    DrawGroundLine(b->position, b->aimAngle, center, 0.075f, edge);
-
-    if (pellets > 1 && half > 0.001f)
-    {
-        float dl = RayGroundDistance(w, b->position, b->aimAngle - half, range);
-        float dr = RayGroundDistance(w, b->position, b->aimAngle + half, range);
-        DrawGroundLine(b->position, b->aimAngle - half, dl, 0.06f, tint);
-        DrawGroundLine(b->position, b->aimAngle + half, dr, 0.06f, tint);
-
-        for (int i = 1; i < 5; i++)
-        {
-            float t = (i/5.0f)*2.0f - 1.0f;
-            float ang = b->aimAngle + t*half;
-            float d = RayGroundDistance(w, b->position, ang, range);
-            Color faint = tint;
-            faint.a = 55;
-            DrawGroundLine(b->position, ang, d, 0.04f, faint);
-        }
-    }
+    // Everything else is either a spread cone or, for single-shot weapons, one beam.
+    if (pellets > 1 && spreadDeg > 0.5f)
+        DrawAimCone(w, b->position, b->aimAngle, (spreadDeg*DEG2RAD)*0.5f, range, fill, edge);
+    else
+        DrawAimBeam(w, b->position, b->aimAngle, range, fmaxf(radius*2.2f, 0.30f), fill, edge);
 
     rlEnableDepthMask();
     EndBlendMode();
-
-    Vector3 tip = { b->position.x + sinf(b->aimAngle)*center, 0.0f, b->position.z + cosf(b->aimAngle)*center };
-    DrawGroundGlow(a, tip, 0.55f, edge);
 }
 
 //------------------------------------------------------------------------------------
