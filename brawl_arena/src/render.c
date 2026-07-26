@@ -92,6 +92,23 @@ void RenderBuildGrass(World *w)
     }
 }
 
+#define AIM_Y 0.08f     // sits just clear of the floor and its grid lines
+
+// A thick ground segment, shared by the shockwave rings and the aim-preview outlines.
+static void DrawGroundEdge(Vector3 a, Vector3 b, float thickness, Color color)
+{
+    DrawCylinderEx((Vector3){ a.x, AIM_Y, a.z }, (Vector3){ b.x, AIM_Y, b.z },
+                   thickness, thickness, 6, color);
+}
+
+// Scale + free rotation + translate, for objects that tumble rather than just yaw.
+static Matrix TumbleTRS(float scale, Vector3 euler, Vector3 position)
+{
+    Matrix m = MatrixScale(scale, scale, scale);
+    m = MatrixMultiply(m, MatrixRotateXYZ(euler));
+    return MatrixMultiply(m, MatrixTranslate(position.x, position.y, position.z));
+}
+
 void CameraInit(World *w)
 {
     w->camFocus = w->arena.playerSpawn;
@@ -406,6 +423,84 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
 //------------------------------------------------------------------------------------
 // Projectiles: a lit core plus additive glow billboards, with a short trail.
 //------------------------------------------------------------------------------------
+// Anything with real geometry goes down first, lit and depth-written, so the additive
+// glow layer has something solid to sit on top of.
+static void DrawSolidEffects(World *w, Assets *a)
+{
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        Projectile *p = &w->projectiles[i];
+        if (!p->active || !p->arcing) continue;
+
+        // Tumble the shell as it flies: a spinning object reads as thrown, a static
+        // billboard reads as a light.
+        float spin = p->arcT*14.0f;
+        Vector3 euler = { spin*1.7f, spin*1.15f, spin*0.6f };
+
+        float body = 0.34f;
+        DrawLit(a, a->sphere, TumbleTRS(body, euler, p->position), a->texMetal,
+                (Color){ 96, 104, 126, 255 }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+
+        // A wide emissive band around the casing: it tells you whose shell it is, and
+        // keeps the silhouette readable against the dark floor as it tumbles.
+        Matrix band = MatrixMultiply(MatrixScale(body*1.18f, body*0.46f, body*1.18f),
+                                     MatrixRotateXYZ(euler));
+        band = MatrixMultiply(band, MatrixTranslate(p->position.x, p->position.y, p->position.z));
+        DrawLit(a, a->sphere, band, a->texFlat, p->color, (Vector2){ 1.0f, 1.0f }, 0.55f);
+    }
+
+    // Debris chunks from a blast, tumbling on their own axes.
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        Particle *pa = &w->particles[i];
+        if (!pa->active || pa->type != PARTICLE_DEBRIS) continue;
+
+        float t = pa->life/pa->maxLife;
+        float spin = (1.0f - t)*11.0f;
+        Vector3 euler = { spin*1.4f, spin, spin*0.7f };
+
+        DrawLit(a, a->cube, TumbleTRS(pa->size*(0.7f + t*0.5f), euler, pa->position),
+                a->texMetal, pa->color, (Vector2){ 1.0f, 1.0f }, 0.0f);
+    }
+}
+
+// Expanding ground rings. Drawn additively so they read as light rather than paint.
+static void DrawShockwaves(World *w)
+{
+    BeginBlendMode(BLEND_ADDITIVE);
+    rlDisableDepthMask();
+
+    for (int i = 0; i < MAX_SHOCKWAVES; i++)
+    {
+        Shockwave *sw = &w->waves[i];
+        if (!sw->active) continue;
+
+        float t = 1.0f - sw->life/sw->maxLife;          // 0 at birth, 1 at death
+        float eased = 1.0f - powf(1.0f - t, 3.0f);      // fast out, then settles
+        float radius = sw->maxRadius*eased;
+        if (radius < 0.05f) continue;
+
+        float fade = 1.0f - t;
+        Color c = sw->color;
+        c.a = (unsigned char)(225*fade*fade);
+        float thickness = 0.07f + 0.20f*fade;
+
+        const int SEG = 30;
+        Vector3 prev = { sw->position.x, AIM_Y, sw->position.z + radius };
+        for (int k = 1; k <= SEG; k++)
+        {
+            float ang = (k/(float)SEG)*PI*2.0f;
+            Vector3 pt = { sw->position.x + sinf(ang)*radius, AIM_Y,
+                           sw->position.z + cosf(ang)*radius };
+            DrawGroundEdge(prev, pt, thickness, c);
+            prev = pt;
+        }
+    }
+
+    rlEnableDepthMask();
+    EndBlendMode();
+}
+
 static void DrawProjectiles(World *w, Assets *a)
 {
     BeginBlendMode(BLEND_ADDITIVE);
@@ -417,7 +512,7 @@ static void DrawProjectiles(World *w, Assets *a)
         if (!p->active) continue;
 
         Color glow = p->color;
-        float coreSize = p->arcing ? 0.55f : fmaxf(p->radius, 0.16f)*2.6f;
+        float coreSize = p->arcing ? 0.30f : fmaxf(p->radius, 0.16f)*2.6f;
 
         if (!p->arcing)
         {
@@ -436,6 +531,15 @@ static void DrawProjectiles(World *w, Assets *a)
             }
         }
 
+        // The shell already has a solid body, so it only needs a fuse glow, not a core.
+        if (p->arcing)
+        {
+            float flicker = 0.72f + 0.28f*sinf(w->time*34.0f + i);
+            DrawBillboard(w->camera, a->texGlow, p->position, coreSize*2.1f*flicker,
+                          (Color){ glow.r, glow.g, glow.b, 70 });
+            continue;
+        }
+
         Color hot = { 255, 255, 255, 165 };
         DrawBillboard(w->camera, a->texGlow, p->position, coreSize*1.45f, (Color){ glow.r, glow.g, glow.b, 88 });
         DrawBillboard(w->camera, a->texGlow, p->position, coreSize*0.58f, hot);
@@ -450,13 +554,20 @@ static void DrawProjectiles(World *w, Assets *a)
         float t = pa->life/pa->maxLife;
         Color c = pa->color;
 
-        if (pa->type == PARTICLE_SMOKE)
+        // Smoke is soft and dark; debris is solid. Both are handled elsewhere.
+        if (pa->type == PARTICLE_SMOKE || pa->type == PARTICLE_DEBRIS) continue;
+
+        c.a = (unsigned char)(c.a*(t > 1.0f ? 1.0f : t));
+
+        if (pa->type == PARTICLE_SPARK)
         {
-            // Smoke is soft and dark rather than emissive, so it goes in the alpha pass.
+            // Stretched along travel, so a blast throws streaks instead of dots.
+            Vector3 tail = Vector3Subtract(pa->position, Vector3Scale(pa->velocity, 0.035f));
+            DrawCylinderEx(tail, pa->position, pa->size*0.35f, pa->size*1.15f, 5, c);
+            DrawBillboard(w->camera, a->texGlow, pa->position, pa->size*1.5f, c);
             continue;
         }
 
-        c.a = (unsigned char)(c.a*(t > 1.0f ? 1.0f : t));
         float size = pa->size*(0.6f + t*0.8f)*1.9f;
         DrawBillboard(w->camera, a->texGlow, pa->position, size, c);
     }
@@ -501,15 +612,6 @@ static float RayGroundDistance(World *w, Vector3 from, float angle, float maxDis
         if (ArenaSolidAt(&w->arena, x, z)) return d;
     }
     return maxDist;
-}
-
-#define AIM_Y 0.08f     // sits just clear of the floor and its grid lines
-
-// A thick ground segment, used for the outlines of the aim shapes below.
-static void DrawGroundEdge(Vector3 a, Vector3 b, float thickness, Color color)
-{
-    DrawCylinderEx((Vector3){ a.x, AIM_Y, a.z }, (Vector3){ b.x, AIM_Y, b.z },
-                   thickness, thickness, 6, color);
 }
 
 // Filled cone for spread weapons. Every rib is raycast separately, so the shape is
@@ -765,7 +867,9 @@ void RenderWorld(World *w)
             }
         }
 
+        DrawSolidEffects(w, a);
         DrawAimPreview(w, a);
+        DrawShockwaves(w);
         DrawProjectiles(w, a);
 
         if (w->tune.showDebug) DrawDebugOverlay(w);

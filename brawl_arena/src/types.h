@@ -30,6 +30,7 @@
 #define MAX_PROJECTILES 512
 #define MAX_PARTICLES 1024
 #define MAX_FLOATTEXTS 64
+#define MAX_SHOCKWAVES 24
 #define MAX_FX_LIGHTS 64
 #define MAX_SHADER_LIGHTS 8     // how many make it to the GPU each frame
 
@@ -219,6 +220,16 @@ typedef struct Particle {
     bool active;
 } Particle;
 
+// Expanding ground ring left by a detonation. Gives a blast a readable size and edge
+// instead of just a cloud of sparks.
+typedef struct Shockwave {
+    Vector3 position;
+    float maxRadius;
+    float life, maxLife;
+    Color color;
+    bool active;
+} Shockwave;
+
 // Short-lived point lights fed to the scene shader: muzzle flashes, blasts, supers.
 typedef struct FxLight {
     Vector3 position;
@@ -295,6 +306,7 @@ typedef struct World {
     Particle particles[MAX_PARTICLES];
     FloatText texts[MAX_FLOATTEXTS];
     FxLight lights[MAX_FX_LIGHTS];
+    Shockwave waves[MAX_SHOCKWAVES];
 
     Camera3D camera;
     Vector3 camFocus;

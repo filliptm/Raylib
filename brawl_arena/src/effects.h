@@ -12,6 +12,7 @@ void FxCrateBreak(World *w, Vector3 pos);
 void FxFloatText(World *w, Vector3 pos, const char *text, Color color);
 void FxShake(World *w, float amount);
 void FxSpawnLight(World *w, Vector3 pos, Color color, float radius, float life);
+void FxShockwave(World *w, Vector3 pos, float maxRadius, float life, Color color);
 
 void FxUpdate(World *w, float dt);
 void FxDrawScreen(World *w);     // called after EndMode3D

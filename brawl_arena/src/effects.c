@@ -70,26 +70,52 @@ void FxImpact(World *w, Vector3 pos, Color color, int count)
 
 void FxExplosion(World *w, Vector3 pos, float radius, Color color)
 {
-    int count = 18 + (int)(radius * 4.0f);
+    Vector3 ground = { pos.x, 0.12f, pos.z };
+
+    // 1. A hard white core for two frames, so the blast has an instant.
+    FxSpawnParticle(w, (Vector3){ pos.x, pos.y + 0.4f, pos.z }, (Vector3){ 0, 0.4f, 0 },
+                    (Color){ 255, 250, 235, 255 }, 0.09f, radius*0.42f, PARTICLE_MUZZLE);
+
+    // 2. An expanding ring on the floor that reads the blast radius exactly.
+    FxShockwave(w, ground, radius, 0.42f, color);
+    FxShockwave(w, ground, radius*0.62f, 0.26f, (Color){ 255, 244, 214, 255 });
+
+    // 3. Sparks thrown along the ground rather than up, so the ring stays legible.
+    int count = 16 + (int)(radius*5.0f);
     for (int i = 0; i < count; i++)
     {
-        float a = (i / (float)count) * PI * 2.0f + GetRandomValue(-20, 20) / 100.0f;
-        float speed = radius * (1.5f + GetRandomValue(0, 120) / 100.0f);
-        Vector3 vel = { sinf(a) * speed, GetRandomValue(40, 320) / 100.0f, cosf(a) * speed };
-        Color c = ColorLerpC(color, WHITE, GetRandomValue(0, 45) / 100.0f);
-        FxSpawnParticle(w, pos, vel, c, 0.40f + GetRandomValue(0, 25) / 100.0f, 0.16f, PARTICLE_SPARK);
+        float a = (i/(float)count)*PI*2.0f + GetRandomValue(-24, 24)/100.0f;
+        float speed = radius*(2.2f + GetRandomValue(0, 150)/100.0f);
+        Vector3 vel = { sinf(a)*speed, GetRandomValue(30, 190)/100.0f, cosf(a)*speed };
+        Color c = ColorLerpC(color, WHITE, GetRandomValue(20, 70)/100.0f);
+        FxSpawnParticle(w, ground, vel, c, 0.34f + GetRandomValue(0, 22)/100.0f, 0.15f, PARTICLE_SPARK);
     }
-    for (int i = 0; i < 8; i++)
+
+    // 4. Solid tumbling chunks give the blast something with edges in it.
+    for (int i = 0; i < 9; i++)
     {
-        Vector3 vel = { GetRandomValue(-90, 90) / 100.0f, GetRandomValue(60, 200) / 100.0f, GetRandomValue(-90, 90) / 100.0f };
-        FxSpawnParticle(w, pos, vel, (Color){ 190, 190, 200, 160 }, 0.7f, 0.35f, PARTICLE_SMOKE);
+        float a = GetRandomValue(0, 628)/100.0f;
+        float speed = radius*(1.0f + GetRandomValue(0, 110)/100.0f);
+        Vector3 vel = { sinf(a)*speed, GetRandomValue(240, 520)/100.0f, cosf(a)*speed };
+        FxSpawnParticle(w, ground, vel, ColorLerpC(color, (Color){ 60, 62, 72, 255 }, 0.55f),
+                        0.7f, 0.17f, PARTICLE_DEBRIS);
     }
 
-    // A hot white core that fades into the blast colour reads as a real detonation.
-    FxSpawnLight(w, (Vector3){ pos.x, pos.y + 0.9f, pos.z }, (Color){ 255, 240, 200, 255 }, radius * 1.1f, 0.16f);
-    FxSpawnLight(w, pos, color, radius * 1.6f, 0.38f);
+    // 5. Smoke lingers after the light has gone.
+    for (int i = 0; i < 9; i++)
+    {
+        Vector3 p = { pos.x + GetRandomValue(-70, 70)/100.0f, 0.35f + GetRandomValue(0, 90)/100.0f,
+                      pos.z + GetRandomValue(-70, 70)/100.0f };
+        Vector3 vel = { GetRandomValue(-80, 80)/100.0f, GetRandomValue(70, 210)/100.0f,
+                        GetRandomValue(-80, 80)/100.0f };
+        FxSpawnParticle(w, p, vel, (Color){ 176, 178, 190, 165 }, 0.85f, 0.38f, PARTICLE_SMOKE);
+    }
 
-    FxShake(w, radius * 0.9f);
+    // A hot white core fading into the blast colour.
+    FxSpawnLight(w, (Vector3){ pos.x, pos.y + 0.9f, pos.z }, (Color){ 255, 240, 200, 255 }, radius*1.1f, 0.16f);
+    FxSpawnLight(w, pos, color, radius*1.6f, 0.38f);
+
+    FxShake(w, radius*0.9f);
 }
 
 void FxDeathBurst(World *w, Vector3 pos, Color color)
@@ -156,6 +182,22 @@ void FxSpawnLight(World *w, Vector3 pos, Color color, float radius, float life)
     }
 }
 
+void FxShockwave(World *w, Vector3 pos, float maxRadius, float life, Color color)
+{
+    for (int i = 0; i < MAX_SHOCKWAVES; i++)
+    {
+        Shockwave *s = &w->waves[i];
+        if (s->active) continue;
+
+        s->position = pos;
+        s->maxRadius = maxRadius;
+        s->life = s->maxLife = life;
+        s->color = color;
+        s->active = true;
+        return;
+    }
+}
+
 void FxShake(World *w, float amount)
 {
     if (amount > w->shake) w->shake = amount;
@@ -210,6 +252,15 @@ void FxUpdate(World *w, float dt)
 
         l->life -= dt;
         if (l->life <= 0.0f) l->active = false;
+    }
+
+    for (int i = 0; i < MAX_SHOCKWAVES; i++)
+    {
+        Shockwave *s = &w->waves[i];
+        if (!s->active) continue;
+
+        s->life -= dt;
+        if (s->life <= 0.0f) s->active = false;
     }
 
     if (w->shake > 0.0f)

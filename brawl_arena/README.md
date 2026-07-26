@@ -166,9 +166,22 @@ without extra geometry, speckled concrete walls, planked wood crates with metal 
 and leafy bush noise — all generated with a small value-noise/fbm function, mipmapped
 and trilinear filtered.
 
-**Projectiles** are a bright core plus additive glow billboards with a fading trail, and
-particles ride the same additive pass so sparks actually glow. Smoke is alpha-blended
-separately. Shadows are soft radial ground decals rather than hard cylinders.
+**Projectiles** are a bright core plus additive glow billboards with a fading trail.
+Lobbed shells are different: they are solid geometry, a dark casing with an emissive
+team-coloured band, tumbling on three axes as they fly, so a thrown object reads as an
+object rather than as a light.
+
+**Explosions** are built in layers so a blast has a shape rather than being a puff:
+
+- A hard white core for a couple of frames, giving the blast an instant.
+- Two expanding ground rings - one the full blast colour at the real radius, one tighter
+  and hotter - which is what actually communicates how far the damage reached.
+- Sparks thrown along the ground rather than up, drawn stretched along their travel so
+  they read as streaks instead of dots.
+- Solid tumbling debris chunks, so there is something with edges in the middle of it.
+- Smoke that lingers after the light has gone.
+
+Shadows are soft radial ground decals rather than hard cylinders.
 
 **Post-processing** adds thresholded bloom, a vignette and a gentle contrast S-curve.
 Toggle it and dial bloom strength on the WORLD tab.
