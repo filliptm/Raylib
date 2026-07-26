@@ -1,0 +1,18 @@
+# Editor Configuration
+camera_position 2.08 9.58 -13.56
+camera_target 0.35 0.00 -0.36
+camera_distance 16.40
+camera_angle_x -3.27
+camera_angle_y 0.62
+show_grid 1
+grid_size 1.00
+grid_color 130 130 130 255
+gizmo_size 1.00
+snap_to_grid 0
+snap_size 0.50
+show_property_panel 0
+show_object_browser 0
+show_timeline 1
+show_performance_overlay 1
+auto_save 1
+auto_save_interval 0.00

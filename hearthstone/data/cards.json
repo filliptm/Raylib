@@ -1,0 +1,111 @@
+{
+  "cards": [
+    {
+      "id": 1,
+      "name": "Goblin Warrior",
+      "type": "minion",
+      "cost": 1,
+      "attack": 2,
+      "health": 1,
+      "rarity": "common",
+      "class": "neutral",
+      "keywords": ["charge"],
+      "description": "A fierce goblin warrior that can attack immediately.",
+      "art": "goblin_warrior.png"
+    },
+    {
+      "id": 2,
+      "name": "Shield Bearer",
+      "type": "minion",
+      "cost": 1,
+      "attack": 0,
+      "health": 4,
+      "rarity": "common",
+      "class": "neutral",
+      "keywords": ["taunt"],
+      "description": "A sturdy defender that must be attacked first.",
+      "art": "shield_bearer.png"
+    },
+    {
+      "id": 3,
+      "name": "Fireball",
+      "type": "spell",
+      "cost": 4,
+      "spell_damage": 6,
+      "rarity": "common",
+      "class": "mage",
+      "keywords": [],
+      "description": "Deal 6 damage to any target.",
+      "art": "fireball.png"
+    },
+    {
+      "id": 4,
+      "name": "Healing Potion",
+      "type": "spell",
+      "cost": 2,
+      "healing": 5,
+      "rarity": "common",
+      "class": "neutral",
+      "keywords": [],
+      "description": "Restore 5 health to any target.",
+      "art": "healing_potion.png"
+    },
+    {
+      "id": 5,
+      "name": "Knight",
+      "type": "minion",
+      "cost": 3,
+      "attack": 3,
+      "health": 3,
+      "rarity": "common",
+      "class": "neutral",
+      "keywords": [],
+      "description": "A reliable warrior.",
+      "art": "knight.png"
+    },
+    {
+      "id": 6,
+      "name": "Dragon",
+      "type": "minion",
+      "cost": 7,
+      "attack": 8,
+      "health": 8,
+      "rarity": "legendary",
+      "class": "neutral",
+      "keywords": ["divine_shield"],
+      "description": "A mighty dragon protected by divine magic.",
+      "art": "dragon.png"
+    },
+    {
+      "id": 7,
+      "name": "Assassin",
+      "type": "minion",
+      "cost": 2,
+      "attack": 3,
+      "health": 1,
+      "rarity": "rare",
+      "class": "rogue",
+      "keywords": ["poisonous"],
+      "description": "Destroy any minion damaged by this.",
+      "art": "assassin.png"
+    },
+    {
+      "id": 8,
+      "name": "Priest",
+      "type": "minion",
+      "cost": 4,
+      "attack": 2,
+      "health": 6,
+      "rarity": "common",
+      "class": "priest",
+      "keywords": [],
+      "battlecry": {
+        "type": "heal",
+        "amount": 3,
+        "target": "any"
+      },
+      "description": "Battlecry: Restore 3 health to any character.",
+      "art": "priest.png"
+    }
+  ]
+}
