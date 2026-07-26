@@ -9,5 +9,8 @@ example_launcher
 squad_runner/squad_runner
 hearthstone/build/
 
+# Runtime-generated tuning (per-machine sandbox state)
+brawl_arena/tuning.cfg
+
 # Local logs
 logs/
