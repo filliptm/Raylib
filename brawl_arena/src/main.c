@@ -58,6 +58,7 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
         w->brawlerCount++;
     }
 
+    RenderBuildGrass(w);
     CameraInit(w);
 }
 

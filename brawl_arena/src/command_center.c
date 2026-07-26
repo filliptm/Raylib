@@ -11,6 +11,7 @@
 #include "arena.h"
 #include "brawler.h"
 #include "weapons.h"
+#include "render.h"
 #include "effects.h"
 #include "config.h"
 #include "raymath.h"
@@ -413,6 +414,14 @@ static void TabWorld(UI *ui)
     uiSection(ui, "STEALTH");
     uiSliderF(ui, "Bush reveal range", &t->bushReveal, 0.0f, 14.0f, "%.1f");
     uiSliderF(ui, "Reveal on fire", &t->fireReveal, 0.0f, 6.0f, "%.1fs");
+    uiSliderF(ui, "Conceal ghosting", &t->concealDither, 0.0f, 0.95f, "%.2f");
+
+    uiSection(ui, "GRASS");
+    uiSliderF(ui, "Height", &t->grassHeight, 0.2f, 4.0f, "%.2f");
+    uiSliderF(ui, "Wind strength", &t->windStrength, 0.0f, 1.5f, "%.2f");
+    uiSliderF(ui, "Wind speed", &t->windSpeed, 0.0f, 6.0f, "%.2f");
+    uiSliderF(ui, "Bend radius", &t->grassBendRadius, 0.2f, 6.0f, "%.2f");
+    uiSliderF(ui, "Bend strength", &t->grassBendStrength, 0.0f, 4.0f, "%.2f");
 
     uiSection(ui, "LOOK");
     uiToggle(ui, "Bloom + vignette", &t->postFx);
@@ -428,7 +437,7 @@ static void TabWorld(UI *ui)
     uiText(ui, TextFormat("%d FPS   %d shots   %d particles", GetFPS(), projectiles, particles), TEXT_DIM);
 
     uiSection(ui, "ACTIONS");
-    if (uiButton(ui, "Rebuild arena")) ArenaLoad(&w->arena);
+    if (uiButton(ui, "Rebuild arena")) { ArenaLoad(&w->arena); RenderBuildGrass(w); }
 
     if (uiButton(ui, "Reset score")) { w->kills = 0; w->deaths = 0; }
 

@@ -56,6 +56,12 @@ static int BuildFields(World *w, Field *f)
     n = AddField(f, n, "show_debug",     F_BOOL,  &t->showDebug);
     n = AddField(f, n, "post_fx",        F_BOOL,  &t->postFx);
     n = AddField(f, n, "bloom",          F_FLOAT, &t->bloom);
+    n = AddField(f, n, "grass_height",   F_FLOAT, &t->grassHeight);
+    n = AddField(f, n, "wind_strength",  F_FLOAT, &t->windStrength);
+    n = AddField(f, n, "wind_speed",     F_FLOAT, &t->windSpeed);
+    n = AddField(f, n, "grass_bend_r",   F_FLOAT, &t->grassBendRadius);
+    n = AddField(f, n, "grass_bend_s",   F_FLOAT, &t->grassBendStrength);
+    n = AddField(f, n, "conceal_dither", F_FLOAT, &t->concealDither);
     n = AddField(f, n, "bot_mode",       F_INT,   &t->botMode);
     n = AddField(f, n, "bot_count",      F_INT,   &t->botCount);
     n = AddField(f, n, "bot_kit",        F_INT,   &t->botKit);
@@ -158,6 +164,10 @@ bool ConfigLoad(World *w)
     if (t->timeScale < 0.01f) t->timeScale = 0.01f;
     if (t->playerRespawn < 0.1f) t->playerRespawn = 0.1f;
     if (t->enemyRespawn < 0.1f) t->enemyRespawn = 0.1f;
+    if (t->grassHeight < 0.1f) t->grassHeight = 0.1f;
+    if (t->grassBendRadius < 0.05f) t->grassBendRadius = 0.05f;
+    if (t->concealDither < 0.0f) t->concealDither = 0.0f;
+    if (t->concealDither > 0.95f) t->concealDither = 0.95f;
     if (t->botCount < 0) t->botCount = 0;
     if (t->botCount > MAX_BRAWLERS - 1) t->botCount = MAX_BRAWLERS - 1;
     if (t->botMode < 0 || t->botMode >= BOT_MODE_COUNT) t->botMode = BOT_STATIC;

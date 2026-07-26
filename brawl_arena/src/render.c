@@ -13,10 +13,10 @@
 // Palette. Textures carry the detail, these tint them.
 //------------------------------------------------------------------------------------
 static const Color FLOOR_TINT  = { 150, 163, 190, 255 };
-static const Color WALL_TINT   = { 132, 146, 176, 255 };
-static const Color WALL_CAP    = { 176, 190, 218, 255 };
+static const Color WALL_TINT   = { 120, 134, 166, 255 };   // cold steel: permanent cover
+static const Color WALL_CAP    = { 126, 140, 172, 255 };   // top plate, kept off the floor's value
+static const Color WALL_BASE   = {  74,  84, 108, 255 };   // skirt where it meets the floor
 static const Color CRATE_TINT  = { 205, 168, 122, 255 };
-static const Color BUSH_TINT   = { 128, 205, 132, 255 };
 static const Color SKIN_TINT   = { 232, 190, 158, 255 };
 
 // Camera framing: pulled back and tilted, the way the mobile game reads.
@@ -26,12 +26,70 @@ static Assets *g_assets = NULL;
 
 void RenderSetAssets(Assets *a) { g_assets = a; }
 
+// Grass instances are static geometry: positions are baked once per arena and all the
+// motion happens in the vertex shader.
+static Matrix g_grassXforms[MAX_GRASS_INSTANCES];
+static int g_grassCount = 0;
+
+// Lights collected this frame, shared between the scene and grass shaders.
+static Vector3 g_lightPos[MAX_SHADER_LIGHTS];
+static Vector3 g_lightCol[MAX_SHADER_LIGHTS];
+static int g_lightCount = 0;
+
+// Deterministic jitter, so an arena rebuild reproduces exactly the same field.
+static float Scatter(int a, int b, int c)
+{
+    int h = a*374761393 + b*668265263 + c*1442695040;
+    h = (h ^ (h >> 13))*1274126177;
+    return (float)((h ^ (h >> 16)) & 0xFFFFFF)/(float)0xFFFFFF;
+}
+
 //------------------------------------------------------------------------------------
 static Matrix TRS(Vector3 scale, float yawRadians, Vector3 position)
 {
     Matrix m = MatrixScale(scale.x, scale.y, scale.z);
     if (yawRadians != 0.0f) m = MatrixMultiply(m, MatrixRotateY(yawRadians));
     return MatrixMultiply(m, MatrixTranslate(position.x, position.y, position.z));
+}
+
+void RenderBuildGrass(World *w)
+{
+    g_grassCount = 0;
+
+    for (int tz = 0; tz < ARENA_H; tz++)
+    {
+        for (int tx = 0; tx < ARENA_W; tx++)
+        {
+            if (w->arena.tiles[tz][tx].type != TILE_BUSH) continue;
+
+            Vector3 c = ArenaTileCenter(tx, tz);
+
+            for (int i = 0; i < GRASS_PER_TILE; i++)
+            {
+                if (g_grassCount >= MAX_GRASS_INSTANCES) return;
+
+                float r = Scatter(tx, tz, i*3 + 2);
+
+                // Work out the blade's footprint first, then allow only enough jitter for
+                // the whole quad to stay inside its own tile. The field then lines up with
+                // the floor grid instead of bleeding over the edges onto bare ground.
+                // Narrow enough that roots can sit close to the tile edge without the
+                // quad overhanging it; density comes from GRASS_PER_TILE instead.
+                float width = TILE_SIZE*(0.21f + r*0.13f);
+                float room = TILE_SIZE*0.5f - width*0.5f;
+                if (room < 0.0f) room = 0.0f;
+
+                float jx = (Scatter(tx, tz, i*3 + 0) - 0.5f)*2.0f*room;
+                float jz = (Scatter(tx, tz, i*3 + 1) - 0.5f)*2.0f*room;
+
+                Vector3 pos = { c.x + jx, 0.0f, c.z + jz };
+                float height = 0.78f + r*0.46f;     // multiplies the grassHeight uniform
+
+                g_grassXforms[g_grassCount++] =
+                    TRS((Vector3){ width, height, width }, r*PI*2.0f, pos);
+            }
+        }
+    }
 }
 
 void CameraInit(World *w)
@@ -82,8 +140,8 @@ void CameraUpdate(World *w, float dt)
 //------------------------------------------------------------------------------------
 static void SubmitLights(World *w, Assets *a)
 {
-    Vector3 positions[MAX_SHADER_LIGHTS];
-    Vector3 colors[MAX_SHADER_LIGHTS];
+    Vector3 *positions = g_lightPos;
+    Vector3 *colors = g_lightCol;
     float scores[MAX_SHADER_LIGHTS];
     int count = 0;
 
@@ -146,6 +204,7 @@ static void SubmitLights(World *w, Assets *a)
 
     #undef TRY_LIGHT
 
+    g_lightCount = count;
     AssetsSetLights(a, positions, colors, count);
 }
 
@@ -192,10 +251,17 @@ static void DrawArenaGeometry(World *w, Assets *a)
                                   (Vector3){ c.x, WALL_HEIGHT*0.5f, c.z });
                 DrawLit(a, a->cube, body, a->texWall, WALL_TINT, (Vector2){ 1.0f, 1.0f }, 0.0f);
 
-                // Bright cap so the top edge catches the key light.
-                Matrix cap = TRS((Vector3){ TILE_SIZE*1.01f, 0.16f, TILE_SIZE*1.01f }, 0.0f,
-                                 (Vector3){ c.x, WALL_HEIGHT + 0.04f, c.z });
+                // From this camera the cap is most of what you see, so it carries the
+                // same bolted plating rather than a blank brushed-metal lid.
+                Matrix cap = TRS((Vector3){ TILE_SIZE*1.03f, 0.20f, TILE_SIZE*1.03f }, 0.0f,
+                                 (Vector3){ c.x, WALL_HEIGHT + 0.06f, c.z });
                 DrawLit(a, a->cube, cap, a->texWall, WALL_CAP, (Vector2){ 1.0f, 1.0f }, 0.0f);
+
+                // A wider skirt at the floor. Crates sit flush on the ground, so this
+                // silhouette alone tells you which cover you can shoot through.
+                Matrix plinth = TRS((Vector3){ TILE_SIZE*1.06f, 0.30f, TILE_SIZE*1.06f }, 0.0f,
+                                    (Vector3){ c.x, 0.15f, c.z });
+                DrawLit(a, a->cube, plinth, a->texMetal, WALL_BASE, (Vector2){ 1.0f, 1.0f }, 0.0f);
             }
             else if (t->type == TILE_CRATE)
             {
@@ -213,22 +279,9 @@ static void DrawArenaGeometry(World *w, Assets *a)
             }
             else if (t->type == TILE_BUSH)
             {
-                // A clump of overlapping spheres reads as foliage from this angle.
-                const float ox[4] = { -0.36f, 0.38f, 0.02f, 0.18f };
-                const float oz[4] = { 0.30f, -0.28f, 0.38f, -0.36f };
-                const float sc[4] = { 0.52f, 0.48f, 0.44f, 0.40f };
-                const float hy[4] = { 0.30f, 0.27f, 0.36f, 0.22f };
-
-                for (int i = 0; i < 4; i++)
-                {
-                    float r = TILE_SIZE*sc[i];
-                    // Squashed hard on Y: a brawler standing behind a bush must stay visible.
-                    Matrix m = TRS((Vector3){ r, r*0.50f, r }, 0.0f,
-                                   (Vector3){ c.x + ox[i], BUSH_HEIGHT*hy[i], c.z + oz[i] });
-                    Color tint = ColorLerpC(BUSH_TINT, (Color){ 74, 150, 84, 255 }, i*0.22f);
-                    DrawLit(a, a->sphere, m, a->texBush, tint, (Vector2){ 1.6f, 1.6f }, 0.0f);
-                }
-                DrawShadow(a, c, TILE_SIZE*0.6f);
+                // Darken the soil so the grass field has something to sit in. The blades
+                // themselves are instanced separately in DrawGrass().
+                DrawGroundGlow(a, c, TILE_SIZE*0.66f, (Color){ 12, 32, 16, 130 });
             }
         }
     }
@@ -257,17 +310,25 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
         helmet = ColorLerpC(helmet, WHITE, b->hitFlash);
     }
 
-    // Visible-but-hidden brawlers render translucent.
-    if (b->inBush)
-    {
-        body.a = 170; dark.a = 170; skin.a = 170; helmet.a = 170;
-    }
-
     Vector3 pos = b->position;
     float bob = sinf(b->bobPhase)*0.06f*s;
     float yaw = b->renderYaw;
 
     DrawShadow(a, pos, 0.52f*s);
+
+    // Concealed in grass: dissolve the body on a Bayer pattern. Screen-door beats real
+    // transparency here because it needs no blending and so cannot sort wrongly against
+    // the grass drawn on top of it. A green cast sells "in the bushes" as well.
+    bool concealed = b->inBush;
+    if (concealed)
+    {
+        AssetsSetDither(a, w->tune.concealDither);
+        Color moss = { 108, 190, 120, 255 };
+        body = ColorLerpC(body, moss, 0.28f);
+        dark = ColorLerpC(dark, moss, 0.28f);
+        skin = ColorLerpC(skin, moss, 0.28f);
+        helmet = ColorLerpC(helmet, moss, 0.28f);
+    }
 
     // Legs: two stubby cylinders that swing with the walk cycle.
     float stride = sinf(b->bobPhase)*0.16f*s;
@@ -327,6 +388,8 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
     Matrix grip = TRS((Vector3){ 0.10f*s, 0.18f*s, 0.10f*s }, yaw,
                       (Vector3){ pos.x + ax*0.34f*s, 0.60f*s + bob, pos.z + az*0.34f*s });
     DrawLit(a, a->cube, grip, a->texMetal, (Color){ 56, 60, 74, body.a }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+
+    if (concealed) AssetsSetDither(a, 0.0f);
 
     // Charged-super ring on the floor
     if (b->superCharge >= 1.0f)
@@ -532,6 +595,47 @@ static void DrawAimPreview(World *w, Assets *a)
 }
 
 //------------------------------------------------------------------------------------
+// Instanced grass. Alpha cutout with depth writes, so it needs no sorting and can be
+// drawn after the brawlers it partially hides.
+//------------------------------------------------------------------------------------
+static void DrawGrass(World *w, Assets *a)
+{
+    if (!a->grassOk || g_grassCount == 0) return;
+
+    Vector3 actorPos[MAX_SHADER_LIGHTS];
+    Vector2 actorVel[MAX_SHADER_LIGHTS];
+    int actorCount = 0;
+
+    for (int i = 0; i < w->brawlerCount && actorCount < MAX_SHADER_LIGHTS; i++)
+    {
+        Brawler *b = &w->brawlers[i];
+        if (!b->alive) continue;
+
+        // Only brawlers you are allowed to see bend the grass. Otherwise a hidden enemy
+        // would part the blades as they moved and their own concealment would betray
+        // them. `visible` already encodes the bush rules, including firing and proximity
+        // reveals, so a revealed enemy starts disturbing the field again straight away.
+        if (!b->visible) continue;
+
+        actorPos[actorCount] = b->position;
+
+        // Normalised travel direction, so blades lean the way someone is running rather
+        // than only pushing straight out from them.
+        float speed = sqrtf(b->velocity.x*b->velocity.x + b->velocity.z*b->velocity.z);
+        float scale = (speed > 0.2f) ? fminf(speed/w->tune.moveSpeed, 1.0f)/speed : 0.0f;
+        actorVel[actorCount] = (Vector2){ b->velocity.x*scale, b->velocity.z*scale };
+
+        actorCount++;
+    }
+
+    AssetsGrassFrame(a, &w->tune, w->time, w->camera.position,
+                     actorPos, actorVel, actorCount,
+                     g_lightPos, g_lightCol, g_lightCount);
+
+    DrawMeshInstanced(a->grassBlade, a->grassMat, g_grassXforms, g_grassCount);
+}
+
+//------------------------------------------------------------------------------------
 static void DrawDebugOverlay(World *w)
 {
     Brawler *p = &w->brawlers[w->playerIdx];
@@ -576,6 +680,26 @@ void RenderWorld(World *w)
 
         for (int i = 0; i < w->brawlerCount; i++)
             DrawBrawler(w, a, &w->brawlers[i]);
+
+        // Grass goes down after the brawlers so it can cover them, and before the
+        // additive effects pass so muzzle flashes still read through the blades.
+        DrawGrass(w, a);
+
+        // Concealed-player locator. Drawn after the grass with depth testing off, so
+        // however deep in the field you are you can still tell where you are standing.
+        {
+            Brawler *me = &w->brawlers[w->playerIdx];
+            if (me->alive && me->inBush)
+            {
+                float pulse = 0.5f + 0.5f*sinf(w->time*3.6f);
+                rlDisableDepthTest();
+                BeginBlendMode(BLEND_ADDITIVE);
+                DrawGroundGlow(a, me->position, 0.95f,
+                               (Color){ 80, 210, 120, (unsigned char)(48 + pulse*54) });
+                EndBlendMode();
+                rlEnableDepthTest();
+            }
+        }
 
         DrawAimPreview(w, a);
         DrawProjectiles(w, a);

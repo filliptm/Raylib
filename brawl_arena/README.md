@@ -53,12 +53,49 @@ hold the trigger; you manage a small budget of shots and reposition while it ref
 **Supers charged by damage.** Every pellet that lands fills the meter, and a takedown
 tops it up. No timers — aggression is what earns your super.
 
-**Bushes.** Standing in one hides you from the bots entirely, unless you fire (which
-reveals you for a second) or someone walks within ~3 units. Brawlers concealed in a bush
-render faded, and carry a `~` marker on their health bar.
+**Grass you can hide in.** Bush tiles grow a field of instanced blades standing about as
+tall as a brawler. Standing in one hides you from the bots entirely, unless you fire
+(which reveals you for a second) or someone walks within ~3 units.
 
-**Destructible cover.** Crates block movement and shots. Supers blow them apart, and the
-dash smashes through them, so the map opens up as a fight goes on.
+The grass is a single instanced cross-quad mesh with all of its motion in the vertex
+shader:
+
+- **Wind** displaces X and Z weighted by height up the blade, so roots stay planted and
+  only the tips travel. Two desynchronised sine waves, phase-offset by world position,
+  keep the field from swaying like a metronome.
+- **Brawlers push blades aside.** Every brawler's position and travel direction goes to
+  the shader, and blades within the bend radius lean away with a squared falloff, biased
+  along the direction of travel. Walking through leaves a parting behind you; standing
+  still clears a pocket around you. Passing actor positions as uniforms only scales to a
+  handful of characters, which is exactly the case here (max 8) - a bigger cast would
+  need the displacement baked into a render target instead.
+- **Only brawlers you can legitimately see bend the grass.** A concealed enemy is left
+  out of the actor list entirely, because rustling blades would otherwise track them
+  through cover and undo the hiding place. The moment something reveals them - firing,
+  or you closing to within the reveal range - they start disturbing the field again.
+- Blade footprints are **kept inside their own tile**: the jitter budget is whatever is
+  left after subtracting the quad's half-width from the half-tile, so the field lines up
+  with the floor grid rather than bleeding over onto bare ground. Density comes from the
+  count per tile instead of from oversized quads.
+- Blades are **alpha cutout, not alpha blended**, so the depth buffer resolves draw order
+  and no per-frame sorting is needed.
+
+**Concealment reads as a ghost.** A brawler standing in grass dissolves on a 4x4 Bayer
+pattern with a green cast over them. Screen-door transparency beats real alpha here: it
+needs no blending, so it can never sort wrongly against the grass drawn over it. A soft
+pulsing ring on the ground, drawn after the grass with depth testing off, means you can
+always find yourself however deep in the field you are.
+
+**Cover reads at a glance.** The two kinds of hard cover are deliberately opposite so you
+never have to think about which is which mid-fight:
+
+- **Crates** are warm planked wood with metal banding, sitting flush on the floor. They
+  block movement and shots, but supers blow them apart and the dash smashes straight
+  through, so the map opens up as a fight goes on.
+- **Walls** are cold bolted steel plating - recessed panel seams, a stud in each plate,
+  and a wider skirt where they meet the ground. They never break. The plating is on the
+  top face as well as the sides, because from this camera angle the top is most of what
+  you actually see.
 
 **Bots** with three modes, set from the command center:
 

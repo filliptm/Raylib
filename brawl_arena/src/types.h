@@ -20,6 +20,8 @@
 #define WALL_HEIGHT 2.4f
 #define CRATE_HEIGHT 1.9f
 #define BUSH_HEIGHT 1.1f
+#define GRASS_PER_TILE 29       // blade clumps scattered over each bush tile
+#define MAX_GRASS_INSTANCES 4096
 
 //------------------------------------------------------------------------------------
 // Pool sizes
@@ -264,6 +266,14 @@ typedef struct Tuning {
     // Presentation
     bool postFx;            // bloom + vignette pass
     float bloom;            // bloom strength
+
+    // Grass
+    float grassHeight;      // blade height in world units; ~2.0 matches a brawler
+    float windStrength;
+    float windSpeed;
+    float grassBendRadius;  // how far from a brawler blades start pushing aside
+    float grassBendStrength;
+    float concealDither;    // 0 solid, 1 invisible: how ghosted a hidden brawler looks
 
     // Bots
     BotMode botMode;

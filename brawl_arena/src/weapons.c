@@ -96,6 +96,13 @@ void TuningSetDefaults(Tuning *t)
     t->showDebug     = false;
     t->postFx        = true;
     t->bloom         = 0.85f;
+
+    t->grassHeight       = 2.0f;    // level with a brawler, so cover really conceals
+    t->windStrength      = 0.30f;
+    t->windSpeed         = 1.7f;
+    t->grassBendRadius   = 2.1f;
+    t->grassBendStrength = 1.55f;   // blades part around you, which also keeps you visible
+    t->concealDither     = 0.35f;   // ghosted, not erased: you still have to steer
     t->botMode       = BOT_STATIC;   // inert targets by default
     t->botCount      = 3;
     t->botKit        = CLASS_SHOTGUNNER;

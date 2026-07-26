@@ -1,5 +1,4 @@
 #include "hud.h"
-#include "command_center.h"
 #include "weapons.h"
 #include "effects.h"
 #include "raymath.h"
@@ -7,6 +6,40 @@
 
 static const Color PANEL_BG = { 12, 16, 26, 205 };
 static const Color SUPER_GOLD = { 255, 206, 74, 255 };
+static const Color HEALTH_GREEN = { 78, 216, 108, 255 };
+static const Color AMMO_FULL = { 122, 206, 255, 255 };
+static const Color AMMO_PART = { 62, 122, 176, 255 };
+static const Color SLOT_EMPTY = { 40, 46, 58, 255 };
+
+// Text with a hard drop shadow, so readouts stay legible over any part of the arena.
+static void DrawCenteredLabel(const char *text, int centerX, int y, int size, Color color)
+{
+    int tw = MeasureText(text, size);
+    DrawText(text, centerX - tw / 2 + 1, y + 1, size, (Color){ 0, 0, 0, 200 });
+    DrawText(text, centerX - tw / 2, y, size, color);
+}
+
+// Reload state as segmented tabs, one per ammo pip. Ammo is fractional, so a partly
+// refilled pip shows how far along the reload is.
+static void DrawAmmoTabs(int x, int y, int width, float ammo)
+{
+    const int gap = 3;
+    const int h = 5;
+    int tabW = (width - gap * (MAX_AMMO - 1)) / MAX_AMMO;
+    if (tabW < 1) return;
+
+    for (int i = 0; i < MAX_AMMO; i++)
+    {
+        int tx = x + i * (tabW + gap);
+        float fill = Clamp(ammo - i, 0.0f, 1.0f);
+
+        DrawRectangle(tx - 1, y - 1, tabW + 2, h + 2, (Color){ 0, 0, 0, 180 });
+        DrawRectangle(tx, y, tabW, h, SLOT_EMPTY);
+
+        if (fill > 0.0f)
+            DrawRectangle(tx, y, (int)(tabW * fill), h, (fill >= 1.0f) ? AMMO_FULL : AMMO_PART);
+    }
+}
 
 //------------------------------------------------------------------------------------
 void HudDrawBars(World *w)
@@ -17,26 +50,43 @@ void HudDrawBars(World *w)
         if (!b->alive || !b->visible) continue;
 
         Vector3 head = b->position;
-        head.y = 2.60f;      // clears the helmet; brawlers stand about one tile tall
+        // Brawlers stand about one tile tall. Your own cluster is taller than an
+        // enemy's - number above, ammo tabs below - so it needs extra clearance or the
+        // tabs sit on the helmet.
+        head.y = b->isPlayer ? 3.05f : 2.60f;
         Vector2 sp = GetWorldToScreen(head, w->camera);
 
         if (sp.x < -80 || sp.x > GetScreenWidth() + 80) continue;
         if (sp.y < -80 || sp.y > GetScreenHeight() + 80) continue;
 
-        int bw = b->isPlayer ? 56 : 46;
-        int bh = b->isPlayer ? 8 : 6;
+        bool mine = b->isPlayer;
+        int bw = mine ? 62 : 46;
+        int bh = mine ? 9 : 6;
         int x = (int)sp.x - bw / 2;
         int y = (int)sp.y;
 
         float ratio = (float)b->health / (float)b->maxHealth;
         if (ratio < 0.0f) ratio = 0.0f;
 
-        DrawRectangle(x - 2, y - 2, bw + 4, bh + 4, (Color){ 0, 0, 0, 170 });
-        DrawRectangle(x, y, bw, bh, (Color){ 40, 44, 54, 255 });
+        // Health reads as a number above every bar. Yours is larger and cooler-toned;
+        // enemies get a smaller, warmer figure so the two never get confused.
+        DrawCenteredLabel(TextFormat("%d", b->health), (int)sp.x,
+                          y - (mine ? 18 : 15), mine ? 16 : 13,
+                          mine ? (Color){ 236, 248, 238, 255 } : (Color){ 255, 208, 208, 255 });
 
-        Color fill = TEAM_COLORS[b->team];
-        if (ratio < 0.3f) fill = ColorLerpC(fill, (Color){ 255, 90, 90, 255 }, 0.6f);
+        DrawRectangle(x - 2, y - 2, bw + 4, bh + 4, (Color){ 0, 0, 0, 180 });
+        DrawRectangle(x, y, bw, bh, SLOT_EMPTY);
+
+        // Green for you, team colour for everyone else, reddening as they get low.
+        Color fill = HEALTH_GREEN;
+        if (!mine)
+        {
+            fill = TEAM_COLORS[b->team];
+            if (ratio < 0.3f) fill = ColorLerpC(fill, (Color){ 255, 90, 90, 255 }, 0.6f);
+        }
         DrawRectangle(x, y, (int)(bw * ratio), bh, fill);
+
+        if (mine) DrawAmmoTabs(x, y + bh + 5, bw, b->ammo);
 
         // Super-ready pip beside the bar.
         if (b->superCharge >= 1.0f)
@@ -49,27 +99,6 @@ void HudDrawBars(World *w)
 
         if (b->inBush)
             DrawText("~", x - 14, y - 4, 16, (Color){ 130, 235, 150, 220 });
-    }
-}
-
-//------------------------------------------------------------------------------------
-static void DrawAmmoPips(int x, int y, float ammo)
-{
-    const int pipW = 42, pipH = 10, gap = 6;
-
-    for (int i = 0; i < MAX_AMMO; i++)
-    {
-        float fill = Clamp(ammo - i, 0.0f, 1.0f);
-        int px = x + i * (pipW + gap);
-
-        DrawRectangleRounded((Rectangle){ px - 1, y - 1, pipW + 2, pipH + 2 }, 0.5f, 6, (Color){ 0, 0, 0, 150 });
-        DrawRectangleRounded((Rectangle){ px, y, pipW, pipH }, 0.5f, 6, (Color){ 44, 50, 62, 255 });
-
-        if (fill > 0.0f)
-        {
-            Color c = (fill >= 1.0f) ? (Color){ 120, 205, 255, 255 } : (Color){ 70, 130, 180, 255 };
-            DrawRectangleRounded((Rectangle){ px, y, pipW * fill, pipH }, 0.5f, 6, c);
-        }
     }
 }
 
@@ -96,31 +125,6 @@ void HudDrawPanel(World *w)
     const char *enemyText = TextFormat("%d ENEMIES", alive);
     int etw = MeasureText(enemyText, 20);
     DrawText(enemyText, sw - etw - 22, 26, 20, (Color){ 235, 150, 150, 255 });
-
-    //--- Bottom-left kit panel --------------------------------------------------
-    // Slide clear of the command center rather than hiding behind it.
-    int px = CommandCenterIsOpen() ? 404 : 20;
-    int py = sh - 132, pw = 330, ph = 112;
-    DrawRectangleRounded((Rectangle){ px, py, pw, ph }, 0.09f, 8, PANEL_BG);
-
-    DrawText(def->name, px + 16, py + 12, 24, WHITE);
-    DrawText(def->flavor, px + 16, py + 38, 13, (Color){ 150, 162, 180, 255 });
-
-    // Health
-    float hpRatio = p->alive ? (float)p->health / (float)p->maxHealth : 0.0f;
-    int hbX = px + 16, hbY = py + 60, hbW = pw - 32, hbH = 14;
-
-    DrawRectangleRounded((Rectangle){ hbX, hbY, hbW, hbH }, 0.5f, 6, (Color){ 40, 44, 54, 255 });
-    Color hpColor = (hpRatio < 0.3f) ? (Color){ 235, 90, 90, 255 } : (Color){ 90, 210, 120, 255 };
-    if (hpRatio > 0.0f)
-        DrawRectangleRounded((Rectangle){ hbX, hbY, hbW * hpRatio, hbH }, 0.5f, 6, hpColor);
-
-    const char *hpText = TextFormat("%d / %d", p->health, p->maxHealth);
-    int htw = MeasureText(hpText, 12);
-    DrawText(hpText, hbX + hbW / 2 - htw / 2, hbY + 1, 12, WHITE);
-
-    // Ammo
-    DrawAmmoPips(px + 16, py + 84, p->ammo);
 
     //--- Super meter, bottom-right ----------------------------------------------
     int sx = sw - 190, sy = sh - 122;

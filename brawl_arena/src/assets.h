@@ -21,6 +21,21 @@ typedef struct Assets {
     // post uniforms
     int locResolution, locBloom, locVignette;
 
+    // Grass: instanced, wind-animated, alpha-cutout blades
+    Shader grass;
+    bool grassOk;
+    Mesh grassBlade;
+    Material grassMat;
+    Texture2D texGrass;
+
+    int gTime, gHeight, gWindStrength, gWindSpeed, gWindDir;
+    int gActorPos, gActorVel, gActorCount, gBendRadius, gBendStrength;
+    int gViewPos, gSunDir, gSunColor, gAmbient, gFogColor, gFogDensity;
+    int gBaseColor, gTipColor, gLightPos, gLightColor, gLightCount;
+
+    // Screen-door transparency on the scene shader, used for concealed brawlers.
+    int locDither;
+
     // Unit meshes, scaled into place with a matrix at draw time
     Mesh cube;      // 1x1x1 centred on origin
     Mesh sphere;    // radius 1 centred on origin
@@ -53,5 +68,14 @@ void DrawLit(Assets *a, Mesh mesh, Matrix transform, Texture2D tex, Color tint,
 // Upload this frame's point lights.
 void AssetsSetLights(Assets *a, const Vector3 *positions, const Vector3 *colors, int count);
 void AssetsSetCamera(Assets *a, Vector3 viewPos);
+
+// Screen-door transparency: 0 draws solid, higher values discard more pixels on a
+// Bayer pattern. Avoids the sorting problems real alpha blending would bring.
+void AssetsSetDither(Assets *a, float amount);
+
+// Per-frame grass uniforms. Actors are the brawlers that push blades aside.
+void AssetsGrassFrame(Assets *a, const Tuning *t, float time, Vector3 viewPos,
+                      const Vector3 *actorPos, const Vector2 *actorVel, int actorCount,
+                      const Vector3 *lightPos, const Vector3 *lightColor, int lightCount);
 
 #endif // ASSETS_H

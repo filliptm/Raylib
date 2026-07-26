@@ -53,6 +53,7 @@ static const char *FS_LIGHTING =
 "uniform vec3 fogColor;\n"
 "uniform float fogDensity;\n"
 "uniform float emissive;\n"
+"uniform float dither;\n"
 "#define MAX_LIGHTS 8\n"
 "uniform vec3 lightPos[MAX_LIGHTS];\n"
 "uniform vec3 lightColor[MAX_LIGHTS];\n"
@@ -60,6 +61,14 @@ static const char *FS_LIGHTING =
 "out vec4 finalColor;\n"
 "void main()\n"
 "{\n"
+"    if (dither > 0.001)\n"
+"    {\n"
+"        ivec2 p = ivec2(mod(gl_FragCoord.xy, 4.0));\n"
+"        int idx = p.y*4 + p.x;\n"
+"        float bayer[16] = float[16](0.0625,0.5625,0.1875,0.6875, 0.8125,0.3125,0.9375,0.4375,\n"
+"                                    0.25,0.75,0.125,0.625, 1.0,0.5,0.875,0.375);\n"
+"        if (bayer[idx] < dither) discard;\n"
+"    }\n"
 "    vec4 texel = texture(texture0, fragTexCoord);\n"
 "    vec3 albedo = texel.rgb*colDiffuse.rgb*fragColor.rgb;\n"
 "    float alpha = texel.a*colDiffuse.a*fragColor.a;\n"
@@ -129,6 +138,115 @@ static const char *FS_POST =
 "    vec2 centred = uv - 0.5;\n"
 "    float vig = 1.0 - dot(centred, centred)*vignetteStrength;\n"
 "    color *= clamp(vig, 0.0, 1.0);\n"
+"    finalColor = vec4(color, 1.0);\n"
+"}\n";
+
+
+//------------------------------------------------------------------------------------
+// Grass shader. Instanced cross-quads, alpha cut out rather than blended so the depth
+// buffer resolves order for us and no per-frame sorting is needed.
+//
+// Bending is weighted by height up the blade, so roots stay planted and only the tips
+// travel - that single detail is what separates grass that sways from grass that slides.
+//------------------------------------------------------------------------------------
+static const char *VS_GRASS =
+"#version 330\n"
+"in vec3 vertexPosition;\n"
+"in vec2 vertexTexCoord;\n"
+"in vec3 vertexNormal;\n"
+"in mat4 instanceTransform;\n"
+"uniform mat4 mvp;\n"
+"uniform mat4 matNormal;\n"
+"uniform float time;\n"
+"uniform float grassHeight;\n"
+"uniform float windStrength;\n"
+"uniform float windSpeed;\n"
+"uniform vec2 windDir;\n"
+"uniform float bendRadius;\n"
+"uniform float bendStrength;\n"
+"#define MAX_ACTORS 8\n"
+"uniform vec3 actorPos[MAX_ACTORS];\n"
+"uniform vec2 actorVel[MAX_ACTORS];\n"
+"uniform int actorCount;\n"
+"out vec3 fragPosition;\n"
+"out vec2 fragTexCoord;\n"
+"out vec3 fragNormal;\n"
+"out float fragUp;\n"
+"void main()\n"
+"{\n"
+"    vec3 local = vertexPosition;\n"
+"    local.y *= grassHeight;\n"
+"    vec3 world = vec3(instanceTransform*vec4(local, 1.0));\n"
+"    vec3 root = vec3(instanceTransform[3][0], instanceTransform[3][1], instanceTransform[3][2]);\n"
+"    float up = clamp(vertexPosition.y, 0.0, 1.0);\n"
+"    float weight = up*up;\n"                       // quadratic: anchored at the root
+"    float phase = dot(root.xz, vec2(0.42, 0.31));\n"
+"    float sway = sin(time*windSpeed + phase)*0.65 + sin(time*windSpeed*1.73 + phase*1.4)*0.35;\n"
+"    vec2 offset = windDir*sway*windStrength;\n"
+"    for (int i = 0; i < actorCount; i++)\n"
+"    {\n"
+"        vec2 delta = root.xz - actorPos[i].xz;\n"
+"        float dist = length(delta);\n"
+"        if (dist < bendRadius)\n"
+"        {\n"
+"            float falloff = 1.0 - dist/bendRadius;\n"
+"            falloff *= falloff;\n"
+"            vec2 away = (dist > 0.001) ? delta/dist : vec2(1.0, 0.0);\n"
+"            offset += (away*0.8 + actorVel[i]*0.3)*falloff*bendStrength;\n"
+"        }\n"
+"    }\n"
+"    world.xz += offset*weight;\n"
+"    world.y -= length(offset)*weight*0.22;\n"      // bending shortens rather than stretches
+"    fragPosition = world;\n"
+"    fragTexCoord = vertexTexCoord;\n"
+"    fragNormal = normalize(vec3(matNormal*vec4(vertexNormal, 1.0)));\n"
+"    fragUp = up;\n"
+"    gl_Position = mvp*vec4(world, 1.0);\n"
+"}\n";
+
+static const char *FS_GRASS =
+"#version 330\n"
+"in vec3 fragPosition;\n"
+"in vec2 fragTexCoord;\n"
+"in vec3 fragNormal;\n"
+"in float fragUp;\n"
+"uniform sampler2D texture0;\n"
+"uniform vec3 viewPos;\n"
+"uniform vec3 sunDir;\n"
+"uniform vec3 sunColor;\n"
+"uniform vec3 ambientColor;\n"
+"uniform vec3 fogColor;\n"
+"uniform float fogDensity;\n"
+"uniform vec3 baseColor;\n"
+"uniform vec3 tipColor;\n"
+"#define MAX_LIGHTS 8\n"
+"uniform vec3 lightPos[MAX_LIGHTS];\n"
+"uniform vec3 lightColor[MAX_LIGHTS];\n"
+"uniform int lightCount;\n"
+"out vec4 finalColor;\n"
+"void main()\n"
+"{\n"
+"    vec4 texel = texture(texture0, fragTexCoord);\n"
+"    if (texel.a < 0.45) discard;\n"                // cutout: order-independent
+"    vec3 albedo = mix(baseColor, tipColor, fragUp)*texel.rgb;\n"
+"    vec3 N = normalize(fragNormal);\n"
+"    vec3 V = normalize(viewPos - fragPosition);\n"
+"    if (dot(N, V) < 0.0) N = -N;\n"                // foliage is two sided
+"    vec3 L = normalize(-sunDir);\n"
+"    float ndl = max(dot(N, L), 0.0)*0.6 + 0.4;\n"
+"    vec3 light = ambientColor + sunColor*ndl;\n"
+"    for (int i = 0; i < lightCount; i++)\n"
+"    {\n"
+"        vec3 d = lightPos[i] - fragPosition;\n"
+"        float dist = length(d);\n"
+"        float att = 1.0/(1.0 + 0.28*dist + 0.12*dist*dist);\n"
+"        light += lightColor[i]*att;\n"
+"    }\n"
+"    vec3 color = albedo*light;\n"
+"    color += sunColor*pow(fragUp, 3.0)*0.10;\n"    // tips catch a little extra sun
+"    float viewDist = length(viewPos - fragPosition);\n"
+"    float fog = 1.0 - exp(-fogDensity*viewDist);\n"
+"    color = mix(color, fogColor, clamp(fog, 0.0, 1.0));\n"
 "    finalColor = vec4(color, 1.0);\n"
 "}\n";
 
@@ -232,20 +350,50 @@ static void PxFloor(int x, int y, int size, Color *out)
     out->a = 255;
 }
 
+// Riveted steel plate. Crates are warm planked wood that you can blow apart; permanent
+// walls are cold, bolted and panelled, so the two never get confused at a glance.
 static void PxWall(int x, int y, int size, Color *out)
 {
-    float fx = (float)x/size, fy = (float)y/size;
-    float grain = Fbm(fx*10.0f, fy*10.0f, 23, 4);
-    float blotch = Fbm(fx*3.0f, fy*3.0f, 77, 3);
+    float u = (float)x/size;
+    float v = (float)y/size;             // 0 at the top of the face
+    float up = 1.0f - v;
 
-    float base = 108.0f + grain*30.0f + blotch*22.0f;
+    float grain = Fbm(u*26.0f, v*6.0f, 23, 3);      // brushed, mostly horizontal
+    float weather = Fbm(u*3.5f, v*3.5f, 77, 3);
+    float base = 104.0f + grain*26.0f + weather*22.0f;
 
-    // Chipped corners: darken a scatter of speckles
-    if (Hash2(x, y, 5) > 0.985f) base *= 0.7f;
+    // Grubbier toward the floor so the block feels planted rather than floating.
+    base *= 0.76f + up*0.32f;
 
-    out->r = ClampByte(base*0.94f);
-    out->g = ClampByte(base*0.98f);
-    out->b = ClampByte(base*1.10f);
+    // Recessed seams split the face into four bolted plates, plus an outer groove.
+    bool seam = (fabsf(u - 0.5f) < 0.042f) || (fabsf(v - 0.5f) < 0.042f);
+    bool border = (u < 0.052f) || (u > 0.948f) || (v < 0.052f) || (v > 0.948f);
+    if (seam || border) base *= 0.50f;
+
+    float r = base*0.91f, g = base*0.97f, b = base*1.19f;
+
+    // A bolt in the outer corner of each plate.
+    const float bolts[4][2] = { { 0.18f, 0.18f }, { 0.82f, 0.18f },
+                                { 0.18f, 0.82f }, { 0.82f, 0.82f } };
+    for (int i = 0; i < 4; i++)
+    {
+        float dx = u - bolts[i][0], dy = v - bolts[i][1];
+        float d = sqrtf(dx*dx + dy*dy);
+        if (d < 0.034f)
+        {
+            // Brighter on the upper-left of the stud so it reads as domed.
+            float lit = 1.62f - (d/0.034f)*0.55f - (dx + dy)*2.4f;
+            if (lit < 0.55f) lit = 0.55f;
+            r = base*lit*1.02f; g = base*lit*1.06f; b = base*lit*1.18f;
+        }
+    }
+
+    // Scattered pitting
+    if (Hash2(x, y, 5) > 0.988f) { r *= 0.68f; g *= 0.68f; b *= 0.72f; }
+
+    out->r = ClampByte(r);
+    out->g = ClampByte(g);
+    out->b = ClampByte(b);
     out->a = 255;
 }
 
@@ -317,6 +465,42 @@ static void PxCloth(int x, int y, int size, Color *out)
     out->a = 255;
 }
 
+// A card of tapered blades with hard alpha edges, ready for cutout rendering.
+// Row 0 is the top of the image, which is the tip of the blade.
+static void PxGrass(int x, int y, int size, Color *out)
+{
+    const int BLADES = 5;
+    float u = (float)x/size;
+    float t = 1.0f - (float)y/size;          // 0 at the root, 1 at the tip
+
+    out->r = out->g = out->b = 255;
+    out->a = 0;
+
+    for (int i = 0; i < BLADES; i++)
+    {
+        float seed = Hash2(i, 7, 3);
+        float baseX = (i + 0.5f)/BLADES + (seed - 0.5f)*0.10f;
+        float lean = (seed - 0.5f)*0.42f;
+        float height = 0.68f + seed*0.32f;
+        if (t > height) continue;
+
+        float along = t/height;
+        float halfWidth = (0.055f + seed*0.022f)*(1.0f - along*0.92f);
+        float centre = baseX + lean*along*along;
+
+        if (fabsf(u - centre) < halfWidth)
+        {
+            // Slight shading variation between blades so the clump is not uniform.
+            float shade = 0.80f + seed*0.20f + Fbm(u*20.0f, t*6.0f, 5, 2)*0.14f;
+            out->r = ClampByte(255.0f*shade);
+            out->g = ClampByte(255.0f*shade);
+            out->b = ClampByte(255.0f*shade);
+            out->a = 255;
+            return;
+        }
+    }
+}
+
 static void PxFlat(int x, int y, int size, Color *out)
 {
     (void)x; (void)y; (void)size;
@@ -335,6 +519,64 @@ static void PxGlow(int x, int y, int size, Color *out)
 
     out->r = out->g = out->b = 255;
     out->a = ClampByte(a*255.0f);
+}
+
+//------------------------------------------------------------------------------------
+// Three quads at 60 degrees to each other. A clump then reads as grass from any angle
+// on the ground plane, which a single billboard never manages.
+//------------------------------------------------------------------------------------
+static Mesh MakeGrassBlade(void)
+{
+    const int QUADS = 3;
+    Mesh m = { 0 };
+    m.vertexCount = QUADS*4;
+    m.triangleCount = QUADS*2;
+
+    m.vertices  = (float *)MemAlloc(m.vertexCount*3*sizeof(float));
+    m.texcoords = (float *)MemAlloc(m.vertexCount*2*sizeof(float));
+    m.normals   = (float *)MemAlloc(m.vertexCount*3*sizeof(float));
+    m.indices   = (unsigned short *)MemAlloc(m.triangleCount*3*sizeof(unsigned short));
+
+    for (int q = 0; q < QUADS; q++)
+    {
+        float angle = (q/(float)QUADS)*PI;      // 0, 60, 120 degrees
+        float cx = cosf(angle)*0.5f, cz = sinf(angle)*0.5f;
+
+        // Normal points along the quad, but tilted upward: pure face normals make
+        // foliage read as hard-edged cardboard under a directional light.
+        float nx = -sinf(angle), nz = cosf(angle);
+        Vector3 n = Vector3Normalize((Vector3){ nx*0.45f, 0.78f, nz*0.45f });
+
+        int v = q*4;
+        const float px[4] = { -cx,  cx,  cx, -cx };
+        const float pz[4] = { -cz,  cz,  cz, -cz };
+        const float py[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+        const float uu[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+        const float vv[4] = { 1.0f, 1.0f, 0.0f, 0.0f };
+
+        for (int i = 0; i < 4; i++)
+        {
+            m.vertices[(v + i)*3 + 0] = px[i];
+            m.vertices[(v + i)*3 + 1] = py[i];
+            m.vertices[(v + i)*3 + 2] = pz[i];
+            m.texcoords[(v + i)*2 + 0] = uu[i];
+            m.texcoords[(v + i)*2 + 1] = vv[i];
+            m.normals[(v + i)*3 + 0] = n.x;
+            m.normals[(v + i)*3 + 1] = n.y;
+            m.normals[(v + i)*3 + 2] = n.z;
+        }
+
+        int t = q*6;
+        m.indices[t + 0] = (unsigned short)(v + 0);
+        m.indices[t + 1] = (unsigned short)(v + 1);
+        m.indices[t + 2] = (unsigned short)(v + 2);
+        m.indices[t + 3] = (unsigned short)(v + 0);
+        m.indices[t + 4] = (unsigned short)(v + 2);
+        m.indices[t + 5] = (unsigned short)(v + 3);
+    }
+
+    UploadMesh(&m, false);
+    return m;
 }
 
 //------------------------------------------------------------------------------------
@@ -389,11 +631,68 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         SetShaderValue(a->post, a->locResolution, &res, SHADER_UNIFORM_VEC2);
     }
 
+    a->locDither = GetShaderLocation(a->lighting, "dither");
+
+    //--- Grass shader ---------------------------------------------------------
+    a->grass = LoadShaderFromMemory(VS_GRASS, FS_GRASS);
+    a->grassOk = (a->grass.id > 0) && (a->grass.locs != NULL);
+
+    if (a->grassOk)
+    {
+        // raylib feeds DrawMeshInstanced's per-instance matrix through whatever
+        // attribute SHADER_LOC_MATRIX_MODEL points at, so it must be redirected from
+        // the usual matModel uniform to our instanceTransform attribute.
+        a->grass.locs[SHADER_LOC_MATRIX_MVP] = GetShaderLocation(a->grass, "mvp");
+        a->grass.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(a->grass, "matNormal");
+        a->grass.locs[SHADER_LOC_MATRIX_MODEL] = GetShaderLocationAttrib(a->grass, "instanceTransform");
+
+        a->gTime          = GetShaderLocation(a->grass, "time");
+        a->gHeight        = GetShaderLocation(a->grass, "grassHeight");
+        a->gWindStrength  = GetShaderLocation(a->grass, "windStrength");
+        a->gWindSpeed     = GetShaderLocation(a->grass, "windSpeed");
+        a->gWindDir       = GetShaderLocation(a->grass, "windDir");
+        a->gBendRadius    = GetShaderLocation(a->grass, "bendRadius");
+        a->gBendStrength  = GetShaderLocation(a->grass, "bendStrength");
+        a->gActorPos      = GetShaderLocation(a->grass, "actorPos");
+        a->gActorVel      = GetShaderLocation(a->grass, "actorVel");
+        a->gActorCount    = GetShaderLocation(a->grass, "actorCount");
+        a->gViewPos       = GetShaderLocation(a->grass, "viewPos");
+        a->gSunDir        = GetShaderLocation(a->grass, "sunDir");
+        a->gSunColor      = GetShaderLocation(a->grass, "sunColor");
+        a->gAmbient       = GetShaderLocation(a->grass, "ambientColor");
+        a->gFogColor      = GetShaderLocation(a->grass, "fogColor");
+        a->gFogDensity    = GetShaderLocation(a->grass, "fogDensity");
+        a->gBaseColor     = GetShaderLocation(a->grass, "baseColor");
+        a->gTipColor      = GetShaderLocation(a->grass, "tipColor");
+        a->gLightPos      = GetShaderLocation(a->grass, "lightPos");
+        a->gLightColor    = GetShaderLocation(a->grass, "lightColor");
+        a->gLightCount    = GetShaderLocation(a->grass, "lightCount");
+
+        Vector3 sunDir = Vector3Normalize((Vector3){ -0.45f, -1.0f, 0.35f });
+        Vector3 sunColor = { 1.05f, 1.00f, 0.92f };
+        Vector3 ambient = { 0.30f, 0.34f, 0.46f };
+        Vector3 fogColor = { 0.086f, 0.102f, 0.149f };
+        Vector3 baseColor = { 0.10f, 0.26f, 0.13f };     // shaded down at the roots
+        Vector3 tipColor = { 0.44f, 0.80f, 0.34f };
+        float fogDensity = 0.0075f;
+        Vector2 windDir = { 0.82f, 0.57f };
+
+        SetShaderValue(a->grass, a->gSunDir, &sunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gSunColor, &sunColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gAmbient, &ambient, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gFogColor, &fogColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gFogDensity, &fogDensity, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->grass, a->gBaseColor, &baseColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gTipColor, &tipColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->grass, a->gWindDir, &windDir, SHADER_UNIFORM_VEC2);
+    }
+
     //--- Meshes ---------------------------------------------------------------
     a->cube     = GenMeshCube(1.0f, 1.0f, 1.0f);
     a->sphere   = GenMeshSphere(1.0f, 14, 20);
     a->cylinder = GenMeshCylinder(1.0f, 1.0f, 18);
     a->plane    = GenMeshPlane(1.0f, 1.0f, 1, 1);
+    a->grassBlade = MakeGrassBlade();
 
     //--- Textures -------------------------------------------------------------
     a->texFloor = MakeTexture(256, PxFloor, true);
@@ -404,10 +703,16 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->texCloth = MakeTexture(128, PxCloth, true);
     a->texFlat  = MakeTexture(4, PxFlat, false);
     a->texGlow  = MakeTexture(128, PxGlow, false);
+    a->texGrass = MakeTexture(256, PxGrass, true);
 
     //--- Material -------------------------------------------------------------
     a->mat = LoadMaterialDefault();
     if (a->lightingOk) a->mat.shader = a->lighting;
+
+    a->grassMat = LoadMaterialDefault();
+    if (a->grassOk) a->grassMat.shader = a->grass;
+    a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
+    a->grassMat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 
     a->sceneTarget = LoadRenderTexture(screenW, screenH);
     SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
@@ -421,6 +726,7 @@ void AssetsUnload(Assets *a)
     UnloadMesh(a->sphere);
     UnloadMesh(a->cylinder);
     UnloadMesh(a->plane);
+    UnloadMesh(a->grassBlade);
 
     UnloadTexture(a->texFloor);
     UnloadTexture(a->texWall);
@@ -430,15 +736,20 @@ void AssetsUnload(Assets *a)
     UnloadTexture(a->texCloth);
     UnloadTexture(a->texFlat);
     UnloadTexture(a->texGlow);
+    UnloadTexture(a->texGrass);
 
     UnloadRenderTexture(a->sceneTarget);
 
     // The material borrows the shader, so drop its reference before unloading it.
     a->mat.shader = (Shader){ 0 };
     UnloadMaterial(a->mat);
+    a->grassMat.shader = (Shader){ 0 };
+    a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = (Texture2D){ 0 };
+    UnloadMaterial(a->grassMat);
 
     if (a->lightingOk) UnloadShader(a->lighting);
     if (a->postOk) UnloadShader(a->post);
+    if (a->grassOk) UnloadShader(a->grass);
 }
 
 //------------------------------------------------------------------------------------
@@ -474,4 +785,42 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos)
 {
     if (!a->lightingOk) return;
     SetShaderValue(a->lighting, a->locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+}
+
+void AssetsSetDither(Assets *a, float amount)
+{
+    if (!a->lightingOk) return;
+    SetShaderValue(a->lighting, a->locDither, &amount, SHADER_UNIFORM_FLOAT);
+}
+
+void AssetsGrassFrame(Assets *a, const Tuning *t, float time, Vector3 viewPos,
+                      const Vector3 *actorPos, const Vector2 *actorVel, int actorCount,
+                      const Vector3 *lightPos, const Vector3 *lightColor, int lightCount)
+{
+    if (!a->grassOk) return;
+
+    if (actorCount > MAX_SHADER_LIGHTS) actorCount = MAX_SHADER_LIGHTS;
+    if (lightCount > MAX_SHADER_LIGHTS) lightCount = MAX_SHADER_LIGHTS;
+
+    SetShaderValue(a->grass, a->gTime, &time, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gHeight, &t->grassHeight, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gWindStrength, &t->windStrength, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gWindSpeed, &t->windSpeed, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gBendRadius, &t->grassBendRadius, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gBendStrength, &t->grassBendStrength, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->grass, a->gViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+
+    if (actorCount > 0)
+    {
+        SetShaderValueV(a->grass, a->gActorPos, actorPos, SHADER_UNIFORM_VEC3, actorCount);
+        SetShaderValueV(a->grass, a->gActorVel, actorVel, SHADER_UNIFORM_VEC2, actorCount);
+    }
+    SetShaderValue(a->grass, a->gActorCount, &actorCount, SHADER_UNIFORM_INT);
+
+    if (lightCount > 0)
+    {
+        SetShaderValueV(a->grass, a->gLightPos, lightPos, SHADER_UNIFORM_VEC3, lightCount);
+        SetShaderValueV(a->grass, a->gLightColor, lightColor, SHADER_UNIFORM_VEC3, lightCount);
+    }
+    SetShaderValue(a->grass, a->gLightCount, &lightCount, SHADER_UNIFORM_INT);
 }
