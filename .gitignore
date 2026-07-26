@@ -1,0 +1,13 @@
+.DS_Store
+
+# Build artifacts
+*.o
+build/
+
+# Compiled binaries
+example_launcher
+squad_runner/squad_runner
+hearthstone/build/
+
+# Local logs
+logs/
