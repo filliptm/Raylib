@@ -12,6 +12,7 @@
 #include "brawler.h"
 #include "weapons.h"
 #include "render.h"
+#include "gems.h"
 #include "effects.h"
 #include "config.h"
 #include "raymath.h"
@@ -25,13 +26,13 @@
 #define LABEL_W 132
 #define VALUE_W 62      // right-hand column reserved for a slider's numeric readout
 
-typedef enum { TAB_BOTS = 0, TAB_PLAYER, TAB_KIT, TAB_WORLD, TAB_COUNT } PanelTab;
+typedef enum { TAB_MATCH = 0, TAB_BOTS, TAB_PLAYER, TAB_KIT, TAB_WORLD, TAB_COUNT } PanelTab;
 
-static const char *TAB_NAMES[TAB_COUNT] = { "BOTS", "PLAYER", "KIT", "WORLD" };
+static const char *TAB_NAMES[TAB_COUNT] = { "MATCH", "BOTS", "PLAYER", "KIT", "WORLD" };
 
 // Open on launch: this build is a sandbox, so the tuning panel is the point of entry.
 static bool g_open = true;
-static PanelTab g_tab = TAB_BOTS;
+static PanelTab g_tab = TAB_MATCH;
 static const void *g_activeSlider = NULL;
 
 // Palette
@@ -210,6 +211,13 @@ static bool uiCycler(UI *ui, const char *label, int *value, int count, const cha
 //------------------------------------------------------------------------------------
 // Actions
 //------------------------------------------------------------------------------------
+// Some rules only take effect on a rebuild; flag it and let the game loop handle it.
+static void NeedsRestart(World *w)
+{
+    w->matchRestartPending = true;
+    ConfigMarkDirty();
+}
+
 static BrawlerClass BotKitFor(World *w, int slot)
 {
     return w->tune.botMixedKits ? (BrawlerClass)(slot % CLASS_COUNT) : w->tune.botKit;
@@ -272,6 +280,46 @@ static void SyncMaxHealth(World *w, BrawlerClass cls)
 //------------------------------------------------------------------------------------
 // Tabs
 //------------------------------------------------------------------------------------
+static void TabMatch(UI *ui)
+{
+    World *w = ui->world;
+    Tuning *t = &w->tune;
+
+    uiSection(ui, "MODE");
+    if (uiToggle(ui, "Gem Grab", &t->gemGrab)) NeedsRestart(w);
+    uiText(ui, t->gemGrab ? "Two teams race to hold the target count."
+                          : "Free-form sandbox: no teams, no objective.", TEXT_DIM);
+
+    if (!t->gemGrab)
+    {
+        uiSection(ui, "");
+        uiText(ui, "Turn Gem Grab on for team rules.", TEXT_DIM);
+        return;
+    }
+
+    uiSection(ui, "RULES");
+    if (uiSliderI(ui, "Team size", &t->teamSize, 1, MAX_BRAWLERS/2)) NeedsRestart(w);
+    uiSliderI(ui, "Gems to win", &t->gemsToWin, 1, 30);
+    uiSliderF(ui, "Countdown", &t->gemCountdown, 3.0f, 40.0f, "%.0fs");
+    uiSliderF(ui, "Gem every", &t->gemVentInterval, 1.0f, 20.0f, "%.1fs");
+
+    uiSection(ui, "STATE");
+    const char *phase = (w->match.phase == MATCH_OVER) ? "OVER"
+                      : (w->match.phase == MATCH_COUNTDOWN) ? "COUNTDOWN" : "PLAYING";
+    uiText(ui, TextFormat("%s    %d - %d", phase, w->match.teamGems[0], w->match.teamGems[1]), TEXT_MAIN);
+
+    int loose = 0;
+    for (int i = 0; i < MAX_GEMS; i++) if (w->gems[i].active) loose++;
+    uiText(ui, TextFormat(loose == 1 ? "%d gem on the floor" : "%d gems on the floor", loose), TEXT_DIM);
+
+    uiSection(ui, "ACTIONS");
+    if (uiButton(ui, "Restart match")) { MatchReset(w); ConfigMarkDirty(); }
+    if (uiButton(ui, "Drop a gem at the vent"))
+        GemSpawnAt(w, w->arena.gemVent, (Vector3){ 0.0f, 3.0f, 0.0f });
+    if (uiButton(ui, "Clear the floor"))
+        for (int i = 0; i < MAX_GEMS; i++) w->gems[i].active = false;
+}
+
 static void TabBots(UI *ui)
 {
     World *w = ui->world;
@@ -335,7 +383,7 @@ static void TabPlayer(UI *ui)
     int kit = (int)p->cls;
     if (uiCycler(ui, "Active kit", &kit, CLASS_COUNT, CLASS_NAMES))
     {
-        Vector3 pos = p->alive ? p->position : w->arena.playerSpawn;
+        Vector3 pos = p->alive ? p->position : ArenaSpawnFor(&w->arena, TEAM_PLAYER, p->spawnSlot);
         float keep = p->superCharge;
         BrawlerSpawn(w, w->playerIdx, TEAM_PLAYER, (BrawlerClass)kit, pos, true);
         w->brawlers[w->playerIdx].superCharge = keep;
@@ -456,6 +504,8 @@ static void TabWorld(UI *ui)
 //------------------------------------------------------------------------------------
 bool CommandCenterIsOpen(void) { return g_open; }
 
+void CommandCenterForceOpen(void) { g_open = true; }
+
 bool CommandCenterCapturesMouse(void)
 {
     if (!g_open) return false;
@@ -512,6 +562,7 @@ void CommandCenterDraw(World *w)
 
     switch (g_tab)
     {
+        case TAB_MATCH:  TabMatch(&ui); break;
         case TAB_BOTS:   TabBots(&ui); break;
         case TAB_PLAYER: TabPlayer(&ui); break;
         case TAB_KIT:    TabKit(&ui); break;

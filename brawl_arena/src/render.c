@@ -3,6 +3,7 @@
 #include "brawler.h"
 #include "weapons.h"
 #include "effects.h"
+#include "gems.h"
 #include "assets.h"
 #include "rlgl.h"
 #include <stddef.h>
@@ -111,7 +112,7 @@ static Matrix TumbleTRS(float scale, Vector3 euler, Vector3 position)
 
 void CameraInit(World *w)
 {
-    w->camFocus = w->arena.playerSpawn;
+    w->camFocus = ArenaSpawnFor(&w->arena, TEAM_PLAYER, 0);
     w->camera.position = Vector3Add(w->camFocus, CAM_OFFSET);
     w->camera.target = w->camFocus;
     w->camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
@@ -305,17 +306,20 @@ static void DrawArenaGeometry(World *w, Assets *a)
 }
 
 //------------------------------------------------------------------------------------
-static void DrawBrawler(World *w, Assets *a, Brawler *b)
+// Draws a brawler from its own fields only. No World, so the menu can stand one on a
+// podium without a match existing.
+void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const Color *bodyTint)
 {
-    if (!b->alive || !b->visible) return;
 
     // Everything below is expressed in units of `s`, so one factor scales the whole
     // character. Roughly one tile tall, which is the proportion the genre uses.
     float s = b->spawnScale*1.32f;
     if (s <= 0.03f) return;
 
-    Color body = TEAM_COLORS[b->team];
-    Color dark = TEAM_DARK[b->team];
+    // In a match the body is team coloured, because telling friend from foe matters more
+    // than telling kits apart. The menu overrides it to distinguish the kits instead.
+    Color body = bodyTint ? *bodyTint : TEAM_COLORS[b->team];
+    Color dark = bodyTint ? ColorLerpC(*bodyTint, BLACK, 0.42f) : TEAM_DARK[b->team];
     Color skin = SKIN_TINT;
     Color helmet = b->isPlayer ? (Color){ 236, 242, 252, 255 } : dark;
 
@@ -336,10 +340,10 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
     // Concealed in grass: dissolve the body on a Bayer pattern. Screen-door beats real
     // transparency here because it needs no blending and so cannot sort wrongly against
     // the grass drawn on top of it. A green cast sells "in the bushes" as well.
-    bool concealed = b->inBush;
+    bool concealed = (dither > 0.001f);
     if (concealed)
     {
-        AssetsSetDither(a, w->tune.concealDither);
+        AssetsSetDither(a, dither);
         Color moss = { 108, 190, 120, 255 };
         body = ColorLerpC(body, moss, 0.28f);
         dark = ColorLerpC(dark, moss, 0.28f);
@@ -396,11 +400,29 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
                       (Vector3){ pos.x - sinf(yaw)*0.26f*s, 0.68f*s + bob, pos.z - cosf(yaw)*0.26f*s });
     DrawLit(a, a->cube, pack, a->texMetal, dark, (Vector2){ 1.0f, 1.0f }, 0.0f);
 
-    // Weapon
+    // Weapon, shaped per kit: a long thin barrel for the sniper, a stubby wide one for
+    // the lobber, a broad slab for the bruiser. Kit is then readable from the silhouette.
+    float gunLen = 0.72f, gunGirth = 0.11f, gunReach = 0.62f;
+    switch (b->cls)
+    {
+        case CLASS_SNIPER:  gunLen = 1.15f; gunGirth = 0.085f; gunReach = 0.82f; break;
+        case CLASS_LOBBER:  gunLen = 0.46f; gunGirth = 0.19f;  gunReach = 0.50f; break;
+        case CLASS_BRUISER: gunLen = 0.58f; gunGirth = 0.22f;  gunReach = 0.54f; break;
+        default: break;
+    }
+
     float ax = sinf(yaw), az = cosf(yaw);
-    Vector3 gunMid = { pos.x + ax*0.62f*s, 0.72f*s + bob, pos.z + az*0.62f*s };
-    Matrix gun = TRS((Vector3){ 0.11f*s, 0.11f*s, 0.72f*s }, yaw, gunMid);
+    Vector3 gunMid = { pos.x + ax*gunReach*s, 0.72f*s + bob, pos.z + az*gunReach*s };
+    Matrix gun = TRS((Vector3){ gunGirth*s, gunGirth*s, gunLen*s }, yaw, gunMid);
     DrawLit(a, a->cube, gun, a->texMetal, (Color){ 78, 84, 100, body.a }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+
+    // The lobber carries a drum on top of its launcher.
+    if (b->cls == CLASS_LOBBER)
+    {
+        Matrix drum = TRS((Vector3){ 0.20f*s, 0.16f*s, 0.20f*s }, yaw,
+                          (Vector3){ pos.x + ax*0.44f*s, 0.86f*s + bob, pos.z + az*0.44f*s });
+        DrawLit(a, a->sphere, drum, a->texMetal, (Color){ 96, 102, 122, body.a }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+    }
 
     Matrix grip = TRS((Vector3){ 0.10f*s, 0.18f*s, 0.10f*s }, yaw,
                       (Vector3){ pos.x + ax*0.34f*s, 0.60f*s + bob, pos.z + az*0.34f*s });
@@ -411,7 +433,7 @@ static void DrawBrawler(World *w, Assets *a, Brawler *b)
     // Charged-super ring on the floor
     if (b->superCharge >= 1.0f)
     {
-        float pulse = 0.5f + 0.5f*sinf(w->time*6.0f);
+        float pulse = 0.5f + 0.5f*sinf(time*6.0f);
         DrawGroundGlow(a, pos, 1.05f, (Color){ 255, 210, 90, (unsigned char)(70 + pulse*90) });
     }
 
@@ -461,6 +483,40 @@ static void DrawSolidEffects(World *w, Assets *a)
 
         DrawLit(a, a->cube, TumbleTRS(pa->size*(0.7f + t*0.5f), euler, pa->position),
                 a->texMetal, pa->color, (Vector2){ 1.0f, 1.0f }, 0.0f);
+    }
+}
+
+static const Color GEM_TINT = { 176, 104, 248, 255 };
+
+// Gems and the vent they come from. Solid faceted geometry, because a gem has to be
+// legible at a glance across the arena.
+static void DrawGems(World *w, Assets *a)
+{
+    if (!w->tune.gemGrab) return;
+
+    // The vent: a lit pad marking where the next gem will surface.
+    float pulse = 0.5f + 0.5f*sinf(w->time*2.4f);
+    Vector3 vent = w->arena.gemVent;
+    Matrix pad = TRS((Vector3){ 1.5f, 0.14f, 1.5f }, 0.0f, (Vector3){ vent.x, 0.07f, vent.z });
+    DrawLit(a, a->cylinder, pad, a->texMetal,
+            (Color){ 92, 62, 132, 255 }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+    DrawGroundGlow(a, vent, 1.35f,
+                   (Color){ GEM_TINT.r, GEM_TINT.g, GEM_TINT.b, (unsigned char)(55 + pulse*70) });
+
+    for (int i = 0; i < MAX_GEMS; i++)
+    {
+        Gem *g = &w->gems[i];
+        if (!g->active) continue;
+
+        Vector3 pos = g->position;
+        pos.y += sinf(g->bobPhase)*0.12f;
+
+        // A cube tipped onto its corner reads as a cut crystal from this camera.
+        Vector3 euler = { 0.62f, g->spin, 0.62f };
+        DrawLit(a, a->cube, TumbleTRS(0.42f, euler, pos), a->texFlat,
+                GEM_TINT, (Vector2){ 1.0f, 1.0f }, 0.55f);
+
+        DrawShadow(a, (Vector3){ g->position.x, 0.0f, g->position.z }, 0.26f);
     }
 }
 
@@ -543,6 +599,21 @@ static void DrawProjectiles(World *w, Assets *a)
         Color hot = { 255, 255, 255, 165 };
         DrawBillboard(w->camera, a->texGlow, p->position, coreSize*1.45f, (Color){ glow.r, glow.g, glow.b, 88 });
         DrawBillboard(w->camera, a->texGlow, p->position, coreSize*0.58f, hot);
+    }
+
+    if (w->tune.gemGrab)
+    {
+        for (int i = 0; i < MAX_GEMS; i++)
+        {
+            Gem *g = &w->gems[i];
+            if (!g->active) continue;
+
+            Vector3 pos = g->position;
+            pos.y += sinf(g->bobPhase)*0.12f;
+            float twinkle = 0.75f + 0.25f*sinf(w->time*5.0f + g->bobPhase);
+            DrawBillboard(w->camera, a->texGlow, pos, 1.05f*twinkle,
+                          (Color){ GEM_TINT.r, GEM_TINT.g, GEM_TINT.b, 92 });
+        }
     }
 
     // Particles ride in the same additive pass so sparks actually glow.
@@ -760,6 +831,12 @@ static void DrawAimPreview(World *w, Assets *a)
     EndBlendMode();
 }
 
+static void DrawBrawler(World *w, Assets *a, Brawler *b)
+{
+    if (!b->alive || !b->visible) return;
+    RenderBrawlerModel(a, b, w->time, b->inBush ? w->tune.concealDither : 0.0f, NULL);
+}
+
 //------------------------------------------------------------------------------------
 // Instanced grass. Alpha cutout with depth writes, so it needs no sorting and can be
 // drawn after the brawlers it partially hides.
@@ -867,6 +944,7 @@ void RenderWorld(World *w)
             }
         }
 
+        DrawGems(w, a);
         DrawSolidEffects(w, a);
         DrawAimPreview(w, a);
         DrawShockwaves(w);

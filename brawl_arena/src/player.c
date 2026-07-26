@@ -37,10 +37,13 @@ void PlayerUpdate(World *w, float dt)
     {
         if (IsKeyPressed(KEY_ONE + c))
         {
-            Vector3 pos = b->alive ? b->position : w->arena.playerSpawn;
+            Vector3 pos = b->alive ? b->position : ArenaSpawnFor(&w->arena, TEAM_PLAYER, b->spawnSlot);
             float keepSuper = b->superCharge;
+            int keepGems = b->gems, keepSlot = b->spawnSlot;
             BrawlerSpawn(w, idx, TEAM_PLAYER, (BrawlerClass)c, pos, true);
             w->brawlers[idx].superCharge = keepSuper;
+            w->brawlers[idx].gems = keepGems;      // swapping kit is not a death
+            w->brawlers[idx].spawnSlot = keepSlot;
             FxFloatText(w, pos, WEAPONS[c].name, (Color){ 255, 255, 255, 255 });
         }
     }

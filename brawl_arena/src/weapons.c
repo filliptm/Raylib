@@ -97,6 +97,15 @@ void TuningSetDefaults(Tuning *t)
     t->postFx        = true;
     t->bloom         = 0.85f;
 
+    t->selectedKit       = CLASS_SHOTGUNNER;
+    t->statWins = t->statLosses = t->statKos = 0;
+
+    t->gemGrab           = true;
+    t->teamSize          = 3;
+    t->gemsToWin         = 10;
+    t->gemCountdown      = 15.0f;
+    t->gemVentInterval   = 6.5f;
+
     t->grassHeight       = 2.0f;    // level with a brawler, so cover really conceals
     t->windStrength      = 0.30f;
     t->windSpeed         = 1.7f;

@@ -6,6 +6,7 @@
 
 static const Color PANEL_BG = { 12, 16, 26, 205 };
 static const Color SUPER_GOLD = { 255, 206, 74, 255 };
+static const Color GEM_PURPLE = { 186, 116, 252, 255 };
 static const Color HEALTH_GREEN = { 78, 216, 108, 255 };
 static const Color AMMO_FULL = { 122, 206, 255, 255 };
 static const Color AMMO_PART = { 62, 122, 176, 255 };
@@ -97,6 +98,20 @@ void HudDrawBars(World *w)
             DrawCircle(x + bw + 9, y + bh / 2, 5.0f, c);
         }
 
+        // What this brawler is carrying. Knowing who to hunt is the whole mode.
+        if (b->gems > 0)
+        {
+            const char *carried = TextFormat("%d", b->gems);
+            int cw = MeasureText(carried, mine ? 17 : 14);
+            int gx = x + bw/2 - (cw + 16)/2;
+            int gy = y + bh + (mine ? 14 : 6);
+
+            DrawRectangleRounded((Rectangle){ gx - 4, gy - 3, cw + 22, (mine ? 19 : 16) },
+                                 0.45f, 6, (Color){ 0, 0, 0, 175 });
+            DrawPoly((Vector2){ gx + 5, gy + (mine ? 7 : 6) }, 4, 5.5f, 45.0f, GEM_PURPLE);
+            DrawText(carried, gx + 14, gy, mine ? 17 : 14, WHITE);
+        }
+
         if (b->inBush)
             DrawText("~", x - 14, y - 4, 16, (Color){ 130, 235, 150, 220 });
     }
@@ -109,22 +124,71 @@ void HudDrawPanel(World *w)
     Brawler *p = &w->brawlers[w->playerIdx];
     const WeaponDef *def = &WEAPONS[p->cls];
 
-    //--- Top bar: score ---------------------------------------------------------
-    DrawRectangleGradientV(0, 0, sw, 64, (Color){ 0, 0, 0, 190 }, (Color){ 0, 0, 0, 0 });
+    //--- Top bar ----------------------------------------------------------------
+    DrawRectangleGradientV(0, 0, sw, 78, (Color){ 0, 0, 0, 200 }, (Color){ 0, 0, 0, 0 });
 
-    DrawText("KOs", 22, 10, 13, (Color){ 150, 160, 175, 255 });
-    DrawText(TextFormat("%d", w->kills), 22, 25, 30, WHITE);
+    if (w->tune.gemGrab)
+    {
+        const Match *m = &w->match;
+        int target = w->tune.gemsToWin;
 
-    DrawText("DOWNS", 100, 10, 13, (Color){ 150, 160, 175, 255 });
-    DrawText(TextFormat("%d", w->deaths), 100, 25, 30, (Color){ 235, 130, 130, 255 });
+        // Two counters flanking the centre, so a glance tells you who is ahead.
+        for (int team = 0; team < 2; team++)
+        {
+            bool left = (team == TEAM_PLAYER);
+            int cx = left ? (sw/2 - 96) : (sw/2 + 96);
+            Color tc = TEAM_COLORS[team];
 
-    int alive = 0;
-    for (int i = 0; i < w->brawlerCount; i++)
-        if (w->brawlers[i].team == TEAM_ENEMY && w->brawlers[i].alive) alive++;
+            const char *count = TextFormat("%d", m->teamGems[team]);
+            int cwid = MeasureText(count, 40);
 
-    const char *enemyText = TextFormat("%d ENEMIES", alive);
-    int etw = MeasureText(enemyText, 20);
-    DrawText(enemyText, sw - etw - 22, 26, 20, (Color){ 235, 150, 150, 255 });
+            DrawRectangleRounded((Rectangle){ cx - 46, 10, 92, 50 }, 0.28f, 8,
+                                 (Color){ tc.r/4, tc.g/4, tc.b/4, 225 });
+            if (m->teamGems[team] >= target)
+                DrawRectangleRoundedLines((Rectangle){ cx - 46, 10, 92, 50 }, 0.28f, 8, tc);
+
+            DrawPoly((Vector2){ cx - 26, 36 }, 4, 9.0f, 45.0f, GEM_PURPLE);
+            DrawText(count, cx - cwid/2 + 14, 18, 40, WHITE);
+        }
+
+        const char *targetText = TextFormat("FIRST TO %d", target);
+        int ttw = MeasureText(targetText, 13);
+        DrawText(targetText, sw/2 - ttw/2, 62, 13, (Color){ 150, 160, 178, 255 });
+
+        // Countdown, owned by whoever is currently holding the lead.
+        if (m->phase == MATCH_COUNTDOWN)
+        {
+            Color tc = TEAM_COLORS[m->countdownTeam];
+            const char *cd = TextFormat("%d", (int)ceilf(m->countdown));
+            int cdw = MeasureText(cd, 64);
+
+            float pulse = 0.5f + 0.5f*sinf(w->time*9.0f);
+            DrawText(cd, sw/2 - cdw/2 + 2, 92 + 2, 64, (Color){ 0, 0, 0, 190 });
+            DrawText(cd, sw/2 - cdw/2, 92, 64,
+                     ColorLerpC(tc, WHITE, pulse*0.55f));
+
+            const char *who = (m->countdownTeam == TEAM_PLAYER) ? "YOUR TEAM IS WINNING"
+                                                                : "ENEMY TEAM IS WINNING";
+            int ww = MeasureText(who, 15);
+            DrawText(who, sw/2 - ww/2, 160, 15, tc);
+        }
+    }
+    else
+    {
+        DrawText("KOs", 22, 10, 13, (Color){ 150, 160, 175, 255 });
+        DrawText(TextFormat("%d", w->kills), 22, 25, 30, WHITE);
+
+        DrawText("DOWNS", 100, 10, 13, (Color){ 150, 160, 175, 255 });
+        DrawText(TextFormat("%d", w->deaths), 100, 25, 30, (Color){ 235, 130, 130, 255 });
+
+        int alive = 0;
+        for (int i = 0; i < w->brawlerCount; i++)
+            if (w->brawlers[i].team == TEAM_ENEMY && w->brawlers[i].alive) alive++;
+
+        const char *enemyText = TextFormat("%d ENEMIES", alive);
+        int etw = MeasureText(enemyText, 20);
+        DrawText(enemyText, sw - etw - 22, 26, 20, (Color){ 235, 150, 150, 255 });
+    }
 
     //--- Super meter, bottom-right ----------------------------------------------
     int sx = sw - 190, sy = sh - 122;
@@ -153,6 +217,36 @@ void HudDrawPanel(World *w)
     {
         Color fill = ready ? SUPER_GOLD : (Color){ 190, 150, 60, 255 };
         DrawRectangleRounded((Rectangle){ sx, mbY, 148 * p->superCharge, 14 }, 0.5f, 6, fill);
+    }
+
+    //--- Match result -----------------------------------------------------------
+    if (w->tune.gemGrab && w->match.phase == MATCH_OVER)
+    {
+        bool won = (w->match.winner == TEAM_PLAYER);
+        float fade = Clamp(w->match.overTimer*1.6f, 0.0f, 1.0f);
+
+        DrawRectangle(0, 0, sw, sh, (Color){ won ? 10 : 60, won ? 40 : 10, won ? 24 : 18,
+                                             (unsigned char)(180*fade) });
+
+        const char *banner = won ? "VICTORY" : "DEFEAT";
+        Color bc = won ? (Color){ 120, 240, 150, 255 } : (Color){ 255, 110, 110, 255 };
+        int bw2 = MeasureText(banner, 78);
+        float drop = EaseOutBack(Clamp(w->match.overTimer*2.2f, 0.0f, 1.0f));
+        DrawText(banner, sw/2 - bw2/2, (int)(sh/2 - 90 + (1.0f - drop)*70), 78, bc);
+
+        const char *tally = TextFormat("%d  -  %d", w->match.teamGems[TEAM_PLAYER],
+                                       w->match.teamGems[TEAM_ENEMY]);
+        int tw2 = MeasureText(tally, 34);
+        DrawText(tally, sw/2 - tw2/2, sh/2 + 6, 34, WHITE);
+
+        if (w->match.overTimer > 1.0f)
+        {
+            const char *again = "Press R for a new match";
+            int aw = MeasureText(again, 22);
+            float p = 0.5f + 0.5f*sinf(w->time*4.0f);
+            DrawText(again, sw/2 - aw/2, sh/2 + 62, 22, ColorLerpC(GRAY, WHITE, p));
+        }
+        return;
     }
 
     //--- Respawn overlay --------------------------------------------------------

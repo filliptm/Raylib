@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "weapons.h"
 #include "effects.h"
+#include "gems.h"
 #include "raymath.h"
 #include <stdio.h>
 #include <math.h>
@@ -38,19 +39,13 @@ void BrawlerSpawn(World *w, int idx, Team team, BrawlerClass cls, Vector3 pos, b
 void BrawlerRespawn(World *w, int idx)
 {
     Brawler *b = &w->brawlers[idx];
-    Vector3 pos;
+    int slot = b->spawnSlot;
+    bool player = b->isPlayer;
+    Team team = b->team;
+    BrawlerClass cls = b->cls;
 
-    if (b->team == TEAM_PLAYER)
-    {
-        pos = w->arena.playerSpawn;
-    }
-    else
-    {
-        int n = w->arena.enemySpawnCount;
-        pos = w->arena.enemySpawns[GetRandomValue(0, n - 1)];
-    }
-
-    BrawlerSpawn(w, idx, b->team, b->cls, pos, b->isPlayer);
+    BrawlerSpawn(w, idx, team, cls, ArenaSpawnFor(&w->arena, team, slot), player);
+    w->brawlers[idx].spawnSlot = slot;
 }
 
 void BrawlerAwardSuper(World *w, int idx, float amount)
@@ -92,6 +87,9 @@ void BrawlerApplyDamage(World *w, int idx, int damage, int attacker, Vector3 hit
         b->dashTimer = 0.0f;
 
         FxDeathBurst(w, b->position, TEAM_COLORS[b->team]);
+
+        // Everything they were carrying goes back on the floor for anyone to take.
+        GemsDropFrom(w, idx);
 
         if (attacker == w->playerIdx && !b->isPlayer)
         {

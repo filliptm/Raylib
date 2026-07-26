@@ -6,6 +6,9 @@
 
 void ArenaLoad(Arena *a);
 
+// Spawn point for a team slot, wrapping if the map has fewer points than brawlers.
+Vector3 ArenaSpawnFor(const Arena *a, int team, int slot);
+
 // Tile <-> world helpers. World space is centered on the arena origin.
 int   ArenaTileX(float worldX);
 int   ArenaTileZ(float worldZ);

@@ -21,6 +21,8 @@
 #include "command_center.h"
 #include "assets.h"
 #include "config.h"
+#include "gems.h"
+#include "menu.h"
 #include <string.h>
 
 #define SCREEN_WIDTH 1280
@@ -35,29 +37,78 @@ static const Color SKY_COLOR = { 22, 26, 38, 255 };
 // throws away what you have dialled in.
 static void ResetMatch(World *w, BrawlerClass playerClass)
 {
+    // The wipe clears match state only. Anything owned by the application rather than
+    // by the match has to survive it, or starting a game would throw away which screen
+    // we are on and bounce straight back to the menu.
     Tuning keepTuning = w->tune;
+    AppScreen keepScreen = w->screen;
+    AppScreen keepPending = w->pending;
+    float keepFade = w->fade;
+    bool keepFadingOut = w->fadingOut;
+    bool keepQuit = w->quitRequested;
+    bool keepBanked = w->matchResultBanked;
 
     memset(w, 0, sizeof(World));
+
     w->tune = keepTuning;
+    w->screen = keepScreen;
+    w->pending = keepPending;
+    w->fade = keepFade;
+    w->fadingOut = keepFadingOut;
+    w->quitRequested = keepQuit;
+    w->matchResultBanked = keepBanked;
 
     ArenaLoad(&w->arena);
-
     w->playerIdx = 0;
-    BrawlerSpawn(w, 0, TEAM_PLAYER, playerClass, w->arena.playerSpawn, true);
-    w->brawlerCount = 1;
 
-    int bots = w->tune.botCount;
-    if (bots > MAX_BRAWLERS - 1) bots = MAX_BRAWLERS - 1;
-    if (bots < 0) bots = 0;
-
-    for (int i = 0; i < bots; i++)
+    if (w->tune.gemGrab)
     {
-        BrawlerClass kit = w->tune.botMixedKits ? (BrawlerClass)(i % CLASS_COUNT) : w->tune.botKit;
-        Vector3 pos = w->arena.enemySpawns[i % w->arena.enemySpawnCount];
-        BrawlerSpawn(w, 1 + i, TEAM_ENEMY, kit, pos, false);
-        w->brawlerCount++;
+        // Even sides. Slot 0 of the player team is the human; everyone else is a bot,
+        // and allies fall out of the existing AI for free because it only ever asks
+        // whether a brawler is on the other team.
+        int perSide = w->tune.teamSize;
+        if (perSide < 1) perSide = 1;
+        if (perSide > MAX_BRAWLERS/2) perSide = MAX_BRAWLERS/2;
+
+        for (int slot = 0; slot < perSide; slot++)
+        {
+            BrawlerClass kit = (BrawlerClass)(slot % CLASS_COUNT);
+            int idx = w->brawlerCount++;
+            BrawlerSpawn(w, idx, TEAM_PLAYER, (slot == 0) ? playerClass : kit,
+                         ArenaSpawnFor(&w->arena, TEAM_PLAYER, slot), slot == 0);
+            w->brawlers[idx].spawnSlot = slot;
+        }
+
+        for (int slot = 0; slot < perSide; slot++)
+        {
+            BrawlerClass kit = (BrawlerClass)((slot + 1) % CLASS_COUNT);
+            int idx = w->brawlerCount++;
+            BrawlerSpawn(w, idx, TEAM_ENEMY, kit,
+                         ArenaSpawnFor(&w->arena, TEAM_ENEMY, slot), false);
+            w->brawlers[idx].spawnSlot = slot;
+        }
+    }
+    else
+    {
+        BrawlerSpawn(w, 0, TEAM_PLAYER, playerClass,
+                     ArenaSpawnFor(&w->arena, TEAM_PLAYER, 0), true);
+        w->brawlerCount = 1;
+
+        int bots = w->tune.botCount;
+        if (bots > MAX_BRAWLERS - 1) bots = MAX_BRAWLERS - 1;
+        if (bots < 0) bots = 0;
+
+        for (int i = 0; i < bots; i++)
+        {
+            BrawlerClass kit = w->tune.botMixedKits ? (BrawlerClass)(i % CLASS_COUNT) : w->tune.botKit;
+            int idx = 1 + i;
+            BrawlerSpawn(w, idx, TEAM_ENEMY, kit, ArenaSpawnFor(&w->arena, TEAM_ENEMY, i), false);
+            w->brawlers[idx].spawnSlot = i;
+            w->brawlerCount++;
+        }
     }
 
+    MatchReset(w);
     RenderBuildGrass(w);
     CameraInit(w);
 }
@@ -70,81 +121,136 @@ static void DrawOverlays(World *w)
     CommandCenterDraw(w);
 }
 
+// Banks a finished match into the profile exactly once.
+static void BankResult(World *w)
+{
+    if (w->matchResultBanked) return;
+    if (!w->tune.gemGrab || w->match.phase != MATCH_OVER) return;
+
+    w->matchResultBanked = true;
+    if (w->match.winner == TEAM_PLAYER) w->tune.statWins++;
+    else w->tune.statLosses++;
+    w->tune.statKos += w->kills;
+    ConfigMarkDirty();
+}
+
 int main(void)
 {
     SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
     SetTargetFPS(60);
 
-    // Weapon table and tuning must exist before anything spawns: spawning reads maxHealth.
+    // ESC must mean "back", not "quit", now that there are screens to back out of.
+    SetExitKey(KEY_NULL);
+
     WeaponsResetAll();
     TuningSetDefaults(&world.tune);
     ConfigLoad(&world);
 
     AssetsLoad(&assets, SCREEN_WIDTH, SCREEN_HEIGHT);
     RenderSetAssets(&assets);
+    MenuInit(&assets);
 
-    ResetMatch(&world, CLASS_SHOTGUNNER);
+    ResetMatch(&world, (BrawlerClass)world.tune.selectedKit);
+    world.screen = SCREEN_MENU;
 
-    while (!WindowShouldClose())
+    while (!WindowShouldClose() && !world.quitRequested)
     {
         float realDt = GetFrameTime();
-        if (realDt > 0.05f) realDt = 0.05f;   // survive a hitch without teleporting anyone
+        if (realDt > 0.05f) realDt = 0.05f;
 
-        float dt = realDt*world.tune.timeScale;
+        ShellUpdate(&world, realDt);
+        bool locked = ShellIsTransitioning(&world);
 
-        CommandCenterUpdate(&world);
+        //--- Back / escape -------------------------------------------------------
+        if (IsKeyPressed(KEY_ESCAPE) && !locked)
+        {
+            if (world.screen == SCREEN_BRAWLERS) ShellRequestScreen(&world, SCREEN_MENU);
+            else if (world.screen == SCREEN_MATCH) ShellRequestScreen(&world, SCREEN_MENU);
+            else world.quitRequested = true;
+        }
 
-        if (IsKeyPressed(KEY_R))
-            ResetMatch(&world, world.brawlers[world.playerIdx].cls);
+        if (world.screen == SCREEN_MATCH)
+        {
+            float dt = realDt*world.tune.timeScale;
 
-        world.time += dt;
+            CommandCenterUpdate(&world);
 
-        PlayerUpdate(&world, dt);
-        AIUpdate(&world, dt);
-        BrawlersUpdate(&world, dt);
-        ProjectilesUpdate(&world, dt);
-        ArenaUpdate(&world.arena, dt);
-        FxUpdate(&world, dt);
-        CameraUpdate(&world, dt);
+            if (IsKeyPressed(KEY_R) || world.matchRestartPending)
+            {
+                world.matchRestartPending = false;
+                world.matchResultBanked = false;
+                ResetMatch(&world, (BrawlerClass)world.tune.selectedKit);
+            }
 
-        // Saving runs on real time so slow-mo does not stall it.
+            world.time += dt;
+
+            // Input is suppressed mid-transition so a menu click cannot also fire a shot.
+            if (!locked) PlayerUpdate(&world, dt);
+            AIUpdate(&world, dt);
+            BrawlersUpdate(&world, dt);
+            ProjectilesUpdate(&world, dt);
+            ArenaUpdate(&world.arena, dt);
+            MatchUpdate(&world, dt);
+            FxUpdate(&world, dt);
+            CameraUpdate(&world, dt);
+
+            BankResult(&world);
+        }
+        else
+        {
+            world.time += realDt;
+            if (!locked) MenuUpdate(&world, realDt);
+            else MenuUpdate(&world, 0.0f);
+        }
+
         ConfigAutoSave(&world, realDt);
 
-        bool usePost = world.tune.postFx && assets.postOk;
-
-        if (usePost)
+        //--- Present -------------------------------------------------------------
+        if (world.screen == SCREEN_MATCH)
         {
-            BeginTextureMode(assets.sceneTarget);
-                ClearBackground(SKY_COLOR);
-                RenderWorld(&world);
-            EndTextureMode();
+            bool usePost = world.tune.postFx && assets.postOk;
 
-            float bloom = world.tune.bloom;
-            float vignette = 0.85f;
-            SetShaderValue(assets.post, assets.locBloom, &bloom, SHADER_UNIFORM_FLOAT);
-            SetShaderValue(assets.post, assets.locVignette, &vignette, SHADER_UNIFORM_FLOAT);
+            if (usePost)
+            {
+                BeginTextureMode(assets.sceneTarget);
+                    ClearBackground(SKY_COLOR);
+                    RenderWorld(&world);
+                EndTextureMode();
 
-            BeginDrawing();
-                ClearBackground(BLACK);
+                float bloom = world.tune.bloom;
+                float vignette = 0.85f;
+                SetShaderValue(assets.post, assets.locBloom, &bloom, SHADER_UNIFORM_FLOAT);
+                SetShaderValue(assets.post, assets.locVignette, &vignette, SHADER_UNIFORM_FLOAT);
 
-                BeginShaderMode(assets.post);
-                    // Render textures come out vertically flipped, hence the negative height.
-                    DrawTextureRec(assets.sceneTarget.texture,
-                                   (Rectangle){ 0, 0, (float)assets.sceneTarget.texture.width,
-                                                -(float)assets.sceneTarget.texture.height },
-                                   (Vector2){ 0, 0 }, WHITE);
-                EndShaderMode();
-
-                DrawOverlays(&world);
-            EndDrawing();
+                BeginDrawing();
+                    ClearBackground(BLACK);
+                    BeginShaderMode(assets.post);
+                        DrawTextureRec(assets.sceneTarget.texture,
+                                       (Rectangle){ 0, 0, (float)assets.sceneTarget.texture.width,
+                                                    -(float)assets.sceneTarget.texture.height },
+                                       (Vector2){ 0, 0 }, WHITE);
+                    EndShaderMode();
+                    DrawOverlays(&world);
+                    ShellDrawFade(&world);
+                EndDrawing();
+            }
+            else
+            {
+                BeginDrawing();
+                    ClearBackground(SKY_COLOR);
+                    RenderWorld(&world);
+                    DrawOverlays(&world);
+                    ShellDrawFade(&world);
+                EndDrawing();
+            }
         }
         else
         {
             BeginDrawing();
-                ClearBackground(SKY_COLOR);
-                RenderWorld(&world);
-                DrawOverlays(&world);
+                ClearBackground(BLACK);
+                MenuDraw(&world);
+                ShellDrawFade(&world);
             EndDrawing();
         }
     }

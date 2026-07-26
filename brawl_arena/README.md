@@ -19,6 +19,24 @@ make run
 
 Requires raylib 5.5+ (`brew install raylib`).
 
+## Screens
+
+The game opens on a **main menu** with the selected brawler on a lit podium and everything
+else arranged around the edges: profile and stats top-left, tuning and quit top-right, the
+kit's name badge above the model, its stats to the right, and the mode card and PLAY button
+along the bottom.
+
+Clicking **BRAWLERS** opens character select, built on the same podium scene so switching
+between the two costs nothing but a fade. Cards show each kit's health, damage and range,
+and the big preview updates as you pick.
+
+Nothing in the menu is a placeholder. Every card does something real - selecting a kit,
+toggling the rules, opening the tuning panel, starting a match, quitting - because a menu
+full of dead buttons teaches you to stop clicking things.
+
+`ESC` steps back a screen: select to menu, match to menu, menu to quit. raylib closes the
+window on `ESC` by default, so that is explicitly disabled and handled here instead.
+
 ## Controls
 
 | Input | Action |
@@ -31,6 +49,7 @@ Requires raylib 5.5+ (`brew install raylib`).
 | Release `RMB` | Fire the super |
 | `1` – `4` | Swap kit on the spot |
 | `TAB` | Open / close the command center |
+| `ESC` | Back a screen — select to menu, match to menu, menu quits |
 | `R` | Reset the match (keeps your tuning) |
 | `ESC` | Quit |
 
@@ -228,15 +247,38 @@ The map is a plain character grid at the top of `arena.c` (`#` wall, `c` crate,
 `b` bush, `P` player spawn, `E` enemy spawn). Rows are padded and the border is forced
 to wall, so you can edit the layout without counting characters.
 
+## Gem Grab
+
+The match layer, and the default mode. Two teams of three - you plus two allied bots
+against three enemies - race to hold ten gems.
+
+A vent at the contested centre of the map coughs up a gem every few seconds. You collect
+by walking over them, and **everything you are carrying scatters when you go down**, which
+is what makes a big carrier worth hunting.
+
+Holding the target count starts a fifteen-second countdown. Drop below it at any point and
+the clock is wiped, not paused - you have to hold the lead for the whole countdown, which
+is what makes the last gem tense.
+
+The arena's middle was opened into a corridor specifically for this: the vent has to sit
+somewhere worth fighting over. Each side has three spawn points, and the first one in the
+map is the human's, so you start centre-back.
+
+Allied bots came almost free. The AI only ever asks whether another brawler is on the
+opposing team, so putting bots on your side made them fight alongside you without a line
+of new targeting code. They also break off to collect loose gems when they are out of
+weapon range anyway, rather than walking past a gem to start a fight they cannot yet win.
+
+Everything is tunable live on the **MATCH** tab: team size, gems to win, countdown length,
+and how often the vent produces. Turning Gem Grab off returns the build to the free-form
+sandbox it started as, with the static training bots.
+
 ## Next steps
 
-The combat layer is in place; match rules are what's missing. The natural order:
-
-1. **Gem Grab** — gem spawner in the middle, carry counter, the 15-second countdown at 10
-2. **Teammates** — the bot AI already works as ally logic, it just needs team goals
-3. **More kits** — a healer and a wall-piercing thrower would round out the archetypes
-4. **Gadgets and star powers** — the per-match consumable and passive layer
-5. **Showdown** — free-for-all with a closing poison cloud and power-up cubes
+1. **More kits** — a healer and a wall-piercing thrower would round out the archetypes
+2. **Gadgets and star powers** — the per-match consumable and passive layer
+3. **Showdown** — free-for-all with a closing poison cloud and power-up cubes
+4. **Animation blending** — needed before rigged character models are worth loading
 
 ## Known gaps
 

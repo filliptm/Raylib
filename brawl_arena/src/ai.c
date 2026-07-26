@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "brawler.h"
 #include "weapons.h"
+#include "gems.h"
 #include "raymath.h"
 #include <math.h>
 
@@ -78,7 +79,9 @@ static bool FindNearbyBush(World *w, Vector3 from, Vector3 *out)
 //------------------------------------------------------------------------------------
 void AIUpdate(World *w, float dt)
 {
-    BotMode mode = w->tune.botMode;
+    // A match needs both sides actually playing; the STATIC/ROAM sandbox modes only
+    // apply when there is no match running.
+    BotMode mode = w->tune.gemGrab ? BOT_FIGHT : w->tune.botMode;
 
     for (int i = 0; i < w->brawlerCount; i++)
     {
@@ -113,10 +116,30 @@ void AIUpdate(World *w, float dt)
 
         float healthRatio = (float)b->health / (float)b->maxHealth;
 
-        //--- No target: patrol -----------------------------------------------------
+        // In Gem Grab a loose gem on the floor is worth breaking off for.
+        int gemIdx = -1;
+        float gemDist = 0.0f;
+        if (w->tune.gemGrab && w->match.phase != MATCH_OVER)
+        {
+            gemIdx = GemsNearestLoose(w, b->position, 17.0f);
+            if (gemIdx >= 0)
+                gemDist = Vector3Distance(b->position, w->gems[gemIdx].position);
+        }
+
+        //--- No target: fetch a gem, else patrol -----------------------------------
         if (target < 0)
         {
             b->aiState = AI_IDLE;
+
+            if (gemIdx >= 0)
+            {
+                Vector3 toGem = Vector3Subtract(w->gems[gemIdx].position, b->position);
+                toGem.y = 0.0f;
+                b->moveIntent = AvoidSteer(w, b->position, toGem, b->strafeDir);
+                if (Vector3Length(b->velocity) > 0.4f)
+                    b->aimAngle = atan2f(b->velocity.x, b->velocity.z);
+                continue;
+            }
 
             if (b->aiTimer <= 0.0f || Vector3Distance(b->position, b->aiWander) < 2.0f)
             {
@@ -180,7 +203,16 @@ void AIUpdate(World *w, float dt)
         if (dist > def->range * 0.92f)
         {
             b->aiState = AI_CHASE;
-            b->moveIntent = AvoidSteer(w, b->position, toTarget, b->strafeDir);
+
+            // Out of weapon range anyway: grab the gem on the way rather than walking
+            // past it to start a fight it cannot yet win.
+            if (gemIdx >= 0 && gemDist < dist)
+            {
+                Vector3 toGem = Vector3Subtract(w->gems[gemIdx].position, b->position);
+                toGem.y = 0.0f;
+                b->moveIntent = AvoidSteer(w, b->position, toGem, b->strafeDir);
+            }
+            else b->moveIntent = AvoidSteer(w, b->position, toTarget, b->strafeDir);
         }
         else
         {

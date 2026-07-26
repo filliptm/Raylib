@@ -7,6 +7,10 @@
 // Hand-authored map.
 //   '#' wall   'c' crate   'b' bush   '.' floor   'P' player spawn   'E' enemy spawn
 //
+// Three spawns a side. The first 'P' found is the human's, so it sits centre-back.
+// The middle of the map is deliberately left open: that corridor is where the gem
+// vent sits, and it has to be worth fighting over.
+//
 // Rows shorter than ARENA_W are padded with floor, and the border is forced to wall,
 // so the layout stays easy to edit without counting characters.
 //------------------------------------------------------------------------------------
@@ -24,16 +28,16 @@ static const char *MAP[] = {
     "#.....cc......bbbbb.......cc....#",
     "#.....cc..................cc....#",
     "#...............................#",
-    "#..###.....##########.......###.#",
-    "#..###.....##########.......###.#",
+    "#..###.....####...####.....###..#",
+    "#..###.....####...####.....###..#",
     "#...............................#",
     "#.....cc......bbbbb.......cc....#",
     "#.....cc......bbbbb.......cc....#",
     "#.............bbbbb.............#",
     "#..###......................###.#",
     "#..###......................###.#",
-    "#.........cc.........cc.........#",
-    "#..bb.....cc....P....cc.....bb..#",
+    "#.........cc....P....cc.........#",
+    "#..bb.P...cc.........cc...P.bb..#",
     "#..bb.....cc.........cc.....bb..#",
     "#################################",
 };
@@ -58,7 +62,6 @@ bool ArenaInBounds(int tx, int tz)
 void ArenaLoad(Arena *a)
 {
     memset(a, 0, sizeof(Arena));
-    a->playerSpawn = (Vector3){ 0, 0, 0 };
 
     int rows = (int)(sizeof(MAP) / sizeof(MAP[0]));
     if (rows > ARENA_H) rows = ARENA_H;
@@ -81,11 +84,12 @@ void ArenaLoad(Arena *a)
                 case 'b': t->type = TILE_BUSH; break;
                 case 'P':
                     t->type = TILE_FLOOR;
-                    a->playerSpawn = ArenaTileCenter(tx, tz);
+                    if (a->playerSpawnCount < MAX_SPAWNS)
+                        a->playerSpawns[a->playerSpawnCount++] = ArenaTileCenter(tx, tz);
                     break;
                 case 'E':
                     t->type = TILE_FLOOR;
-                    if (a->enemySpawnCount < 8)
+                    if (a->enemySpawnCount < MAX_SPAWNS)
                         a->enemySpawns[a->enemySpawnCount++] = ArenaTileCenter(tx, tz);
                     break;
                 default: t->type = TILE_FLOOR; break;
@@ -100,9 +104,23 @@ void ArenaLoad(Arena *a)
         }
     }
 
-    // Guarantee at least one enemy spawn so the arena is never empty.
+    // Never leave a side without somewhere to stand.
+    if (a->playerSpawnCount == 0)
+        a->playerSpawns[a->playerSpawnCount++] = (Vector3){ 0, 0, 16.0f };
     if (a->enemySpawnCount == 0)
-        a->enemySpawns[a->enemySpawnCount++] = (Vector3){ 0, 0, -10.0f };
+        a->enemySpawns[a->enemySpawnCount++] = (Vector3){ 0, 0, -16.0f };
+
+    // The vent sits dead centre, in the corridor the map opens up for it.
+    a->gemVent = ArenaTileCenter(ARENA_W/2, ARENA_H/2);
+}
+
+Vector3 ArenaSpawnFor(const Arena *a, int team, int slot)
+{
+    const Vector3 *list = (team == TEAM_PLAYER) ? a->playerSpawns : a->enemySpawns;
+    int count = (team == TEAM_PLAYER) ? a->playerSpawnCount : a->enemySpawnCount;
+    if (count <= 0) return (Vector3){ 0, 0, 0 };
+    if (slot < 0) slot = 0;
+    return list[slot % count];
 }
 
 TileType ArenaTypeAt(const Arena *a, float x, float z)

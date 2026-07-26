@@ -30,6 +30,8 @@
 #define MAX_PROJECTILES 512
 #define MAX_PARTICLES 1024
 #define MAX_FLOATTEXTS 64
+#define MAX_GEMS 40
+#define MAX_SPAWNS 8
 #define MAX_SHOCKWAVES 24
 #define MAX_FX_LIGHTS 64
 #define MAX_SHADER_LIGHTS 8     // how many make it to the GPU each frame
@@ -65,9 +67,14 @@ typedef struct Tile {
 
 typedef struct Arena {
     Tile tiles[ARENA_H][ARENA_W];
-    Vector3 playerSpawn;
-    Vector3 enemySpawns[8];
+
+    // One spawn per brawler slot, per side. Index 0 of the player side is the human.
+    Vector3 playerSpawns[MAX_SPAWNS];
+    int playerSpawnCount;
+    Vector3 enemySpawns[MAX_SPAWNS];
     int enemySpawnCount;
+
+    Vector3 gemVent;        // where gems well up, at the contested centre
 } Arena;
 
 //------------------------------------------------------------------------------------
@@ -89,6 +96,15 @@ typedef enum {
     AI_ATTACK,
     AI_RETREAT
 } AIState;
+
+// Which screen the application is on. The match is just one of them, so every gameplay
+// system has to be gated on it or menu clicks leak into the arena.
+typedef enum {
+    SCREEN_MENU = 0,
+    SCREEN_BRAWLERS,        // character select
+    SCREEN_MATCH,
+    SCREEN_COUNT
+} AppScreen;
 
 // How the bots behave. Static is the default: inert targets you can shoot at while
 // you dial in weapon feel, without being shot back at.
@@ -163,6 +179,8 @@ typedef struct Brawler {
     Team team;
     BrawlerClass cls;
     bool isPlayer;
+    int spawnSlot;          // which of its team's spawn points this brawler returns to
+    int gems;               // gems currently carried
 
     // AI scratch state
     AIState aiState;
@@ -219,6 +237,33 @@ typedef struct Particle {
     ParticleType type;
     bool active;
 } Particle;
+
+// A gem lying on the floor. Dropped gems pop outward on a short arc before settling.
+typedef struct Gem {
+    Vector3 position;
+    Vector3 velocity;
+    float spin;
+    float bobPhase;
+    float settleTimer;      // >0 while still arcing out of a kill
+    float pickupDelay;      // brief grace so a death drop is not instantly re-grabbed
+    bool active;
+} Gem;
+
+typedef enum {
+    MATCH_PLAYING = 0,
+    MATCH_COUNTDOWN,        // a team holds the target and the clock is running
+    MATCH_OVER
+} MatchPhase;
+
+typedef struct Match {
+    MatchPhase phase;
+    float ventTimer;        // until the next gem surfaces
+    int teamGems[2];        // recomputed each frame from what brawlers carry
+    int countdownTeam;      // team the countdown belongs to, -1 when none
+    float countdown;
+    int winner;             // -1 until someone takes it
+    float overTimer;
+} Match;
 
 // Expanding ground ring left by a detonation. Gives a blast a readable size and edge
 // instead of just a cloud of sparks.
@@ -278,6 +323,19 @@ typedef struct Tuning {
     bool postFx;            // bloom + vignette pass
     float bloom;            // bloom strength
 
+    // Profile: real numbers so the menu shows something earned rather than decorative.
+    int selectedKit;
+    int statWins;
+    int statLosses;
+    int statKos;
+
+    // Match rules
+    bool gemGrab;           // off = the free-form sandbox this build started as
+    int teamSize;
+    int gemsToWin;
+    float gemCountdown;
+    float gemVentInterval;
+
     // Grass
     float grassHeight;      // blade height in world units; ~2.0 matches a brawler
     float windStrength;
@@ -307,6 +365,8 @@ typedef struct World {
     FloatText texts[MAX_FLOATTEXTS];
     FxLight lights[MAX_FX_LIGHTS];
     Shockwave waves[MAX_SHOCKWAVES];
+    Gem gems[MAX_GEMS];
+    Match match;
 
     Camera3D camera;
     Vector3 camFocus;
@@ -326,6 +386,16 @@ typedef struct World {
     int deaths;
 
     Tuning tune;
+    bool matchRestartPending;   // a rule changed that only a rebuild can apply
+
+    // Screen flow. `fade` runs 0..1..0 across a transition and `pending` is the screen
+    // to swap to at the darkest point, so a switch never shows a half-built scene.
+    AppScreen screen;
+    AppScreen pending;
+    float fade;
+    bool fadingOut;
+    bool matchResultBanked;     // guards against counting one result twice
+    bool quitRequested;
 } World;
 
 // Live weapon table, edited by the command center. WEAPON_DEFAULTS is the pristine
