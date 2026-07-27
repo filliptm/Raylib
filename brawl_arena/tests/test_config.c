@@ -1,7 +1,7 @@
 #define _DARWIN_C_SOURCE
 #define _POSIX_C_SOURCE 200809L
-#include "../src/config.h"
-#include "../src/weapons.h"
+#include "config.h"
+#include "weapons.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,60 +82,63 @@ int main(int argc, char **argv)
     CHECK(CopyFile("config/gameplay.cfg", project), "could not copy canonical fixture");
     SetPaths(project, local, profile, absent);
 
-    World first = { 0 };
+    App first = { 0 };
     CHECK(ConfigInitialize(&first), "canonical configuration did not initialize");
     CHECK(first.config.projectLoaded, "project source was not marked loaded");
-    CHECK(WEAPONS[CLASS_HEALER].mainKind == ATTACK_RAIN,
+    CHECK(first.content.weapons[CLASS_HEALER].mainKind == ATTACK_RAIN,
           "Guardian main kind did not load");
-    CHECK(WEAPONS[CLASS_HEALER].superKind == SUPER_SOUND_WAVE,
+    CHECK(first.content.weapons[CLASS_HEALER].superKind == SUPER_SOUND_WAVE,
           "Guardian super kind did not load");
-    CHECK(WEAPONS[CLASS_HEALER].duration == 1.35f &&
-          WEAPONS[CLASS_HEALER].sTickRate == 0.35f,
+    CHECK(first.content.weapons[CLASS_HEALER].duration == 1.35f &&
+          first.content.weapons[CLASS_HEALER].sTickRate == 0.35f,
           "Guardian timing did not load from canonical config");
     CHECK(ConfigProjectOverrideCount(&first) == 0, "clean load reported draft overrides");
 
-    WEAPONS[CLASS_HEALER].damage = 123;
+    first.content.weapons[CLASS_HEALER].damage = 123;
     ConfigMarkDirty();
     ConfigFlush(&first);
     CHECK(ConfigKitOverrideCount(&first, CLASS_HEALER) == 1,
           "edited Guardian value was not recognized as a draft");
 
-    World draftReload = { 0 };
+    App draftReload = { 0 };
     CHECK(ConfigInitialize(&draftReload), "draft reload failed");
-    CHECK(WEAPONS[CLASS_HEALER].damage == 123, "draft did not override canonical value");
+    CHECK(draftReload.content.weapons[CLASS_HEALER].damage == 123,
+          "draft did not override canonical value");
     CHECK(ConfigKitOverrideCount(&draftReload, CLASS_HEALER) == 1,
           "reloaded draft provenance was lost");
 
     ConfigResetKitToProject(&draftReload, CLASS_HEALER);
     ConfigFlush(&draftReload);
-    CHECK(WEAPONS[CLASS_HEALER].damage == 100, "kit reset did not restore project value");
+    CHECK(draftReload.content.weapons[CLASS_HEALER].damage == 100,
+          "kit reset did not restore project value");
     CHECK(ConfigKitOverrideCount(&draftReload, CLASS_HEALER) == 0,
           "kit reset left a project override");
 
-    WEAPONS[CLASS_HEALER].damage = 137;
+    draftReload.content.weapons[CLASS_HEALER].damage = 137;
     ConfigMarkDirty();
     ConfigFlush(&draftReload);
     CHECK(ConfigPromoteKit(&draftReload, CLASS_HEALER), "kit promotion failed");
     CHECK(ConfigKitOverrideCount(&draftReload, CLASS_HEALER) == 0,
           "promoted kit still differs from project baseline");
 
-    World promotedReload = { 0 };
+    App promotedReload = { 0 };
     CHECK(ConfigInitialize(&promotedReload), "promoted project reload failed");
-    CHECK(WEAPONS[CLASS_HEALER].damage == 137,
+    CHECK(promotedReload.content.weapons[CLASS_HEALER].damage == 137,
           "promoted value was not reproducible from project config");
     CHECK(ConfigProjectOverrideCount(&promotedReload) == 0,
           "promotion did not clear the matching draft override");
 
     promotedReload.tune.moveSpeed = 12.25f;
     promotedReload.tune.godMode = true;
-    WEAPONS[CLASS_LOBBER].maxAmmo = 4;
+    promotedReload.content.weapons[CLASS_LOBBER].maxAmmo = 4;
     ConfigMarkDirty();
     ConfigFlush(&promotedReload);
     CHECK(ConfigPromoteAll(&promotedReload), "full project promotion failed");
 
-    World allReload = { 0 };
+    App allReload = { 0 };
     CHECK(ConfigInitialize(&allReload), "full promotion reload failed");
-    CHECK(allReload.tune.moveSpeed == 12.25f && WEAPONS[CLASS_LOBBER].maxAmmo == 4,
+    CHECK(allReload.tune.moveSpeed == 12.25f &&
+          allReload.content.weapons[CLASS_LOBBER].maxAmmo == 4,
           "full promotion was not reproducible from project config");
     CHECK(allReload.tune.godMode,
           "local-only state was lost while promoting project values");
@@ -145,7 +148,7 @@ int main(int argc, char **argv)
     allReload.tune.statWins = 9;
     ConfigMarkDirty();
     ConfigFlush(&allReload);
-    World profileReload = { 0 };
+    App profileReload = { 0 };
     CHECK(ConfigInitialize(&profileReload), "profile reload failed");
     CHECK(profileReload.tune.statWins == 9, "profile state was not isolated/persisted");
     CHECK(ConfigProjectOverrideCount(&profileReload) == 0,
@@ -155,10 +158,10 @@ int main(int argc, char **argv)
         "format_version 1\n"
         "kit.guardian.main.tick_interval 9.0\n"),
         "could not create invalid draft");
-    World rejectedDraft = { 0 };
+    App rejectedDraft = { 0 };
     CHECK(ConfigInitialize(&rejectedDraft), "invalid draft damaged canonical startup");
-    CHECK(WEAPONS[CLASS_HEALER].damage == 137 &&
-          WEAPONS[CLASS_HEALER].tickRate == 0.15f,
+    CHECK(rejectedDraft.content.weapons[CLASS_HEALER].damage == 137 &&
+          rejectedDraft.content.weapons[CLASS_HEALER].tickRate == 0.15f,
           "invalid draft partially mutated effective configuration");
     CHECK(strstr(ConfigStatus(&rejectedDraft), "rain timing") != NULL,
           "invalid draft did not surface an actionable status");
@@ -187,10 +190,10 @@ int main(int argc, char **argv)
         "could not create legacy fixture");
     SetPaths(project, importedLocal, importedProfile, legacy);
 
-    World imported = { 0 };
+    App imported = { 0 };
     CHECK(ConfigInitialize(&imported), "legacy import initialization failed");
     CHECK(imported.config.legacyImported, "legacy source was not reported as imported");
-    CHECK(WEAPONS[CLASS_HEALER].damage == 137,
+    CHECK(imported.content.weapons[CLASS_HEALER].damage == 137,
           "version-1 Guardian values were not migrated to project semantics");
     CHECK(imported.tune.statWins == 7, "legacy profile statistics were not imported");
     CHECK(FileExists(importedLocal) && FileExists(importedProfile),

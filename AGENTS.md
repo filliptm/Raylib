@@ -12,7 +12,13 @@ Before changing code or documentation:
    `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 4. If working on Brawl Arena gameplay values or persistence, also read
    `brawl_arena/config/README.md` and validate `brawl_arena/config/gameplay.cfg`.
-5. If working on Hearthstone architecture or editor behavior, read the relevant file in
+5. If changing Brawl Arena architecture, module ownership, or dependencies, also read
+   `brawl_arena/docs/ARCHITECTURE.md`.
+6. If changing Brawl Arena maps or runtime content, also read
+   `brawl_arena/docs/MAPS.md` and `brawl_arena/docs/CONTENT_AND_TUNING.md`.
+7. If changing Brawl Arena source organization, tests, or build workflow, also read
+   `brawl_arena/docs/DEVELOPMENT.md`.
+8. If working on Hearthstone architecture or editor behavior, read the relevant file in
    `hearthstone/docs/` and verify it against the current implementation.
 
 `docs/PROJECT_OVERVIEW.md` is the maintained repository-level description. The code is
@@ -84,10 +90,17 @@ intentional, document it explicitly.
 
 ### Brawl Arena
 
-- Shared simulation structures live in `brawl_arena/src/types.h`; layout changes require
-  rebuilding every dependent object. The Makefile deliberately makes every object depend
-  on every header.
-- Prefer passing `World *` through gameplay systems and avoid adding new hidden globals.
+- Keep source in its owning subsystem: `core`, `content`, `game`, `app`, `presentation`,
+  `ui`, or `devtools`. Do not recreate a universal shared-types header.
+- Deterministic simulation APIs take `GameContext`, never `App *`. Game/core code must
+  not read platform input, call rendering/effect functions, or use raylib randomness.
+  Run `make -C brawl_arena check-architecture` after dependency changes.
+- `App` owns the game session, player controller, presentation state, flow, tuning,
+  content catalog, and configuration provenance. Reset only the state region whose
+  lifetime ended.
+- Capture device input into `PlayerInput` in the app layer. Communicate simulation
+  presentation through `GameEvent`, and route developer gameplay mutations through
+  application commands.
 - Preserve fixed-pool behavior unless a change explicitly redesigns allocation.
 - `brawl_arena/config/gameplay.cfg` is the tracked source of truth for project tuning.
   Change it intentionally or through the command center's explicit PROJECT save actions.
@@ -96,6 +109,8 @@ intentional, document it explicitly.
   overwrite or delete the user's local tuning/profile files.
 - Keep Gem Grab and free-form/practice roster semantics separate. Existing command-center
   bot helpers are not team-aware.
+- Maps are versioned packages listed by `brawl_arena/data/maps/manifest.cfg`. Preserve
+  separate terrain, gameplay, visual, and prop layers, and validate every listed map.
 - Permanent walls and destructible crates are different rules. Do not describe crate
   destruction as permanent-wall destruction.
 - Raw Meshy/Tripo GLBs are not runtime-ready. Use the documented conversion pipeline and
@@ -154,10 +169,10 @@ Run `make -C hearthstone test_animation` and
 
 ```bash
 make -C brawl_arena
+make -C brawl_arena check-architecture
 make -C brawl_arena validate-config
 make -C brawl_arena test
-clang -std=c99 -Wall -Wextra -fsyntax-only \
-  $(pkg-config --cflags raylib) brawl_arena/src/*.c
+make -C brawl_arena sanitize
 ```
 
 Compilation does not validate graphical behavior. For changes to input, gameplay,

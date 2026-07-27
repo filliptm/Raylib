@@ -2,7 +2,7 @@
 
 A top-down 3D arena brawler in the Brawl Stars mould, built with raylib in C.
 
-This build is a playable **Gem Grab combat slice**: one arena, five kits, 3v3 team play,
+This build is a playable **Gem Grab combat slice**: two external maps, five kits, 3v3 team play,
 a no-pressure practice range, and a live tuning panel. It keeps movement, aiming, and
 weapon feel easy to iterate while providing a complete match loop and win condition.
 
@@ -145,11 +145,11 @@ never have to think about which is which mid-fight:
 
 Press `TAB`. It opens on launch, because this build is a sandbox.
 
-Effective tuning lives in `World.tune` or the `WEAPONS[]` table and is sourced from the
-tracked `config/gameplay.cfg`. Sliders apply immediately and autosave an ignored local
-draft; roster and rule changes that alter match construction request a rebuild. Clicks
-over the panel never reach the game, and each tab scrolls independently when its controls
-are taller than the window.
+Effective tuning lives in `App.tune` and its owned `ContentCatalog`, sourced from tracked
+`config/gameplay.cfg`. Sliders apply immediately, rebuild typed runtime content, and
+autosave an ignored local draft; roster and rule changes that alter match construction
+request a rebuild. Clicks over the panel never reach the game, and each tab scrolls
+independently when its controls are taller than the window.
 
 | Tab | What's in it |
 |-----|--------------|
@@ -343,40 +343,40 @@ Health and damage use Brawl Stars' numeric scale, so the damage numbers read fam
 
 ## Architecture
 
-Gameplay systems consistently take a `World*`, which makes their shared state explicit.
-The application still has a few deliberate globals: the mutable `WEAPONS[]` table, root
-`World`/`Assets` ownership, and static UI/render caches.
+Brawl Arena is split by ownership rather than by file size alone:
 
-```
+```text
 src/
-├── types.h      # all shared structs + tuning constants
-├── arena.c/.h   # tile map, collision, line of sight, destructibles
-├── brawler.c/.h # entities, health, ammo, timed marks, dash, respawn, visibility
-├── weapons.c/.h # kit roster, projectiles, rain/sound fields, flight and impact
-├── ai.c/.h      # bot state machine, steering and behaviour modes
-├── command_center.c/.h  # live tuning panel + its immediate-mode widgets
-├── assets.c/.h  # procedural assets, shaders, rigged characters, station GLBs
-├── config.c/.h  # canonical config, local draft/profile, validation and promotion
-├── environment.c/.h # collision-aligned Helios-9 presentation + set dressing
-├── player.c/.h  # input to intent, aiming, tap vs hold
-├── render.c/.h  # camera, world drawing, trajectory previews
-├── effects.c/.h # particles, floating text, match-state camera shake
-├── hud.c/.h     # health bars and screen-space UI
-└── main.c       # init and the game loop
+├── core/          # limits, IDs, deterministic random
+├── content/       # typed catalog, tuning persistence, external maps
+├── game/          # deterministic match simulation and events
+├── app/           # ownership, captured input, commands, main loop
+├── presentation/  # assets, camera, effects, environment, rendering
+├── ui/            # menu and HUD
+└── devtools/      # command center and widgets
 ```
 
-`config/gameplay.cfg` is the normal source of starting values. `TuningSetDefaults()` and
-`WEAPON_DEFAULTS[]` are recovery values used to report a broken/missing installation,
-validate isolated fixtures, and import older saves. Runtime reads `World.tune` and the
-mutable `WEAPONS[]` table; the command center edits them and can explicitly promote the
-effective result back into the tracked canonical file.
+`App` separately owns match simulation, local controller state, presentation state,
+screen flow, effective tuning, typed content, and configuration provenance. Match reset
+clears only the match/controller/presentation regions.
 
-The map is a plain 33×23 character grid at the top of `arena.c` (`#` wall, `c` crate,
-`b` bush, `P` player spawn, `E` enemy spawn). Rows are padded and the border is forced
-to wall. Helios-9 uses a mirrored open-atrium layout: short docking-bay shields,
-destructible flank stations, four central pylon groups, and hydroponic pockets separated
-by broad movement bands. Cover is concentrated into recognizable strategic points rather
-than repeated across each row.
+Game systems receive only a `GameContext` containing session, tuning, and content. They
+cannot see the camera or UI, do not read devices, and emit `GameEvent` records instead of
+spawning visual effects. Input is captured into `PlayerInput`. `make
+check-architecture` enforces these boundaries, while deterministic replay tests verify
+them at runtime.
+
+Maps are versioned packages listed in `data/maps/manifest.cfg`, with separate terrain,
+gameplay-marker, visual-hint, and prop files. Every map is validated for dimensions,
+symbols, sealed borders, spawns, one vent, and spawn-to-objective reachability before
+startup continues.
+
+See:
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Content and tuning](docs/CONTENT_AND_TUNING.md)
+- [Map packages](docs/MAPS.md)
+- [Development guide](docs/DEVELOPMENT.md)
 
 ## Gem Grab
 
@@ -426,5 +426,6 @@ sandbox it started as, with the static training bots.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
 - Character animation clips switch without crossfading.
 - Longshot and Mortar still use the primitive fallback characters.
-- Headless tests cover configuration, Guardian timing, and combat camera behavior;
-  graphical and interaction paths still require runtime checks.
+- Headless tests cover configuration, Guardian behavior, all-kit camera isolation,
+  external maps, deterministic replay, events, and presentation isolation. Graphical and
+  interaction paths still require runtime checks.

@@ -48,7 +48,7 @@ but runtime checks open windows and should be performed deliberately.
 | Examples launcher | One 504-line C file plus a vendored examples tree | Global launcher state and on-demand shell compilation | Learning/reference browser |
 | Squad Runner | One 1,334-line C file | One global `GameState` with fixed arrays | Focused playable prototype |
 | Hearthstone | About 12,400 lines of C and headers across many modules | Central `GameState` plus partially integrated subsystems | Broad experimental platform |
-| Brawl Arena | About 9,400 lines of C and headers across focused modules | Fixed-pool `World` passed through gameplay systems | Cohesive combat vertical slice |
+| Brawl Arena | About 10,000 lines across seven source subsystems | Owned `App` state plus deterministic fixed-pool simulation | Cohesive combat vertical slice |
 
 Line counts are descriptive, not contractual. Update them if a major reorganization makes
 them materially misleading.
@@ -533,659 +533,293 @@ smaller live game.
 
 # Brawl Arena
 
-## Purpose and current role
+## Purpose and player-facing scope
 
-`brawl_arena/` is a top-down 3D arena brawler in the Brawl Stars mold. It began as a
-combat-feel sandbox and now includes a menu shell, character selection, practice mode,
-Gem Grab, allied and enemy AI, concealment, destructible cover, a live command center,
-procedural rendering, an imported modular station environment, post-processing, profile
-statistics, and optional rigged characters for selected kits.
+`brawl_arena/` is a top-down 3D arena-brawler vertical slice. It combines a combat-feel
+sandbox with a menu shell, character selection, practice mode, Gem Grab, allied and enemy
+AI, concealment, destructible cover, live designer tuning, imported rigged characters,
+an external map format, and a stylized rendering pipeline.
 
-It is the repository's most recently developed and most cohesive original game.
+The current roster contains five kits:
 
-## Build and run
+| Kit | Role | Main attack | Ultimate |
+|---|---|---|---|
+| Scrapper | damage | short five-pellet spread | nine-pellet crate-breaking Buckshot |
+| Longshot | marksman | range-scaled single projectile | piercing Railgun |
+| Mortar | artillery | arcing splash shell | three-shell Barrage |
+| Tank | tank | short four-pellet burst | damaging crate-breaking Charge |
+| Guardian | support | growing rain field that repeatedly damages enemies and heals allies | wide Resonance cone that applies enemy damage-over-time or ally healing-over-time |
+
+Guardian uses `resources/gaia_guardian.glb`. The current tracked Guardian defaults produce
+nine 100-point rain pulses over 1.35 seconds and six Resonance ticks over 2.1 seconds.
+Those numbers are content values, not hard-coded combat timing.
+
+## Build and verification
+
+From the repository root:
 
 ```bash
 make -C brawl_arena
 make -C brawl_arena run
 make -C brawl_arena validate-config
+make -C brawl_arena check-architecture
 make -C brawl_arena test
+make -C brawl_arena sanitize
 ```
 
-The executable is `brawl_arena/build/brawl_arena`.
+The executable is `brawl_arena/build/brawl_arena`. The Makefile discovers C sources
+recursively, stores objects under matching `build/obj/<subsystem>/` paths, and generates
+header dependency files with `-MMD -MP`.
 
-For a warning-focused source check:
+The headless suite covers:
 
-```bash
-clang -std=c99 -Wall -Wextra -fsyntax-only \
-  $(pkg-config --cflags raylib) brawl_arena/src/*.c
+- Canonical configuration loading, sparse overlays, promotion, reset, invalid-input
+  rejection, profile separation, and legacy migration.
+- Guardian rain and Resonance pulse behavior.
+- The rule that no attack, impact, damage, or elimination shakes any user's camera.
+- External map catalog loading and runtime construction for Helios-9 and Training Court.
+- Deterministic replay from identical input frames, including identical game events.
+- Isolation between simulation and presentation state.
+
+`make sanitize` rebuilds those tests with AddressSanitizer and
+UndefinedBehaviorSanitizer on non-Darwin systems. The current Apple clang/macOS 26 ASan
+runtime deadlocks during its own initialization, so the Darwin target runs strict UBSan.
+`make check-architecture` rejects forbidden dependencies in `src/game/` and `src/core/`.
+Graphical shaders, input feel, screen transitions, and model animation still require an
+interactive run.
+
+## Source organization and dependency direction
+
+```text
+brawl_arena/
+├── config/                  tracked canonical designer settings
+├── data/maps/               versioned map catalog and map packages
+├── docs/                    architecture, maps, content, development, character import
+├── resources/               runtime GLBs, textures, and environment assets
+├── src/
+│   ├── core/                limits, shared IDs, deterministic random
+│   ├── content/             typed content, config storage, map loading/validation
+│   ├── game/                deterministic match simulation and output events
+│   ├── app/                 application ownership, input/controller, commands, loop
+│   ├── presentation/        assets, camera, effects, ability visuals, world rendering
+│   ├── ui/                  player-facing menu and HUD
+│   └── devtools/            command center and immediate-mode authoring widgets
+├── tests/                   headless behavior and integration checks
+└── tools/                   character pipeline and architecture checks
 ```
 
-The headless tests validate the canonical configuration and its migration/overlay/save
-semantics, Guardian rain and Resonance timing, and the rule that combat never drives
-camera shake. Graphical input, rendering, and full match flow still require interactive
-checks.
+The intended dependency direction is implemented, not merely aspirational:
 
-## Application shell
+- `core` and `content` define the narrow types consumed by simulation.
+- `game` receives a `GameContext` containing only `GameSession`, `Tuning`, and
+  `ContentCatalog` pointers. It cannot reach camera, controller, UI, profile, or screen
+  state.
+- `app` owns the aggregate lifetime and translates device input into `PlayerInput`.
+- Simulation emits `GameEvent` records. `presentation/effects.c` consumes them after the
+  simulation step.
+- UI and developer tools use application commands for gameplay mutations.
 
-The game opens a fixed 1280×800 window with four-sample MSAA and a vertical-sync request.
-Its fallback frame ceiling matches the active monitor refresh rate, or 60 Hz when the
-rate is unavailable. raylib's default Escape-to-close behavior is disabled so Escape
-can mean “back.”
+`tools/check_architecture.sh` prevents game/core code from importing outer-layer headers,
+accepting `App *`, reading keyboard/mouse state, using raylib's nondeterministic random
+function, or calling rendering/effect APIs.
 
-The shell has:
+## State ownership
 
-- Main menu.
-- Brawler selection.
-- Match screen.
-- Fade-out/swap/fade-in transitions.
+`App` owns four distinct runtime regions:
 
-The menu displays profile statistics, the selected kit, kit-derived statistics, controls,
-mode selection, Practice, Play, Brawlers, and Quit. Menu actions mutate real state rather
-than being decorative placeholders.
+- `GameSession`: arena, brawlers, projectiles, area fields, gems, objective state,
+  deterministic random state, simulation clock, statistics, and the event queue.
+- `PlayerController`: aim point/distance and main/super charge interaction state.
+- `PresentationState`: camera plus fixed pools for particles, float text, dynamic lights,
+  and shockwaves.
+- `AppFlow`: screen, transition, result-banking, and quit state.
+
+It also owns effective `Tuning`, the `ContentCatalog`, and configuration provenance.
+`Assets` has process lifetime in `main.c` and owns shaders, meshes, textures, character
+models, animations, station models, and the scene render target.
+
+`ResetMatch()` clears only session, controller, and presentation state. Content,
+configuration, profile data, and navigation survive because they have separate owners;
+there is no preserve-and-reconstruct whole-application reset.
+
+Fixed capacities currently include eight brawlers, 512 projectiles, 24 active ability
+fields, four statuses per brawler, 40 gems, 1,024 game events, 1,024 presentation
+particles, 64 float texts, 64 effect lights, and 24 shockwaves. Maps may be up to 64×64,
+the catalog may contain eight maps, and a map may contain 64 decorative props.
 
 ## Startup and frame flow
 
 Startup:
 
-1. Seed built-in recovery tuning and weapon values.
-2. Transactionally validate and load tracked `config/gameplay.cfg` as the canonical
-   project configuration.
-3. Overlay sparse ignored `tuning.local.cfg`, then profile-only `profile.cfg`.
-4. If the new local draft is absent, import an existing legacy `tuning.cfg` into the
-   split local/profile files without modifying the legacy file.
-5. Generate/load shaders and procedural assets, then load optional character and station
-   GLBs.
-6. Initialize menu assets.
-7. Build an initial match from the effective configuration.
-8. Show the main menu.
+1. Seed compiled recovery tuning/content.
+2. Transactionally load required `config/gameplay.cfg`.
+3. Overlay an optional sparse `tuning.local.cfg`, then profile-only `profile.cfg`.
+4. Import legacy `tuning.cfg` once when the new local draft does not exist.
+5. Load and validate `data/maps/manifest.cfg` and every listed map.
+6. Generate procedural fallback assets and load shaders, optional characters, and station
+   models.
+7. Build the initial match and open the main menu.
 
-If the canonical file is missing or invalid, startup retains playable compiled recovery
-values and labels the command center `CONFIG RECOVERY MODE`; it does not silently treat
-those values as the normal project source.
+During an active match:
 
-During a match, each frame:
+1. Clamp real delta time and update screen transitions.
+2. Capture one `PlayerInput` frame when interaction is allowed.
+3. Apply player commands, AI, brawler state, projectiles, persistent abilities, arena
+   damage, and Gem Grab rules using a deterministic `GameContext`.
+4. Consume simulation events into presentation pools.
+5. Update effects and camera.
+6. Autosave the local draft/profile when dirty.
+7. Render the world, optional post pass, HUD, command center, and transition fade.
 
-1. Clamp real frame delta to 0.05 seconds.
-2. Update screen transitions.
-3. Apply the configured time scale.
-4. Update the command center.
-5. Handle full-match restart requests.
-6. Process player input when the match is active and unlocked.
-7. Update AI, brawler movement/state, projectiles, and persistent ability fields.
-8. Update destructible arena tiles.
-9. Update Gem Grab spawning, pickups, scoring, and result state.
-10. Update effects and camera.
-11. Bank match statistics once.
-12. Autosave changed draft/profile fields without changing project defaults.
-13. Render the world, optional post pass, HUD, command center, and screen fade.
+When Gem Grab ends, player/AI/projectile simulation freezes while effects and the camera
+finish presenting the result. The result is banked into the profile once, then the shell
+returns to the menu after the configured hold or a user skip.
 
-When Gem Grab is decided, AI, movement, and projectiles stop. Effects and the camera keep
-running while the result is shown, after which the shell returns to the menu.
-
-## World state and capacity
-
-`World` owns the active simulation:
-
-- `Arena`.
-- Up to eight `Brawler` values.
-- Up to 512 projectiles.
-- Up to 24 rain/sound-wave ability fields.
-- Up to 1,024 particles.
-- Floating text, dynamic effect lights, and shockwaves.
-- Up to 40 gems.
-- Match, camera, aim-preview, statistics, effective tuning, configuration provenance, and
-  screen state.
-
-These are fixed pools. Gameplay avoids per-frame heap allocation and finds inactive slots
-when spawning temporary objects.
-
-Most gameplay functions receive `World *`, but the application is not entirely free of
-globals:
-
-- `main.c` owns global `World` and `Assets` values.
-- `WEAPONS[]` is a mutable global table.
-- Menu and command-center widgets keep static UI state.
-- Rendering keeps static asset and grass/light buffers.
-
-## Match construction
-
-`ResetMatch()` preserves application-level tuning, configuration provenance, and
-screen-transition state, zeroes the match world, reloads the arena, and spawns the
-correct roster.
-
-Gem Grab:
-
-- Team size is configurable from one to four per side.
-- Slot zero on the player team is the human.
-- Remaining player slots are allied bots.
-- The enemy team uses bot-controlled kits.
-- Each brawler receives a stable spawn slot.
-
-Free-form/practice:
-
-- The human occupies index zero.
-- A configurable number of enemy bots fills later indices.
-- Practice targets are fanned out at stepped ranges in front of the player.
-- Practice spawn locations are nudged away from walls and bushes.
-
-After spawning, the match state, grass instances, and camera are reset.
-
-## Arena
-
-The arena is a 33×23 character grid in `src/arena.c`. Each tile is two world units.
-
-Map symbols:
-
-- `#`: permanent metal wall.
-- `c`: destructible crate.
-- `b`: bush/grass concealment tile.
-- `P`: player-team spawn.
-- `E`: enemy-team spawn.
-
-The parser pads short rows and forces a solid border. It records three spawn locations per
-side and places the Gem Grab vent at the center.
-
-The current Helios-9 layout is vertically mirrored and keeps the 33×23 footprint. Short
-walls shield the top and bottom docking-bay spawns without forming lane dividers. Broad
-movement bands connect both flanks and the centre, while four small L-shaped pylon groups,
-hydroponic concealment pockets, and destructible cargo/operations banks provide deliberate
-hold and rotation points. The centre-back `P` appears before the two side spawns so player
-slot zero remains the human.
-
-Arena responsibilities:
-
-- Circle-versus-grid movement resolution.
-- Solid and bush queries.
-- Sampled line of sight.
-- Direct and radius damage to crates.
-- Destruction animation/state.
-
-Permanent walls do not take damage. “Breaks walls” in some UI/README text generally means
-that a super destroys crates; it does not remove the permanent metal wall tiles.
-
-## Brawlers and movement
-
-Each brawler stores:
-
-- Team, class, position, velocity, and facing.
-- Health and maximum health.
-- Per-kit fractional ammo state; the tracked defaults currently give every kit three.
-- Attack cooldown.
-- Super charge.
-- Alive, death, respawn, reveal, bush, and visibility state.
-- Dash state.
-- Resonance heal-over-time/damage-over-time mark state.
-- Gem count.
-- AI target, steering, retreat, strafe, and wander state.
-
-Movement intent is converted to a desired velocity and interpolated using the live movement
-acceleration tuning. Arena collision and brawler separation are applied afterward.
-
-There is no passive health regeneration. Death drops all carried gems, plays effects,
-increments relevant statistics, and starts a configurable respawn timer.
-
-## Player input
+## Controls and modes
 
 - WASD or arrows: camera-relative movement.
-- Hold left mouse: aim the main attack and show its preview.
-- Release left mouse: fire.
-- Quick-tap left mouse: auto-aim with motion leading. Guardian prioritizes a badly hurt
-  ally in range, then falls back to the nearest visible enemy.
-- Space: quick shot using the same support/enemy target priority.
-- Hold/release right mouse: aim and fire a charged super.
-- `1`–`5`: swap kit in place.
+- Hold/release left mouse: preview and fire the main attack.
+- Tap left mouse or press Space: auto-aim. Guardian first considers a wounded ally in
+  range; other cases target the nearest visible enemy.
+- Hold/release right mouse: preview and fire a charged ultimate.
+- `1`–`5`: change the player's kit.
 - Tab: open or close the command center.
-- `R`: rebuild the current match while preserving tuning.
-- Escape: close overlays or return through the screen hierarchy.
-
-Clicks over the command center are captured so UI interaction does not fire a weapon.
-
-## Ammo, attacks, and supers
-
-Ammo capacity and reload time are per-kit project values. The tracked defaults currently
-give every kit three ammo units. Ammo refills continuously at the kit's reload-per-ammo
-rate. A main attack requires at least one ammo unit and its cooldown to be ready.
-
-Landing damaging projectiles grants super charge according to `superPerHit` and the global
-super gain multiplier. Guardian rain pulses grant charge when they damage an enemy or
-restore nonzero health to an ally. Resonance ticks do not recharge Resonance. A takedown
-grants an additional charge bonus. Firing a main attack reveals the brawler for the
-configured duration.
-
-`config/gameplay.cfg` is the normal starting source for weapon and super values.
-`WEAPON_DEFAULTS[]` is a compiled recovery baseline, while `WEAPONS[]` is the mutable
-effective table used by simulation. The command center edits the effective table and can
-restore or promote one kit or all project-scoped values.
-
-No attack causes camera shake. This includes main/super casts, direct player damage,
-projectile explosions, crate destruction, and eliminations for every kit. The remaining
-camera-shake calls are match-state presentation cues, not combat feedback.
-
-## Five kits
-
-### Scrapper
-
-- 3,800 default health.
-- Five-pellet, 320-damage spread attack.
-- Short range and wide spread.
-- Super fires nine stronger pellets.
-- Super projectiles can destroy crates and continue through the destroyed cover.
-
-Scrapper uses the imported Sentinel model when rigged character models are enabled.
-
-### Longshot
-
-- 2,800 default health.
-- One fast, long-range projectile.
-- Listed damage is 1,600 at maximum travel.
-- Damage scales from 50% at point-blank to 100% at maximum range.
-- Super is a piercing rail shot that can hit multiple enemies before permanent cover.
-
-Older documentation says damage reaches 2×. The implemented formula is 0.5×–1.0× of the
-configured damage.
-
-### Mortar
-
-- 3,200 default health.
-- Arcing shell with splash damage.
-- The projectile ignores mid-flight cover and detonates at its landing point.
-- Splash falls toward 55% damage at the edge.
-- Super launches a three-shell barrage.
-
-Arcing supers damage crates in their impact radius.
-
-### Tank
-
-- 5,600 default health.
-- Four-pellet, very-short-range attack.
-- Super is a directional charge.
-- The charge damages and knocks back each enemy once, smashes crates, and stops at
-  permanent walls.
-- Uses the imported Ironclad Guardian model when rigged character models are enabled.
-
-### Guardian
-
-- 3,400 default health.
-- The main attack places a rain field up to 17 units away.
-- The field grows to a 3.4-unit radius during its first 44% of life and disappears after
-  1.35 seconds.
-- It pulses immediately and every 0.15 seconds for nine total pulses. A target that
-  remains inside for the entire cast receives 900 total damage as an enemy or up to 900
-  total healing as an ally, in 100-point increments.
-- Allies at full health remain valid field occupants but gain no health or super charge
-  from that pulse. The caster can be healed when standing inside their own rain.
-- Quick auto-aim and combat AI prioritize sufficiently injured teammates.
-- `RESONANCE` is a 14-unit, 90-degree sound-wave cone, clipped by arena line of sight.
-- Every living non-caster in the cone is marked for 2.1 seconds. Allies receive six
-  220-point healing ticks (up to 1,320 total); enemies receive six 180-point damage ticks
-  (1,080 total). The mark does not revive defeated allies.
-- The travelling cone is visible for 0.7 seconds, and marked characters retain a green
-  healing or pink damage aura until the timed effect ends.
-- Guardian uses the imported Gaia Guardian model when rigged character models are enabled.
-
-## Projectile and ability-field simulation
-
-Projectile slots record owner, team, direction, speed, range, damage, ally healing, radius,
-spread-derived trajectory, super behavior, piercing, arcing, and wall-breaking state.
-
-Normal projectile motion is substepped in increments of at most 0.3 world units to reduce
-tunneling. Cover collision is evaluated before actor collision. Arcing shells instead
-follow a visual arc to a fixed endpoint and resolve splash on landing.
-
-Spread pellets are evenly distributed across the configured angle and receive an
-additional random scatter of up to 6% of that angle.
-
-`World.abilityFields` is a separate fixed pool of 24 persistent area records. Rain fields
-own their growth, lifetime, pulse timer, team, owner, damage, and healing. Each pulse
-checks all living brawlers against the field's current radius. Sound-wave fields own only
-the short cast visualization: the cast performs a range, angle, and line-of-sight test
-once, then copies its timed Resonance mark onto each target.
-
-The Resonance mark lives on `Brawler`, so its ticks continue after the visible cone is
-gone and follow a moving target. A new mark refreshes and replaces the existing one.
-Rain fields and marks are cleared when Gem Grab ends so paused gameplay cannot leave
-frozen effects on the result screen.
-
-## Aim previews
-
-The renderer converts live weapon data into ground previews:
-
-- Spread weapons: a filled cone with separately raycast ribs.
-- Single projectiles: a thick beam clipped to the center-line obstruction.
-- Mortars: landing discs and dotted arcs.
-- Guardian main attack: green target disc at the clamped rain-field center.
-- Guardian Resonance: wide cyan cone with separately raycast ribs.
-- Offensive supers: gold treatment.
-- Ordinary main attacks: blue treatment.
-- Guardian support previews: green treatment.
-
-The previews are highly informative but not mathematically exact in every case:
-
-- Random firing scatter can land outside the deterministic fan ribs.
-- The thick single-shot beam does not independently raycast both visual edges.
-- Permanent and destructible cover use the current arena ray tests.
-
-## Concealment
-
-A brawler in a bush is hidden from opponents unless:
-
-- It has an active reveal timer after firing.
-- An opponent moves within the configured reveal distance.
-
-`BrawlerCanSee()` also requires arena line of sight. AI targeting uses this function.
-
-The later player-facing `visible` calculation uses proximity for bush reveal without
-rechecking line of sight. Consequently, an enemy in a bush can become rendered at close
-range even if a permanent wall lies between it and the player. This is a known consistency
-issue between AI sight and rendering sight.
-
-Concealed characters use screen-door dithering with a green cast rather than alpha
-blending. The local player also receives a locator ring drawn after grass so the player
-does not lose track of their own position.
-
-## AI
-
-Bot modes:
-
-- `STATIC`: no movement or fire.
-- `ROAM`: wander without combat.
-- `FIGHT`: target, steer, strafe, fire, retreat, use supers, and collect gems.
-
-Gem Grab forces combat behavior regardless of the free-form bot-mode setting.
-
-Combat AI:
-
-- Selects the nearest visible opponent.
-- Predicts projectile travel and leads the target.
-- Adds randomized aim error.
-- Moves toward a fraction of weapon range.
-- Strafes while fighting.
-- Retreats toward a nearby bush below 30% health.
-- Uses a super when the target is plausibly in range.
-- Guardian bots interrupt combat to place rain on teammates below 85% health. They aim
-  Resonance toward a nearby ally below 60% health, and can also cast it offensively when
-  an enemy is in cone range.
-- Diverts toward loose gems when appropriate.
-
-There is no A* or navigation mesh. Steering samples nearby alternatives and relies on
-collision resolution. Bots do not explicitly coordinate around carriers, defend a
-countdown leader, escort allies, or choose team-level strategies.
-
-## Gem Grab
-
-The central vent produces its first gem after two seconds and then uses the configured
-interval.
-
-Loose gems:
-
-- Arc out of the vent or a defeated carrier.
-- Settle into a hover.
-- Have a short pickup grace period.
-- Are collected within a fixed radius.
-
-Team scores count gems carried by living brawlers. A defeated carrier's count is set to
-zero before its gems become loose, so dropped gems do not count for either team.
-
-A countdown begins when one team:
-
-- Has at least the configured target number of gems.
-- Has a strict lead over the other team.
-
-Losing that lead resets the countdown rather than pausing it. When the countdown reaches
-zero, the match records a winner, clears projectiles, ability fields, and Resonance marks,
-stops brawler motion, plays result effects, and later returns to the menu. Wins, losses,
-and player KOs are banked exactly once into tuning/profile state.
-
-## Command center
-
-Tab opens an immediate-mode tuning panel with tabs for:
-
-- Match rules.
-- Bots.
-- Player movement and cheats.
-- Current kit and super.
-- Rendering style.
-- World, grass, debug, and reset tools.
-
-Most sliders write directly into `World.tune` or `WEAPONS[]` and take effect immediately.
-Rule changes that require a rebuilt roster set `matchRestartPending`.
-
-The panel is vertically scrollable per tab. Its header reports whether the effective
-values are exactly `PROJECT DEFAULTS`, include a numbered local draft, or are running in
-configuration recovery mode. The Kit tab can discard/promote the current kit. The World
-tab reports status and can discard/promote all project-scoped values. A project save
-rewrites the tracked configuration but deliberately does not create a Git commit.
-
-Current command-center issues:
-
-- `SetBotCount()` assumes every brawler after index zero is an enemy. In Gem Grab, indices
-  after zero also contain allied bots. Bot-count changes can truncate the team roster.
-- “Respawn all bots” respawns all non-player brawlers as enemies, including allies.
-- “Restart match” calls `MatchReset()` only. It resets gems and match timers, not arena
-  cover, brawler positions/health, or projectiles like the `R` rebuild does.
-Treat these as real implementation constraints when tuning or extending Gem Grab.
-
-## Tuning persistence
-
-`config.c` exposes one typed field registry over `Tuning` and all five `WeaponDef`
-records. It assigns each stable dotted key a type, scope, range, and optional kit owner.
-Main and super behavior use named kinds (`projectile`, `lob`, `rain`, `dash`,
-`healing_burst`, and `sound_wave`) rather than persisting implementation booleans.
-
-The layers are:
-
-1. Compiled recovery values from `TuningSetDefaults()` and `WEAPON_DEFAULTS[]`.
-2. Required tracked `config/gameplay.cfg`, containing every project-scoped gameplay, AI,
-   match, kit, and default presentation value.
-3. Sparse ignored `tuning.local.cfg`, containing project fields only while they differ
-   from the canonical project plus local-only cheats/debug fields.
-4. Ignored `profile.cfg`, containing selected kit and win/loss/KO statistics.
-
-Command-center changes apply immediately. Dirty local/profile state autosaves after 0.6
-seconds and flushes on shutdown. Explicit Kit/World save buttons first validate a complete
-candidate, then atomically replace `config/gameplay.cfg`; they do not run Git commands.
-Reset/discard actions copy from the in-memory canonical snapshot and clean matching draft
-keys.
-
-Canonical loading rejects missing, duplicate, unknown, mistyped, non-finite,
-out-of-range, and semantically inconsistent values. Optional overlay loading is also
-transactional: a rejected draft or profile reports an actionable status without partially
-mutating effective state. Writes are deterministic `key value` text through a temporary
-file and rename.
-
-When the new local file is absent, a version-1/version-2 `tuning.cfg` is imported once
-into the split draft/profile files and preserved. Version-1 Guardian bolt/Sanctuary values
-reset to current project semantics because they cannot describe rain and Resonance.
-
-All four config paths can be overridden for isolated tests or tools:
-
-```bash
-cd brawl_arena
-BRAWL_PROJECT_CONFIG=/tmp/gameplay.cfg \
-BRAWL_TUNING=/tmp/tuning.local.cfg \
-BRAWL_PROFILE=/tmp/profile.cfg \
-BRAWL_LEGACY_TUNING=/tmp/legacy.cfg \
-./build/brawl_arena
+- `R`: rebuild the current match without losing tuning.
+- Escape: close an overlay, step back a screen, or quit from the main menu.
+
+Play constructs Gem Grab when enabled. Team size is configurable from one to four per
+side; slot zero is the human and other player-side slots are allied bots. Teams race to
+hold the target gem count for the full countdown. Death drops carried gems.
+
+Practice is a session-only free-form range. It places targets at stepped distances,
+opens the command center, and does not rewrite the saved Play mode. Bot behavior can be
+Static, Roam, or Fight.
+
+## Content and tuning
+
+`ContentCatalog` owns the mutable authoring records, typed character definitions, typed
+ability definitions, and validated map definitions. Each character has a stable ID,
+display name, model asset ID, role, health/ammo values, and handles for its main and
+ultimate abilities. Ability behavior is a tagged enum with typed projectile, area, or
+dash payloads.
+
+The current config schema retains `WeaponDef` as a compatibility/authoring record.
+`ContentCatalogRebuildTyped()` converts it into the runtime character/ability catalog
+after load or live edits. Game, AI, menus, HUD summaries, and aim previews consume the
+typed catalog rather than branching over a universal bag of weapon fields.
+
+`config/gameplay.cfg` is the tracked project truth. Runtime layering is:
+
+```text
+compiled recovery baseline
+        ↓
+config/gameplay.cfg       tracked and required
+        ↓
+tuning.local.cfg          ignored sparse authoring draft
+        ↓
+profile.cfg               ignored profile-only state
 ```
 
-The detailed schema, authoring workflow, and isolation rules are in
-`brawl_arena/config/README.md`.
+Command-center changes apply immediately and autosave after 0.6 seconds. Explicit
+`SAVE KIT AS PROJECT DEFAULT` and `SAVE ALL AS PROJECT DEFAULTS` actions validate a full
+candidate and atomically rewrite the tracked project file. They create an ordinary Git
+working-tree change; they do not commit it. Reset actions restore project values and
+rewrite the sparse local draft. Missing or malformed canonical content enables a visible
+recovery mode rather than silently treating compiled defaults as project truth.
 
-## Rendering pipeline
+The parser rejects missing, duplicate, unknown, out-of-range, non-finite, or
+behavior-inconsistent values transactionally. Automated probes can isolate all four
+paths with `BRAWL_PROJECT_CONFIG`, `BRAWL_TUNING`, `BRAWL_PROFILE`, and
+`BRAWL_LEGACY_TUNING`.
 
-The world renderer draws:
+## Maps
 
-1. Helios-9 deck, collision-aligned cover, hydroponic beds, and exterior set dressing.
-2. Brawlers and character models.
-3. Instanced grass.
-4. Local-player locator.
-5. Gems.
-6. Solid effects and debris.
-7. Ability fields and timed-mark auras.
-8. Aim previews, shockwaves, projectiles, and debug overlays.
+`data/maps/manifest.cfg` declares a version, default map ID, and ordered map list. Each
+map directory contains:
 
-HUD and command-center UI are drawn after post-processing so text remains crisp.
+- `map.cfg`: stable ID/name, dimensions, tile size, and layer filenames.
+- `terrain.layer`: floor (`.`), permanent wall (`#`), crate (`c`), or bush (`b`).
+- `gameplay.layer`: player spawn (`P`), enemy spawn (`E`), objective vent (`V`), or
+  empty (`.`).
+- `visual.layer`: palette and decorative cell hints independent of collision.
+- `props.cfg`: explicit station-model placement, rotation, scale, palette, and emissive
+  strength.
 
-### Procedural and static environment assets
+Loading validates versions, dimensions, exact row widths, legal symbols, a sealed wall
+border, walkable gameplay markers, at least one spawn per side, exactly one vent,
+spawn-to-vent reachability, prop syntax/ranges, duplicate IDs, and the default ID.
+Invalid catalogs stop startup rather than creating a partially valid arena.
 
-`assets.c` generates:
+Helios-9 is the primary full map. Training Court is a second small fixture that proves
+the runtime is not hard-coded to Helios-9's 33×23 dimensions or prop layout. The command
+center can select the next catalog map and request a match rebuild.
 
-- Floor, wall, crate, bush/grass, metal, cloth, and glow textures.
-- Primitive unit meshes.
-- Lighting, grass, skinning, and post-processing shaders.
-- Render targets and the optional depth texture used for outlines.
+## Combat, events, and camera policy
 
-The generated floor remains the low-draw-count gameplay grid and the generated wall/crate
-meshes remain fallbacks. `environment.c` layers Kenney Space Station Kit models over that
-foundation:
+The simulation uses fixed pools and deterministic xorshift random state. Player input is
+captured once per frame, so tests can replay the same input sequence without linking
+keyboard or mouse reads into simulation.
 
-- Permanent tiles retain full-tile collision. Their visible structural core is recessed
-  behind the wall skins; exposed sides receive wall, window, door, banner, or console
-  faces, and imported panels close their tops.
-- Destructible tiles use containers in the cargo half and computer/power banks in the
-  operations half. Their health tint, hit flash, and disappearance follow the tile state.
-- Bush tiles use low station panels as hydroponic beds under the existing grass.
-- Spawn pads, reactor floor details, supports, pipes, rails, and exterior work platforms
-  are presentation only and do not add simulation collision.
-- Shared height constants keep the base deck at -0.08, imported floor-inlay tops at 0.02,
-  passive decals at 0.065, and active targeting/effect overlays at 0.12. This keeps
-  station geometry, shadows, glows, and aim shapes on distinct depth planes.
+Damage, healing, ammo, cooldown, ultimate gain, deaths, respawns, concealment, dash
+collision, crate damage, projectiles, rain fields, and sound-wave status application all
+belong to `src/game/`. Periodic effects use generic, team-aware `StatusEffect` slots:
+the same status heals allies and damages enemies according to the source team.
 
-The complete runtime-ready GLB set is tracked under
-`resources/environment/kenney_space_station/`; `Assets.station` loads the 22 models used
-by this arena. The pack's original orange 512×512 atlas and purple variation are shared
-by the custom scene draw path. Both atlases generate mipmaps and use trilinear filtering
-for angled or distant surfaces. The source ZIP, FBX, OBJ, previews, and sample scene are
-not tracked. The bundled `LICENSE.txt` and `SOURCE.md` record the CC0 license and
-provenance. An unavailable station model falls back independently to generated geometry
-so a solid tile cannot become visually empty.
+Simulation never spawns particles or mutates camera state. It emits typed events for
+muzzle flashes, impacts, explosions, deaths, crate breaks, float text, lights,
+shockwaves, particles, and explicitly requested match presentation. Combat camera shake
+is disabled for every attack and impact, including Mortar/thrower attacks; the regression
+test iterates all five kits and direct damage/elimination paths.
 
-Bush concealment is visually represented by a dark ground tile and instanced grass. A
-generated `texBush` texture exists but is not currently used by rendering.
+## Rendering and assets
 
-### Lighting
+The presentation layer owns:
 
-The main lighting shader uses half-Lambert diffuse, optional Blinn-style highlights, rim
-light, and fog. Toon mode quantizes illumination into bands. Each frame, the renderer
-selects a limited number of the strongest dynamic effect lights.
+- A perspective follow camera with aim lead.
+- Imported/fallback brawler drawing and animation selection.
+- External station-map rendering aligned with runtime collision.
+- Generated fallback floor, wall, crate, bush, metal, cloth, grass, flat, and glow
+  textures.
+- Instanced wind/brawler-reactive grass.
+- Dynamic point-light selection.
+- Projectile, solid-effect, ability-field, and aim-preview visuals.
+- Optional toon/post-processing controls, including outline, bloom, painterly,
+  pixelation, halftone, posterization, grade, vignette, grain, and chromatic fringe.
 
-### Grass
+Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
+and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
+in `ability_visuals.c`, and camera behavior in `camera.c`.
 
-Grass uses one instanced crossed-quad mesh. Static transforms are built per bush tile.
-The vertex shader provides:
+Sentinel, Ironclad Guardian, and Gaia Guardian share a compatible 24-joint hierarchy, so
+clips can be reused only while skeleton names, parent relationships, orientations, and
+rest pose remain compatible. raylib does not retarget animations. Raw Meshy/Tripo
+exports must pass through `tools/fix_meshy_glb.py`; the detailed constraints and import
+workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 
-- Position-phased wind.
-- Height-weighted bending.
-- Displacement away from visible brawlers.
-- Travel-direction bias.
+## Known limitations and next seams
 
-Hidden enemies are left out of the grass actor list so grass movement does not reveal
-their exact location.
+- No audio is implemented.
+- Character animation changes have no crossfade.
+- Longshot and Mortar use primitive fallback characters.
+- Character metadata is typed at runtime, but the five stable character IDs/model IDs
+  and the legacy authoring schema are still compiled. Adding a sixth slot still requires
+  extending those fixed enums/arrays before it can use existing behaviors.
+- The command center has application command boundaries, but some controls still edit
+  tuning/content values directly before rebuilding the typed catalog.
+- Rendering uses a fixed 1280×800 window and animation time comes from rendered frame
+  time.
+- Shadows are blob decals; there is no shadow map.
+- Graphical startup and interaction are manually verified rather than automated.
 
-### Post-processing
+## Local documentation
 
-The optional full-screen post shader combines:
-
-- FXAA-style scene-edge smoothing.
-- Bright-neighborhood bloom.
-- Painterly quadrant filtering.
-- Pixelation.
-- Chromatic aberration.
-- Halftone.
-- Posterization.
-- Saturation and brightness.
-- Grain.
-- Vignette.
-- Depth-assisted outlines when the custom depth target is available.
-
-The perspective cameras use a 0.5-to-120 clip range instead of raylib's 0.01-to-1000
-default, concentrating depth-buffer precision around the playable space. Post-process
-depth linearization receives the same near/far values, and its outline transition uses a
-soft threshold. Scene-color and depth sampling clamp at the render-target boundary so
-edge smoothing and outlines do not wrap pixels across the screen. Additive ability-field
-helpers leave depth-mask state under the ownership of the enclosing pass so a nested glow
-cannot resume depth writes before the pass ends.
-
-The render target is fixed to the 1280×800 window. It is single-sample, so the final pass
-provides the edge smoothing even though the default framebuffer requests four-sample
-MSAA. The window is not resizable.
-
-## Rigged-character asset
-
-Rigged models are optional per kit. `resources/sentinel.glb` is assigned to Scrapper,
-`resources/ironclad_guardian.glb` to Tank, and `resources/gaia_guardian.glb` to Guardian.
-If one file fails to load or skin, only the affected kit falls back to its primitive
-brawler; startup and the other models continue normally.
-
-The Sentinel runtime GLB is approximately 4.3 MiB and contains:
-
-- One 5,210-vertex mesh, one material, and embedded texture data.
-- One 24-joint skin and thirteen named animation clips.
-
-The Ironclad Guardian runtime GLB is approximately 1.6 MiB, with one 4,888-vertex mesh,
-one 24-joint skin, and thirteen named clips. `Assets.characters[CLASS_COUNT]` owns the
-per-kit runtime instances, while `CHARACTER_MODEL_PATHS` in `assets.c` declares their
-class assignments.
-
-The Gaia Guardian runtime GLB is approximately 1.7 MiB, with one 5,070-vertex mesh, one
-24-joint skin, and thirteen named clips. It is assigned only to the healer; Ironclad
-remains the Tank model.
-
-Directional movement, idle/combat, hit, and death clips are resolved separately for each
-model by normalized name matching in `assets.c`. Raylib does not provide animation
-crossfading here, so clip changes can visibly restart animation cycles.
-
-`tools/fix_meshy_glb.py` converts raw Meshy exports into a raylib-compatible file by:
-
-- Reconstructing the rest pose from inverse bind matrices.
-- Baking problematic uniform scale into vertices.
-- Removing non-joint transforms that raylib would compose inconsistently.
-- Adding constant filler channels.
-- Merging animation clips.
-- Optionally downscaling oversized textures with Pillow.
-
-The detailed contract and import procedure are in
-`brawl_arena/docs/CHARACTER_PIPELINE.md`.
-
-Sentinel, Ironclad Guardian, and Gaia Guardian share the same 24 joint names and parent
-hierarchy, so their clips are reusable in principle. raylib does not perform animation
-retargeting: a model with a different hierarchy, rest pose, joint orientation, or naming
-needs clips baked for that rig or external retargeting before export. The current GLBs
-stay self-contained with their included clips. See
-`brawl_arena/docs/CHARACTER_PIPELINE.md` for the compatibility criteria.
-
-The large character source ZIP archives are local import material and ignored. The three
-repacked character GLBs and the extracted CC0 station GLBs are tracked runtime assets.
-
-## Known technical risks
-
-- Command-center roster operations are not team-aware.
-- Rendering and AI disagree on line-of-sight requirements for proximity bush reveal.
-- Movement calls `Lerp` with `moveAccel * dt` without clamping the factor. Low frame rates
-  or high time scale can cause velocity overshoot.
-- The preview is not exact for random spread and thick beam edges.
-- Gems are silently not spawned if the fixed gem pool is exhausted.
-- Animation advances from `GetFrameTime()` during rendering rather than the simulation
-  delta passed through the update loop.
-- No audio.
-- No deterministic arena-collision, general projectile, AI, respawn/gem-drop, or
-  match-rule tests. Configuration roundtrips, Guardian timing, and combat camera behavior
-  are covered.
-- Fixed 1280×800 presentation and no resize path.
-
-## Good next engineering steps
-
-1. Make command-center bot operations team-aware and distinguish free-form controls from
-   Gem Grab roster controls.
-2. Unify visibility behind one line-of-sight-and-concealment predicate.
-3. Extend the headless suite with arena collision, general weapon damage, Gem Grab
-   countdowns, and respawn/gem-drop cases.
-4. Clamp movement interpolation and audit time-scale interactions.
-5. Make preview geometry share the exact collision/spread calculations used by firing.
-6. Add audio and animation blending only after simulation correctness is protected.
-7. Add an interactive smoke-test checklist or harness for screens, input, shaders, and
-   imported models.
+- `brawl_arena/README.md`: player-facing behavior and controls.
+- `brawl_arena/docs/ARCHITECTURE.md`: ownership and dependency contract.
+- `brawl_arena/docs/CONTENT_AND_TUNING.md`: content/catalog/config workflow.
+- `brawl_arena/docs/MAPS.md`: map package schema and authoring.
+- `brawl_arena/docs/DEVELOPMENT.md`: source layout, adding features, and verification.
+- `brawl_arena/docs/CHARACTER_PIPELINE.md`: rigged model/animation conversion.
+- `brawl_arena/config/README.md`: canonical configuration file format and promotion.
 
 # Reference and generated artifacts
 
@@ -1266,10 +900,10 @@ turn changes, editor toggling, or a two-process server/client test.
 
 ```bash
 make -C brawl_arena
+make -C brawl_arena check-architecture
 make -C brawl_arena validate-config
 make -C brawl_arena test
-clang -std=c99 -Wall -Wextra -fsyntax-only \
-  $(pkg-config --cflags raylib) brawl_arena/src/*.c
+make -C brawl_arena sanitize
 ```
 
 For manual runtime/config probes, isolate every layer rather than touching the user's

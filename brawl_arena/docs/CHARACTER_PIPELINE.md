@@ -177,7 +177,8 @@ solve raylib's bind-space limitations.
 3. `python3 tools/fix_meshy_glb.py <dir> resources/<name>.glb`
 4. Check the tool's output: reconstruction errors ~1e-5, expected clip list, texture
    line present.
-5. Register the file for its kit in `CHARACTER_MODEL_PATHS` in `src/assets.c` and run.
+5. Register the file for its kit in `CHARACTER_MODEL_PATHS` in
+   `src/presentation/assets.c` and run.
    The log line to look for is `CHARACTER <KIT>: <verts> verts, <bones> bones, <clips>
    clips, posed height <H>, scale <s>` — posed height should be a sane skeleton-space
    number (tens to hundreds), not thousands.
