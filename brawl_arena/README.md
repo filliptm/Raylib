@@ -22,13 +22,19 @@ Requires raylib 5.5+ (`brew install raylib`).
 ## Screens
 
 The game opens on a **main menu** with the selected brawler on a lit podium and everything
-else arranged around the edges: profile and stats top-left, tuning and quit top-right, the
-kit's name badge above the model, its stats to the right, and the mode card and PLAY button
-along the bottom.
+else arranged around the edges: profile and stats top-left, practice and quit top-right,
+brawler select and controls down the left, the kit's name badge above the model, its stats
+to the right, and the mode card and PLAY button along the bottom.
 
-Clicking **BRAWLERS** opens character select, built on the same podium scene so switching
-between the two costs nothing but a fade. Cards show each kit's health, damage and range,
-and the big preview updates as you pick.
+Clicking **BRAWLERS** opens character select: the brawler stands on the left, and the
+roster scrolls on the right. Each entry carries the kit's name, health, damage, range,
+reload, cooldown and ammo, plus a line describing its attack and its super. Those
+descriptions are derived from the weapon data rather than written out, so they stay true
+after the numbers are tuned.
+
+The list wraps rather than stopping, so a short roster never hits a dead end at either
+edge. Scroll with the wheel or drag it; a press only counts as a pick if the pointer
+barely moved, so dragging never selects by accident.
 
 Nothing in the menu is a placeholder. Every card does something real - selecting a kit,
 toggling the rules, opening the tuning panel, starting a match, quitting - because a menu
@@ -154,13 +160,31 @@ The debug overlay draws each brawler's weapon range and body radius, plus a sigh
 to the player — green when that bot can actually see you, red when a wall or bush is
 blocking it. It's the fastest way to check the stealth rules are doing what you expect.
 
+### The sandbox
+
+**PRACTICE** from the menu drops you into a firing range: three static targets fanned out
+ahead of you at stepped distances, no objective, no return fire, and the command center
+already open. `TAB` hides the panel if you just want the range. Reading weapon range and damage falloff off the screen
+is the whole point, so the targets spawn in front of you rather than at the far end of
+the map, and the spawner nudges them clear of walls and bushes so nothing hides.
+
+The sandbox is a **session**, not a saved setting. Entering it never rewrites which mode
+`PLAY` gives you, and the MATCH tab says so rather than showing a Gem Grab toggle that
+looks live but is not. Leaving to the menu ends the session.
+
 ### Everything you change is saved
 
 Edits are written to `tuning.cfg` beside the binary about half a second after you stop
-dragging, and reloaded on the next launch, so a tuning session survives a restart. The
-file is plain `key value` text and is safe to hand-edit or check by eye; unknown and
+dragging, and reloaded on the next launch. Because the write happens on change rather
+than on exit, the settings survive the process being killed outright - verified by
+tweaking five values, `kill -9`, and restarting to find all five loaded back. Changing
+screen also flushes any pending write immediately, so a tweak made a moment before
+quitting from the menu still lands.
+
+The file is plain `key value` text and is safe to hand-edit or check by eye; unknown and
 missing keys are ignored, and values are range-clamped on load so a bad file cannot put
-the game in an unplayable state.
+the game in an unplayable state. Persisted state covers every command-center parameter,
+all four kits' full stats, the selected brawler, and your win/loss/KO record.
 
 To go back to the built-in defaults, either hit `Reset ALL tuning` on the WORLD tab
 (`Reset this kit` on KIT does one kit) or just delete `tuning.cfg`.
@@ -204,6 +228,29 @@ Shadows are soft radial ground decals rather than hard cylinders.
 
 **Post-processing** adds thresholded bloom, a vignette and a gentle contrast S-curve.
 Toggle it and dial bloom strength on the WORLD tab.
+
+## Imported characters
+
+The SCRAPPER is played as a rigged, animated character model - on the menu podium, in
+character select, and in the arena. The other kits keep their primitive brawlers in
+their accent colours. In a match the model picks its clip from movement (idle,
+walking, running or dashing), flashes on hit, ghosts in bushes like everything else,
+and carries a red cast on enemies and a blue one on allied bots so a grey model still
+reads friend-or-foe at a glance. The WORLD-tab toggle turns it off, and the game falls
+back to primitives automatically if the file is missing.
+
+The model is an AI-generated Meshy export at `resources/sentinel.glb`, repacked from
+117 MB across four files to under 1 MB. raylib has no animation crossfade, so clip
+changes restart the cycle - the known pop when breaking into a run.
+
+Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
+check and then render as a collapsed spike-ball. The full story of why (raylib's
+glTF loader implements a much narrower contract than the spec), the converter that
+fixes it, the checklist for importing the next character, and the debugging traps to
+avoid are in **[docs/CHARACTER_PIPELINE.md](docs/CHARACTER_PIPELINE.md)**. Short
+version:
+
+    python3 tools/fix_meshy_glb.py <meshy-export-dir> resources/<name>.glb
 
 ## The four kits
 
@@ -259,6 +306,13 @@ is what makes a big carrier worth hunting.
 Holding the target count starts a fifteen-second countdown. Drop below it at any point and
 the clock is wiped, not paused - you have to hold the lead for the whole countdown, which
 is what makes the last gem tense.
+
+When the match is decided everything **stops**: no AI, no movement, no shooting, and any
+round still in flight is cleared so nothing hangs frozen in mid-air. Only effects and the
+camera keep running, so the deciding blow finishes playing out. The result is held for a
+few seconds - with the count shown - and then you are returned to the menu, or you can
+click straight through. A finished match that carries on playing itself reads as a bug,
+not as a result.
 
 The arena's middle was opened into a corridor specifically for this: the vent has to sit
 somewhere worth fighting over. Each side has three spawn points, and the first one in the

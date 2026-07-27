@@ -54,6 +54,7 @@ static int BuildFields(World *w, Field *f)
     n = AddField(f, n, "god_mode",       F_BOOL,  &t->godMode);
     n = AddField(f, n, "infinite_ammo",  F_BOOL,  &t->infiniteAmmo);
     n = AddField(f, n, "show_debug",     F_BOOL,  &t->showDebug);
+    n = AddField(f, n, "model_character", F_BOOL,  &t->modelCharacter);
     n = AddField(f, n, "post_fx",        F_BOOL,  &t->postFx);
     n = AddField(f, n, "bloom",          F_FLOAT, &t->bloom);
     n = AddField(f, n, "selected_kit",   F_INT,   &t->selectedKit);
@@ -207,6 +208,14 @@ bool ConfigLoad(World *w)
 void ConfigMarkDirty(void)
 {
     g_dirty = true;
+    g_timer = 0.0f;
+}
+
+void ConfigFlush(World *w)
+{
+    if (!g_dirty) return;
+    ConfigSave(w);
+    g_dirty = false;
     g_timer = 0.0f;
 }
 

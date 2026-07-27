@@ -79,6 +79,11 @@ int GemsNearestLoose(World *w, Vector3 from, float maxDistance)
 }
 
 //------------------------------------------------------------------------------------
+bool MatchIsOver(const World *w)
+{
+    return w->tune.gemGrab && !w->sandbox && w->match.phase == MATCH_OVER;
+}
+
 void MatchReset(World *w)
 {
     for (int i = 0; i < MAX_GEMS; i++) w->gems[i].active = false;
@@ -202,6 +207,16 @@ static void UpdateScore(World *w, float dt)
         m->phase = MATCH_OVER;
         m->winner = leader;
         m->overTimer = 0.0f;
+
+        // Clear the board as the whistle goes. Gameplay stops updating from here, so a
+        // shot left in flight would hang in mid-air and read as a frozen bug.
+        for (int i = 0; i < MAX_PROJECTILES; i++) w->projectiles[i].active = false;
+        for (int i = 0; i < w->brawlerCount; i++)
+        {
+            w->brawlers[i].velocity = (Vector3){ 0, 0, 0 };
+            w->brawlers[i].moveIntent = (Vector3){ 0, 0, 0 };
+        }
+
         FxShake(w, 3.0f);
     }
 }
@@ -209,12 +224,13 @@ static void UpdateScore(World *w, float dt)
 //------------------------------------------------------------------------------------
 void MatchUpdate(World *w, float dt)
 {
-    if (!w->tune.gemGrab) return;
+    if (!w->tune.gemGrab || w->sandbox) return;
 
+    // Once decided, the only thing still running is the clock on the result screen.
+    // No vent, no pickups, no scoring.
     if (w->match.phase == MATCH_OVER)
     {
         w->match.overTimer += dt;
-        UpdateGems(w, dt);
         return;
     }
 

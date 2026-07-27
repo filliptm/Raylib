@@ -286,9 +286,18 @@ static void TabMatch(UI *ui)
     Tuning *t = &w->tune;
 
     uiSection(ui, "MODE");
+
+    // The toggle is the rule PLAY will use. While a sandbox session is running it is
+    // deliberately not in effect, and saying so avoids the panel looking like it lies.
+    if (w->sandbox)
+    {
+        uiText(ui, "SANDBOX SESSION - no objective", (Color){ 120, 200, 255, 255 });
+        uiText(ui, "Rules below apply to PLAY, not to now.", TEXT_DIM);
+    }
+
     if (uiToggle(ui, "Gem Grab", &t->gemGrab)) NeedsRestart(w);
     uiText(ui, t->gemGrab ? "Two teams race to hold the target count."
-                          : "Free-form sandbox: no teams, no objective.", TEXT_DIM);
+                          : "Free-form: no teams, no objective.", TEXT_DIM);
 
     if (!t->gemGrab)
     {
@@ -304,9 +313,16 @@ static void TabMatch(UI *ui)
     uiSliderF(ui, "Gem every", &t->gemVentInterval, 1.0f, 20.0f, "%.1fs");
 
     uiSection(ui, "STATE");
-    const char *phase = (w->match.phase == MATCH_OVER) ? "OVER"
-                      : (w->match.phase == MATCH_COUNTDOWN) ? "COUNTDOWN" : "PLAYING";
-    uiText(ui, TextFormat("%s    %d - %d", phase, w->match.teamGems[0], w->match.teamGems[1]), TEXT_MAIN);
+    if (w->sandbox)
+    {
+        uiText(ui, TextFormat("SANDBOX    bots %s", BOT_MODE_NAMES[t->botMode]), TEXT_MAIN);
+    }
+    else
+    {
+        const char *phase = (w->match.phase == MATCH_OVER) ? "OVER"
+                          : (w->match.phase == MATCH_COUNTDOWN) ? "COUNTDOWN" : "PLAYING";
+        uiText(ui, TextFormat("%s    %d - %d", phase, w->match.teamGems[0], w->match.teamGems[1]), TEXT_MAIN);
+    }
 
     int loose = 0;
     for (int i = 0; i < MAX_GEMS; i++) if (w->gems[i].active) loose++;
@@ -387,6 +403,8 @@ static void TabPlayer(UI *ui)
         float keep = p->superCharge;
         BrawlerSpawn(w, w->playerIdx, TEAM_PLAYER, (BrawlerClass)kit, pos, true);
         w->brawlers[w->playerIdx].superCharge = keep;
+        w->tune.selectedKit = kit;      // so the choice survives a restart like the rest
+        ConfigMarkDirty();
     }
 
     uiSection(ui, "SANDBOX");
@@ -472,6 +490,7 @@ static void TabWorld(UI *ui)
     uiSliderF(ui, "Bend strength", &t->grassBendStrength, 0.0f, 4.0f, "%.2f");
 
     uiSection(ui, "LOOK");
+    uiToggle(ui, "Scrapper rigged model", &t->modelCharacter);
     uiToggle(ui, "Bloom + vignette", &t->postFx);
     uiSliderF(ui, "Bloom strength", &t->bloom, 0.0f, 3.0f, "%.2f");
 

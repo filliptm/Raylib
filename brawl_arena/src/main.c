@@ -24,6 +24,8 @@
 #include "gems.h"
 #include "menu.h"
 #include <string.h>
+#include <math.h>
+#include "raymath.h"
 
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 800
@@ -32,6 +34,26 @@ static World world;
 static Assets assets;
 
 static const Color SKY_COLOR = { 22, 26, 38, 255 };
+
+// Finds a spot near `want` that is neither solid nor a bush, spiralling outward if the
+// first choice is blocked. Sandbox targets must be reachable and, above all, visible.
+static Vector3 ClearSpotNear(World *w, Vector3 want)
+{
+    for (float radius = 0.0f; radius <= 6.0f; radius += 1.0f)
+    {
+        int steps = (radius < 0.5f) ? 1 : 8;
+        for (int i = 0; i < steps; i++)
+        {
+            float a = (i/(float)steps)*PI*2.0f;
+            Vector3 p = { want.x + sinf(a)*radius, 0.0f, want.z + cosf(a)*radius };
+
+            if (ArenaSolidAt(&w->arena, p.x, p.z)) continue;
+            if (ArenaBushAt(&w->arena, p.x, p.z)) continue;
+            return ArenaResolveCircle(&w->arena, p, BRAWLER_RADIUS);
+        }
+    }
+    return ArenaResolveCircle(&w->arena, want, BRAWLER_RADIUS);
+}
 
 // Rebuilds the match while carrying the current tuning across, so a reset never
 // throws away what you have dialled in.
@@ -47,6 +69,7 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
     bool keepFadingOut = w->fadingOut;
     bool keepQuit = w->quitRequested;
     bool keepBanked = w->matchResultBanked;
+    bool keepSandbox = w->sandbox;
 
     memset(w, 0, sizeof(World));
 
@@ -57,11 +80,12 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
     w->fadingOut = keepFadingOut;
     w->quitRequested = keepQuit;
     w->matchResultBanked = keepBanked;
+    w->sandbox = keepSandbox;
 
     ArenaLoad(&w->arena);
     w->playerIdx = 0;
 
-    if (w->tune.gemGrab)
+    if (w->tune.gemGrab && !w->sandbox)
     {
         // Even sides. Slot 0 of the player team is the human; everyone else is a bot,
         // and allies fall out of the existing AI for free because it only ever asks
@@ -98,11 +122,27 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
         if (bots > MAX_BRAWLERS - 1) bots = MAX_BRAWLERS - 1;
         if (bots < 0) bots = 0;
 
+        Vector3 home = ArenaSpawnFor(&w->arena, TEAM_PLAYER, 0);
+
         for (int i = 0; i < bots; i++)
         {
             BrawlerClass kit = w->tune.botMixedKits ? (BrawlerClass)(i % CLASS_COUNT) : w->tune.botKit;
             int idx = 1 + i;
-            BrawlerSpawn(w, idx, TEAM_ENEMY, kit, ArenaSpawnFor(&w->arena, TEAM_ENEMY, i), false);
+
+            Vector3 spot;
+            if (w->sandbox)
+            {
+                // A firing range: targets fanned out ahead of you at stepped distances,
+                // so weapon range and damage falloff can be read off directly. Spawning
+                // them at the far end of the map made testing a long walk.
+                const float dist[4] = { 5.0f, 9.5f, 14.0f, 18.5f };
+                const float side[4] = { 0.0f, -4.0f, 4.0f, -1.5f };
+                spot = ClearSpotNear(w, (Vector3){ home.x + side[i % 4], 0.0f,
+                                                   home.z - dist[i % 4] });
+            }
+            else spot = ArenaSpawnFor(&w->arena, TEAM_ENEMY, i);
+
+            BrawlerSpawn(w, idx, TEAM_ENEMY, kit, spot, false);
             w->brawlers[idx].spawnSlot = i;
             w->brawlerCount++;
         }
@@ -165,7 +205,9 @@ int main(void)
         //--- Back / escape -------------------------------------------------------
         if (IsKeyPressed(KEY_ESCAPE) && !locked)
         {
-            if (world.screen == SCREEN_BRAWLERS) ShellRequestScreen(&world, SCREEN_MENU);
+            // An open overlay gets first refusal, so closing it never also quits.
+            if (MenuConsumeEscape()) { }
+            else if (world.screen == SCREEN_BRAWLERS) ShellRequestScreen(&world, SCREEN_MENU);
             else if (world.screen == SCREEN_MATCH) ShellRequestScreen(&world, SCREEN_MENU);
             else world.quitRequested = true;
         }
@@ -176,7 +218,9 @@ int main(void)
 
             CommandCenterUpdate(&world);
 
-            if (IsKeyPressed(KEY_R) || world.matchRestartPending)
+            bool decided = MatchIsOver(&world);
+
+            if ((IsKeyPressed(KEY_R) && !decided) || world.matchRestartPending)
             {
                 world.matchRestartPending = false;
                 world.matchResultBanked = false;
@@ -185,17 +229,35 @@ int main(void)
 
             world.time += dt;
 
-            // Input is suppressed mid-transition so a menu click cannot also fire a shot.
-            if (!locked) PlayerUpdate(&world, dt);
-            AIUpdate(&world, dt);
-            BrawlersUpdate(&world, dt);
-            ProjectilesUpdate(&world, dt);
+            // Input is suppressed mid-transition so a menu click cannot also fire a shot,
+            // and once the match is decided nothing moves at all. Effects and the camera
+            // keep running so the deciding blow finishes playing out.
+            if (!locked && !decided) PlayerUpdate(&world, dt);
+
+            if (!decided)
+            {
+                AIUpdate(&world, dt);
+                BrawlersUpdate(&world, dt);
+                ProjectilesUpdate(&world, dt);
+            }
+
             ArenaUpdate(&world.arena, dt);
             MatchUpdate(&world, dt);
             FxUpdate(&world, dt);
             CameraUpdate(&world, dt);
 
             BankResult(&world);
+
+            // Hand the player back to the menu, either when they have read the result or
+            // as soon as they click through it.
+            if (decided && !ShellIsTransitioning(&world))
+            {
+                bool skipped = world.match.overTimer > 0.9f &&
+                               (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE));
+
+                if (world.match.overTimer > MATCH_RESULT_HOLD || skipped)
+                    ShellRequestScreen(&world, SCREEN_MENU);
+            }
         }
         else
         {
@@ -255,6 +317,7 @@ int main(void)
         }
     }
 
+    ConfigFlush(&world);
     ConfigSave(&world);
     AssetsUnload(&assets);
     CloseWindow();

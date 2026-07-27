@@ -6,9 +6,12 @@
 *   shader source is embedded, so the game has no resource directory to lose.
 ********************************************************************************************/
 #include "assets.h"
+
+#define CHARACTER_MODEL_PATH "resources/sentinel.glb"
 #include "rlgl.h"
 #include "raymath.h"
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 
 //------------------------------------------------------------------------------------
@@ -96,6 +99,55 @@ static const char *FS_LIGHTING =
 "    float fog = 1.0 - exp(-fogDensity*viewDist);\n"
 "    color = mix(color, fogColor, clamp(fog, 0.0, 1.0));\n"
 "    finalColor = vec4(color, alpha);\n"
+"}\n";
+
+
+//------------------------------------------------------------------------------------
+// Skinned character shader. Same lighting as the scene shader; the only difference is
+// that the vertex stage poses the mesh from the bone matrices first.
+//
+// The attribute and uniform names are exact: raylib binds vertexBoneIds,
+// vertexBoneWeights and boneMatrices by name, so a typo silently yields a T-pose.
+//------------------------------------------------------------------------------------
+static const char *VS_SKINNED =
+"#version 330\n"
+"#define MAX_BONE_NUM 128\n"
+"in vec3 vertexPosition;\n"
+"in vec2 vertexTexCoord;\n"
+"in vec3 vertexNormal;\n"
+"in vec4 vertexColor;\n"
+"in vec4 vertexBoneIds;\n"
+"in vec4 vertexBoneWeights;\n"
+"uniform mat4 mvp;\n"
+"uniform mat4 matModel;\n"
+"uniform mat4 matNormal;\n"
+"uniform mat4 boneMatrices[MAX_BONE_NUM];\n"
+"uniform vec2 uvScale;\n"
+"out vec3 fragPosition;\n"
+"out vec2 fragTexCoord;\n"
+"out vec4 fragColor;\n"
+"out vec3 fragNormal;\n"
+"void main()\n"
+"{\n"
+"    int b0 = int(vertexBoneIds.x);\n"
+"    int b1 = int(vertexBoneIds.y);\n"
+"    int b2 = int(vertexBoneIds.z);\n"
+"    int b3 = int(vertexBoneIds.w);\n"
+"    vec4 pos = vec4(vertexPosition, 1.0);\n"
+"    vec4 skinned = vertexBoneWeights.x*(boneMatrices[b0]*pos)\n"
+"                 + vertexBoneWeights.y*(boneMatrices[b1]*pos)\n"
+"                 + vertexBoneWeights.z*(boneMatrices[b2]*pos)\n"
+"                 + vertexBoneWeights.w*(boneMatrices[b3]*pos);\n"
+"    vec4 nrm = vec4(vertexNormal, 0.0);\n"
+"    vec4 sn = vertexBoneWeights.x*(boneMatrices[b0]*nrm)\n"
+"            + vertexBoneWeights.y*(boneMatrices[b1]*nrm)\n"
+"            + vertexBoneWeights.z*(boneMatrices[b2]*nrm)\n"
+"            + vertexBoneWeights.w*(boneMatrices[b3]*nrm);\n"
+"    fragPosition = vec3(matModel*skinned);\n"
+"    fragTexCoord = vertexTexCoord*uvScale;\n"
+"    fragColor = vertexColor;\n"
+"    fragNormal = normalize(vec3(matNormal*vec4(sn.xyz, 1.0)));\n"
+"    gl_Position = mvp*skinned;\n"
 "}\n";
 
 //------------------------------------------------------------------------------------
@@ -633,6 +685,131 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
 
     a->locDither = GetShaderLocation(a->lighting, "dither");
 
+    //--- Skinned character ----------------------------------------------------
+    a->skinned = LoadShaderFromMemory(VS_SKINNED, FS_LIGHTING);
+    a->skinnedOk = (a->skinned.id > 0) && (a->skinned.locs != NULL);
+
+    if (a->skinnedOk)
+    {
+        a->skinned.locs[SHADER_LOC_MATRIX_MODEL]  = GetShaderLocation(a->skinned, "matModel");
+        a->skinned.locs[SHADER_LOC_MATRIX_NORMAL] = GetShaderLocation(a->skinned, "matNormal");
+        a->skinned.locs[SHADER_LOC_BONE_MATRICES] = GetShaderLocation(a->skinned, "boneMatrices");
+
+        a->kViewPos    = GetShaderLocation(a->skinned, "viewPos");
+        a->kSunDir     = GetShaderLocation(a->skinned, "sunDir");
+        a->kSunColor   = GetShaderLocation(a->skinned, "sunColor");
+        a->kAmbient    = GetShaderLocation(a->skinned, "ambientColor");
+        a->kFogColor   = GetShaderLocation(a->skinned, "fogColor");
+        a->kFogDensity = GetShaderLocation(a->skinned, "fogDensity");
+        a->kUvScale    = GetShaderLocation(a->skinned, "uvScale");
+        a->kEmissive   = GetShaderLocation(a->skinned, "emissive");
+        a->kDither     = GetShaderLocation(a->skinned, "dither");
+        a->kLightPos   = GetShaderLocation(a->skinned, "lightPos");
+        a->kLightColor = GetShaderLocation(a->skinned, "lightColor");
+        a->kLightCount = GetShaderLocation(a->skinned, "lightCount");
+
+        Vector3 sunDir = Vector3Normalize((Vector3){ -0.45f, -1.0f, 0.35f });
+        Vector3 sunColor = { 1.05f, 1.00f, 0.92f };
+        Vector3 ambient = { 0.34f, 0.38f, 0.50f };
+        Vector3 fogColor = { 0.086f, 0.102f, 0.149f };
+        float fogDensity = 0.0075f;
+        Vector2 uv = { 1.0f, 1.0f };
+        float zero = 0.0f;
+
+        SetShaderValue(a->skinned, a->kSunDir, &sunDir, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->skinned, a->kSunColor, &sunColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->skinned, a->kAmbient, &ambient, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->skinned, a->kFogColor, &fogColor, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->skinned, a->kFogDensity, &fogDensity, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->skinned, a->kUvScale, &uv, SHADER_UNIFORM_VEC2);
+        SetShaderValue(a->skinned, a->kEmissive, &zero, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->skinned, a->kDither, &zero, SHADER_UNIFORM_FLOAT);
+    }
+
+    a->character = LoadModel(CHARACTER_MODEL_PATH);
+    a->characterOk = IsModelValid(a->character) && a->character.meshCount > 0;
+
+    if (a->characterOk)
+    {
+        a->charAnims = LoadModelAnimations(CHARACTER_MODEL_PATH, &a->charAnimCount);
+
+        // Resolve clips by name so a regenerated file with reordered tracks cannot
+        // silently swap running for T-pose.
+        a->clipIdle = 1; a->clipRunning = 2; a->clipWalking = 3;
+        for (int i = 0; i < a->charAnimCount; i++)
+        {
+            if (strcmp(a->charAnims[i].name, "idle") == 0) a->clipIdle = i;
+            else if (strcmp(a->charAnims[i].name, "running") == 0) a->clipRunning = i;
+            else if (strcmp(a->charAnims[i].name, "walking") == 0) a->clipWalking = i;
+        }
+
+        // Normalise whatever the source units are, so swapping in another model does not
+        // mean re-tuning every scale in the game.
+        //
+        // This must reproduce exactly what the vertex shader does. A rigged export can
+        // store the mesh at an arbitrary scale and carry the real size in the bone
+        // matrices - this one has 0.017-unit vertices and bone matrices that blow them
+        // up by four orders of magnitude. Measuring raw vertices, or CPU-skinned ones,
+        // both gave the wrong answer; only the GPU bone matrices agree with what is
+        // actually drawn.
+        float lo = 1e30f, hi = -1e30f;
+
+        if (a->charAnims && a->charAnimCount > 0)
+        {
+            UpdateModelAnimationBones(a->character, a->charAnims[0], 0);
+
+            for (int i = 0; i < a->character.meshCount; i++)
+            {
+                Mesh *mesh = &a->character.meshes[i];
+                if (!mesh->vertices || !mesh->boneMatrices || !mesh->boneIds || !mesh->boneWeights)
+                    continue;
+
+                for (int k = 0; k < mesh->vertexCount; k++)
+                {
+                    Vector3 v = { mesh->vertices[k*3 + 0],
+                                  mesh->vertices[k*3 + 1],
+                                  mesh->vertices[k*3 + 2] };
+                    float y = 0.0f;
+
+                    for (int j = 0; j < 4; j++)
+                    {
+                        float wgt = mesh->boneWeights[k*4 + j];
+                        if (wgt <= 0.0f) continue;
+
+                        int bone = mesh->boneIds[k*4 + j];
+                        if (bone < 0 || bone >= mesh->boneCount) continue;
+
+                        Vector3 t = Vector3Transform(v, mesh->boneMatrices[bone]);
+                        y += t.y*wgt;
+                    }
+
+                    if (y < lo) lo = y;
+                    if (y > hi) hi = y;
+                }
+            }
+        }
+
+        if (hi <= lo)
+        {
+            BoundingBox bb = GetModelBoundingBox(a->character);
+            lo = bb.min.y; hi = bb.max.y;
+        }
+
+        float height = hi - lo;
+        a->charScale = (height > 0.000001f) ? (CHARACTER_TARGET_H/height) : 1.0f;
+        a->charFootOffset = -lo*a->charScale;
+
+        if (a->skinnedOk)
+            for (int i = 0; i < a->character.materialCount; i++)
+                a->character.materials[i].shader = a->skinned;
+
+        TraceLog(LOG_INFO, "CHARACTER: %d verts, %d bones, %d clips, posed height %.2f, scale %.5f",
+                 a->character.meshes[0].vertexCount, a->character.boneCount,
+                 a->charAnimCount, height, a->charScale);
+    }
+    else TraceLog(LOG_WARNING, "CHARACTER: %s not loaded, falling back to primitives",
+                  CHARACTER_MODEL_PATH);
+
     //--- Grass shader ---------------------------------------------------------
     a->grass = LoadShaderFromMemory(VS_GRASS, FS_GRASS);
     a->grassOk = (a->grass.id > 0) && (a->grass.locs != NULL);
@@ -750,6 +927,15 @@ void AssetsUnload(Assets *a)
     if (a->lightingOk) UnloadShader(a->lighting);
     if (a->postOk) UnloadShader(a->post);
     if (a->grassOk) UnloadShader(a->grass);
+
+    if (a->characterOk)
+    {
+        if (a->charAnims) UnloadModelAnimations(a->charAnims, a->charAnimCount);
+        for (int i = 0; i < a->character.materialCount; i++)
+            a->character.materials[i].shader = (Shader){ 0 };
+        UnloadModel(a->character);
+    }
+    if (a->skinnedOk) UnloadShader(a->skinned);
 }
 
 //------------------------------------------------------------------------------------
@@ -785,6 +971,56 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos)
 {
     if (!a->lightingOk) return;
     SetShaderValue(a->lighting, a->locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+}
+
+void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
+                         int animIndex, float frame, Color tint, float dither, float emissive,
+                         const Vector3 *lightPos, const Vector3 *lightColor, int lightCount,
+                         Vector3 viewPos)
+{
+    if (!a->characterOk) return;
+
+    if (a->skinnedOk)
+    {
+        SetShaderValue(a->skinned, a->kViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+        SetShaderValue(a->skinned, a->kDither, &dither, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->skinned, a->kEmissive, &emissive, SHADER_UNIFORM_FLOAT);
+        if (lightCount > MAX_SHADER_LIGHTS) lightCount = MAX_SHADER_LIGHTS;
+        if (lightCount > 0)
+        {
+            SetShaderValueV(a->skinned, a->kLightPos, lightPos, SHADER_UNIFORM_VEC3, lightCount);
+            SetShaderValueV(a->skinned, a->kLightColor, lightColor, SHADER_UNIFORM_VEC3, lightCount);
+        }
+        SetShaderValue(a->skinned, a->kLightCount, &lightCount, SHADER_UNIFORM_INT);
+    }
+
+    // Posing writes into the model's shared bone matrices, so it has to happen
+    // immediately before this draw rather than once per frame.
+    if (a->charAnims && a->charAnimCount > 0)
+    {
+        int idx = (animIndex < 0 || animIndex >= a->charAnimCount) ? 0 : animIndex;
+        ModelAnimation anim = a->charAnims[idx];
+        if (anim.frameCount > 0)
+        {
+            int f = (int)frame % anim.frameCount;
+            if (f < 0) f += anim.frameCount;
+            UpdateModelAnimationBones(a->character, anim, f);
+        }
+    }
+
+    float s = a->charScale*scaleMul;
+    Matrix m = MatrixScale(s, s, s);
+    m = MatrixMultiply(m, MatrixRotateY(yaw));
+    m = MatrixMultiply(m, MatrixTranslate(position.x,
+                                          position.y + a->charFootOffset*scaleMul,
+                                          position.z));
+
+    for (int i = 0; i < a->character.meshCount; i++)
+    {
+        Material mat = a->character.materials[a->character.meshMaterial[i]];
+        mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
+        DrawMesh(a->character.meshes[i], mat, m);
+    }
 }
 
 void AssetsSetDither(Assets *a, float amount)

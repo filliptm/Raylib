@@ -79,9 +79,9 @@ static bool FindNearbyBush(World *w, Vector3 from, Vector3 *out)
 //------------------------------------------------------------------------------------
 void AIUpdate(World *w, float dt)
 {
-    // A match needs both sides actually playing; the STATIC/ROAM sandbox modes only
-    // apply when there is no match running.
-    BotMode mode = w->tune.gemGrab ? BOT_FIGHT : w->tune.botMode;
+    // A real match needs both sides playing. In the tuning sandbox the STATIC/ROAM
+    // modes are the whole point, so they win there.
+    BotMode mode = (!w->sandbox && w->tune.gemGrab) ? BOT_FIGHT : w->tune.botMode;
 
     for (int i = 0; i < w->brawlerCount; i++)
     {

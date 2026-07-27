@@ -36,6 +36,21 @@ typedef struct Assets {
     // Screen-door transparency on the scene shader, used for concealed brawlers.
     int locDither;
 
+    // Skinned character. Optional: if the file is missing the game falls back to the
+    // primitive brawlers, so a bad asset can never stop it starting.
+    Shader skinned;
+    bool skinnedOk;
+    int kViewPos, kSunDir, kSunColor, kAmbient, kFogColor, kFogDensity;
+    int kUvScale, kEmissive, kDither, kLightPos, kLightColor, kLightCount;
+
+    Model character;
+    ModelAnimation *charAnims;
+    int charAnimCount;
+    bool characterOk;
+    int clipIdle, clipRunning, clipWalking;   // resolved by name, not by file order
+    float charScale;        // normalises the source model to CHARACTER_TARGET_H
+    float charFootOffset;   // lifts it so the feet land on y = 0
+
     // Unit meshes, scaled into place with a matrix at draw time
     Mesh cube;      // 1x1x1 centred on origin
     Mesh sphere;    // radius 1 centred on origin
@@ -72,6 +87,14 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos);
 // Screen-door transparency: 0 draws solid, higher values discard more pixels on a
 // Bayer pattern. Avoids the sorting problems real alpha blending would bring.
 void AssetsSetDither(Assets *a, float amount);
+
+// Poses and draws the skinned character. `frame` is fractional; it is floored, so a
+// caller can advance it at whatever rate suits. `dither` is the screen-door amount for
+// bush concealment and `emissive` lifts the surface out of lighting (used for hit flash).
+void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
+                         int animIndex, float frame, Color tint, float dither, float emissive,
+                         const Vector3 *lightPos, const Vector3 *lightColor, int lightCount,
+                         Vector3 viewPos);
 
 // Per-frame grass uniforms. Actors are the brawlers that push blades aside.
 void AssetsGrassFrame(Assets *a, const Tuning *t, float time, Vector3 viewPos,

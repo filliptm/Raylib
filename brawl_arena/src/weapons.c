@@ -94,6 +94,7 @@ void TuningSetDefaults(Tuning *t)
     t->godMode       = false;
     t->infiniteAmmo  = false;
     t->showDebug     = false;
+    t->modelCharacter = true;    // rigged model on the menu podium; toggle on WORLD tab
     t->postFx        = true;
     t->bloom         = 0.85f;
 

@@ -30,6 +30,8 @@
 #define MAX_PROJECTILES 512
 #define MAX_PARTICLES 1024
 #define MAX_FLOATTEXTS 64
+#define CHARACTER_TARGET_H 2.0f   // world height every character model is normalised to
+#define MATCH_RESULT_HOLD 4.5f  // seconds the result is shown before returning to the menu
 #define MAX_GEMS 40
 #define MAX_SPAWNS 8
 #define MAX_SHOCKWAVES 24
@@ -320,6 +322,7 @@ typedef struct Tuning {
     bool showDebug;         // range rings and line-of-sight overlay
 
     // Presentation
+    bool modelCharacter;    // draw the rigged model instead of the primitive brawler
     bool postFx;            // bloom + vignette pass
     float bloom;            // bloom strength
 
@@ -396,6 +399,10 @@ typedef struct World {
     bool fadingOut;
     bool matchResultBanked;     // guards against counting one result twice
     bool quitRequested;
+
+    // True while the match is a tuning sandbox rather than a real game. Session state,
+    // not a saved setting: entering the sandbox must not rewrite the mode PLAY uses.
+    bool sandbox;
 } World;
 
 // Live weapon table, edited by the command center. WEAPON_DEFAULTS is the pristine

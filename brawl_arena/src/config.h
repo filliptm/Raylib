@@ -18,4 +18,8 @@ void ConfigMarkDirty(void);
 // hammer the disk. Feed it unscaled real time.
 void ConfigAutoSave(World *w, float realDt);
 
+// Writes straight away if anything is pending, instead of waiting out the debounce.
+// Used at screen changes so a tweak is on disk before you can quit from the menu.
+void ConfigFlush(World *w);
+
 #endif // CONFIG_H

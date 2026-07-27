@@ -831,9 +831,66 @@ static void DrawAimPreview(World *w, Assets *a)
     EndBlendMode();
 }
 
+// In-match draw for the imported rigged character (currently the Scrapper's model).
+// Clip follows movement: idle standing still, walking at a stroll, running flat out
+// or dashing. There is no crossfade in raylib, so a clip change restarts its cycle -
+// starting at frame zero pops less than landing mid-stride.
+static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
+{
+    static float animTime[MAX_BRAWLERS];
+    static int animClip[MAX_BRAWLERS];
+
+    int idx = (int)(b - w->brawlers);
+
+    float speed = sqrtf(b->velocity.x*b->velocity.x + b->velocity.z*b->velocity.z);
+    int clip = a->clipIdle;
+    if (b->dashTimer > 0.0f || speed > 6.5f) clip = a->clipRunning;
+    else if (speed > 0.6f) clip = a->clipWalking;
+
+    if (clip != animClip[idx]) { animClip[idx] = clip; animTime[idx] = 0.0f; }
+    animTime[idx] += GetFrameTime()*w->tune.timeScale;
+
+    DrawShadow(a, b->position, 0.52f*b->spawnScale);
+
+    // A grey model must still read friend-or-foe at a glance: enemies get a red cast,
+    // allied bots a blue one, and your own character stays clean.
+    Color tint = WHITE;
+    if (!b->isPlayer)
+        tint = (b->team == TEAM_PLAYER)
+             ? ColorLerpC(WHITE, (Color){ 168, 202, 255, 255 }, 0.45f)
+             : ColorLerpC(WHITE, (Color){ 255, 118, 118, 255 }, 0.50f);
+    if (b->hitFlash > 0.0f) tint = ColorLerpC(tint, WHITE, b->hitFlash);
+
+    float dither = 0.0f;
+    if (b->inBush)
+    {
+        dither = w->tune.concealDither;
+        tint = ColorLerpC(tint, (Color){ 108, 190, 120, 255 }, 0.30f);
+    }
+
+    AssetsDrawCharacter(a, b->position, b->renderYaw, b->spawnScale,
+                        clip, animTime[idx]*60.0f, tint, dither, b->hitFlash*0.85f,
+                        g_lightPos, g_lightCol, g_lightCount, w->camera.position);
+
+    if (b->superCharge >= 1.0f)
+    {
+        float pulse = 0.5f + 0.5f*sinf(w->time*6.0f);
+        DrawGroundGlow(a, b->position, 1.05f,
+                       (Color){ 255, 210, 90, (unsigned char)(70 + pulse*90) });
+    }
+    if (b->dashTimer > 0.0f)
+        DrawGroundGlow(a, b->position, 1.3f, (Color){ 255, 190, 100, 150 });
+}
+
 static void DrawBrawler(World *w, Assets *a, Brawler *b)
 {
     if (!b->alive || !b->visible) return;
+
+    if (b->cls == CLASS_SHOTGUNNER && a->characterOk && w->tune.modelCharacter)
+    {
+        DrawBrawlerCharacterModel(w, a, b);
+        return;
+    }
     RenderBrawlerModel(a, b, w->time, b->inBush ? w->tune.concealDither : 0.0f, NULL);
 }
 

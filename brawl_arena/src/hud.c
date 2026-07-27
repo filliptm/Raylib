@@ -7,6 +7,7 @@
 static const Color PANEL_BG = { 12, 16, 26, 205 };
 static const Color SUPER_GOLD = { 255, 206, 74, 255 };
 static const Color GEM_PURPLE = { 186, 116, 252, 255 };
+static const Color TEXT_SOFT = { 214, 226, 244, 255 };
 static const Color HEALTH_GREEN = { 78, 216, 108, 255 };
 static const Color AMMO_FULL = { 122, 206, 255, 255 };
 static const Color AMMO_PART = { 62, 122, 176, 255 };
@@ -127,7 +128,7 @@ void HudDrawPanel(World *w)
     //--- Top bar ----------------------------------------------------------------
     DrawRectangleGradientV(0, 0, sw, 78, (Color){ 0, 0, 0, 200 }, (Color){ 0, 0, 0, 0 });
 
-    if (w->tune.gemGrab)
+    if (w->tune.gemGrab && !w->sandbox)
     {
         const Match *m = &w->match;
         int target = w->tune.gemsToWin;
@@ -188,6 +189,13 @@ void HudDrawPanel(World *w)
         const char *enemyText = TextFormat("%d ENEMIES", alive);
         int etw = MeasureText(enemyText, 20);
         DrawText(enemyText, sw - etw - 22, 26, 20, (Color){ 235, 150, 150, 255 });
+
+        if (w->sandbox)
+        {
+            const char *tag = TextFormat("SANDBOX  -  bots %s", BOT_MODE_NAMES[w->tune.botMode]);
+            int tgw = MeasureText(tag, 15);
+            DrawText(tag, sw/2 - tgw/2, 14, 15, (Color){ 120, 200, 255, 235 });
+        }
     }
 
     //--- Super meter, bottom-right ----------------------------------------------
@@ -220,7 +228,7 @@ void HudDrawPanel(World *w)
     }
 
     //--- Match result -----------------------------------------------------------
-    if (w->tune.gemGrab && w->match.phase == MATCH_OVER)
+    if (w->tune.gemGrab && !w->sandbox && w->match.phase == MATCH_OVER)
     {
         bool won = (w->match.winner == TEAM_PLAYER);
         float fade = Clamp(w->match.overTimer*1.6f, 0.0f, 1.0f);
@@ -239,12 +247,19 @@ void HudDrawPanel(World *w)
         int tw2 = MeasureText(tally, 34);
         DrawText(tally, sw/2 - tw2/2, sh/2 + 6, 34, WHITE);
 
-        if (w->match.overTimer > 1.0f)
+        if (w->match.overTimer > 0.9f)
         {
-            const char *again = "Press R for a new match";
-            int aw = MeasureText(again, 22);
+            int remain = (int)ceilf(MATCH_RESULT_HOLD - w->match.overTimer);
+            if (remain < 0) remain = 0;
+
+            const char *back = TextFormat("Returning to the menu in %d", remain);
+            int bwid = MeasureText(back, 22);
+            DrawText(back, sw/2 - bwid/2, sh/2 + 62, 22, TEXT_SOFT);
+
+            const char *skip = "click to go back now";
+            int swid = MeasureText(skip, 15);
             float p = 0.5f + 0.5f*sinf(w->time*4.0f);
-            DrawText(again, sw/2 - aw/2, sh/2 + 62, 22, ColorLerpC(GRAY, WHITE, p));
+            DrawText(skip, sw/2 - swid/2, sh/2 + 94, 15, ColorLerpC(GRAY, WHITE, p));
         }
         return;
     }

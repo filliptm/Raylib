@@ -41,6 +41,19 @@ static Brawler g_preview;
 static float g_spin = 0.0f;
 static float g_time = 0.0f;
 static int g_hoverKit = -1;
+static bool g_showControls = false;
+static bool g_blockCards = false;
+
+// Character select: the roster scrolls forever by wrapping, so there is never a hard
+// stop at either end of a short list.
+#define ENTRY_H 172
+#define SELECT_MODEL_X 3.1f     // world offset that puts the podium on the screen's left
+
+static float g_scroll = 0.0f;
+static bool g_dragging = false;
+static bool g_dragMoved = false;
+static float g_dragStartY = 0.0f;
+static float g_dragStartScroll = 0.0f;
 
 // One accent per kit, used for the podium model and the select cards so the two agree.
 static const Color KIT_ACCENT[CLASS_COUNT] = {
@@ -82,7 +95,7 @@ static bool Card(World *w, Rectangle r, const char *title, const char *sub,
                  CardStyle style, int badge)
 {
     (void)w;
-    bool hover = MouseIn(r);
+    bool hover = MouseIn(r) && !g_blockCards;
     bool click = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     bool held = hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
 
@@ -131,6 +144,15 @@ static CardStyle StylePrimary(void)
 //------------------------------------------------------------------------------------
 // Podium scene
 //------------------------------------------------------------------------------------
+// ESC has to close an open overlay before it means "back", or dismissing the controls
+// panel would also quit the game.
+bool MenuConsumeEscape(void)
+{
+    if (!g_showControls) return false;
+    g_showControls = false;
+    return true;
+}
+
 void MenuInit(Assets *a)
 {
     g_assets = a;
@@ -168,6 +190,10 @@ void MenuUpdate(World *w, float dt)
 
     if (g_previewKit != (BrawlerClass)w->tune.selectedKit) RebuildPreview(w);
 
+    // Select puts the model on the left and the roster on the right; the main menu
+    // keeps it centred.
+    g_preview.position.x = (w->screen == SCREEN_BRAWLERS) ? SELECT_MODEL_X : 0.0f;
+
     // Face the camera, with a slow sway either side so the silhouette is never static.
     // The camera looks down +Z, so PI turns the model around to meet it.
     g_preview.bobPhase += dt*3.4f;
@@ -184,35 +210,48 @@ static void DrawPodiumScene(World *w)
     // flat background rather than reading as a silhouette.
     Vector3 lightPos[2] = { { -2.6f, 3.0f, -2.4f }, { 2.8f, 2.4f, 1.6f } };
     Vector3 lightCol[2] = { { 0.85f, 0.72f, 0.45f }, { 0.32f, 0.48f, 0.80f } };
+    (void)lightCol;
     AssetsSetCamera(a, g_podium.position);
     AssetsSetLights(a, lightPos, lightCol, 2);
 
     Camera3D cam = g_podium;
     if (w->screen == SCREEN_BRAWLERS)
     {
-        cam.position.y += 0.55f;
-        cam.position.z -= 0.7f;
-        cam.target.y += 0.62f;      // model rides higher, clear of the card row
+        cam.position.z -= 0.4f;     // a touch closer, the model is the left-hand feature
     }
 
     BeginMode3D(cam);
 
         // Platform: a low disc, deliberately smaller than the model so it frames the
         // brawler instead of competing with it.
-        Matrix base = MatrixMultiply(MatrixScale(1.45f, 0.22f, 1.45f), MatrixTranslate(0, -0.22f, 0));
+        float px = g_preview.position.x;
+
+        Matrix base = MatrixMultiply(MatrixScale(1.45f, 0.22f, 1.45f), MatrixTranslate(px, -0.22f, 0));
         DrawLit(a, a->cylinder, base, a->texMetal, (Color){ 84, 96, 124, 255 }, (Vector2){ 1, 1 }, 0.0f);
 
-        Matrix lip = MatrixMultiply(MatrixScale(1.58f, 0.07f, 1.58f), MatrixTranslate(0, -0.07f, 0));
+        Matrix lip = MatrixMultiply(MatrixScale(1.58f, 0.07f, 1.58f), MatrixTranslate(px, -0.07f, 0));
         DrawLit(a, a->cylinder, lip, a->texMetal, (Color){ 142, 158, 192, 255 }, (Vector2){ 1, 1 }, 0.0f);
 
-        Matrix glow = MatrixMultiply(MatrixScale(1.30f, 0.02f, 1.30f), MatrixTranslate(0, 0.02f, 0));
+        Matrix glow = MatrixMultiply(MatrixScale(1.30f, 0.02f, 1.30f), MatrixTranslate(px, 0.02f, 0));
         float pulse = 0.5f + 0.5f*sinf(g_time*1.6f);
         Color teamGlow = TEAM_COLORS[TEAM_PLAYER];
         teamGlow.a = (unsigned char)(70 + pulse*60);
         DrawLit(a, a->cylinder, glow, a->texGlow, teamGlow, (Vector2){ 1, 1 }, 1.0f);
 
         Color accent = KIT_ACCENT[g_preview.cls];
-        RenderBrawlerModel(a, &g_preview, g_time, 0.0f, &accent);
+
+        // The imported model is the SCRAPPER's character. Every other kit keeps its
+        // primitive brawler in its accent colour, so the roster stays distinguishable.
+        if (a->characterOk && w->tune.modelCharacter && g_preview.cls == CLASS_SHOTGUNNER)
+        {
+            // Frames advance at 60Hz, the rate the source clips were sampled at. Tint
+            // stays white so the model's own texture reads - the kit accent lives on
+            // the podium ring instead.
+            AssetsDrawCharacter(a, g_preview.position, g_preview.renderYaw, 1.0f,
+                                a->clipIdle, g_time*60.0f, WHITE, 0.0f, 0.0f,
+                                lightPos, lightCol, 2, cam.position);
+        }
+        else RenderBrawlerModel(a, &g_preview, g_time, 0.0f, &accent);
 
     EndMode3D();
 }
@@ -245,8 +284,13 @@ static void DrawMainMenu(World *w)
              78, 47, 13, TEXT_DIM);
 
     //--- Top right: settings and quit -------------------------------------------
-    if (Card(w, (Rectangle){ sw - 250, 16, 108, 46 }, "TUNING", NULL, StyleNormal(), 0))
+    // The single entry to the practice range: static targets to shoot at with every
+    // parameter to hand, without touching the mode PLAY will use. TAB hides the panel
+    // if you just want the range.
+    if (Card(w, (Rectangle){ sw - 250, 16, 108, 46 }, "PRACTICE", NULL, StyleNormal(), 0))
     {
+        w->sandbox = true;
+        w->matchRestartPending = true;
         ShellRequestScreen(w, SCREEN_MATCH);
         CommandCenterForceOpen();
     }
@@ -264,13 +308,8 @@ static void DrawMainMenu(World *w)
     if (Card(w, (Rectangle){ 24, 232, 150, 74 }, "BRAWLERS", "choose a kit", StyleNormal(), 0))
         ShellRequestScreen(w, SCREEN_BRAWLERS);
 
-    if (Card(w, (Rectangle){ 24, 320, 150, 74 }, "SANDBOX", "no rules", StyleNormal(), 0))
-    {
-        t->gemGrab = false;
-        ConfigMarkDirty();
-        w->matchRestartPending = true;
-        ShellRequestScreen(w, SCREEN_MATCH);
-    }
+    if (Card(w, (Rectangle){ 24, 320, 150, 74 }, "CONTROLS", "how to play", StyleNormal(), 0))
+        g_showControls = true;
 
     //--- Right column: kit stats at a glance -------------------------------------
     int rx = sw - 214;
@@ -278,13 +317,11 @@ static void DrawMainMenu(World *w)
     DrawRectangleRoundedLines((Rectangle){ rx, 232, 190, 178 }, 0.14f, 8, CARD_EDGE);
     DrawText("KIT", rx + 16, 244, 13, ACCENT);
 
-    const char *rows[4];
-    rows[0] = TextFormat("HEALTH      %d", kit->maxHealth);
-    rows[1] = TextFormat("DAMAGE      %d", kit->damage*kit->pellets);
-    rows[2] = TextFormat("RANGE       %.0f", kit->range);
-    rows[3] = TextFormat("RELOAD      %.2fs", kit->reloadPerAmmo);
-    for (int i = 0; i < 4; i++)
-        DrawText(rows[i], rx + 16, 272 + i*26, 14, TEXT_MAIN);
+    // Drawn one at a time, for the TextFormat buffer reason noted in DrawRosterEntry.
+    DrawText(TextFormat("HEALTH      %d", kit->maxHealth), rx + 16, 272, 14, TEXT_MAIN);
+    DrawText(TextFormat("DAMAGE      %d", kit->damage*kit->pellets), rx + 16, 298, 14, TEXT_MAIN);
+    DrawText(TextFormat("RANGE       %.0f", kit->range), rx + 16, 324, 14, TEXT_MAIN);
+    DrawText(TextFormat("RELOAD      %.2fs", kit->reloadPerAmmo), rx + 16, 350, 14, TEXT_MAIN);
 
     DrawText("SUPER", rx + 16, 380, 13, ACCENT);
     DrawText(kit->superName, rx + 66, 379, 15, PLAY_GOLD);
@@ -305,75 +342,208 @@ static void DrawMainMenu(World *w)
     //--- Bottom right: play ------------------------------------------------------
     if (Card(w, (Rectangle){ sw/2 + 106, sh - 104, 200, 78 }, "PLAY", NULL, StylePrimary(), 0))
     {
+        w->sandbox = false;              // a real match, whatever the sandbox was doing
         w->matchRestartPending = true;
+        w->matchResultBanked = false;
         ShellRequestScreen(w, SCREEN_MATCH);
     }
+}
+
+static void DrawControlsModal(World *w)
+{
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+
+    DrawRectangle(0, 0, sw, sh, (Color){ 0, 0, 0, 195 });
+
+    Rectangle panel = { sw/2.0f - 270, sh/2.0f - 205, 540, 400 };
+    DrawRectangleRounded(panel, 0.07f, 8, CARD_BG);
+    DrawRectangleRoundedLines(panel, 0.07f, 8, CARD_EDGE);
+    DrawLabel("CONTROLS", sw/2, (int)panel.y + 20, 25, TEXT_MAIN);
+
+    static const char *KEYS[] = {
+        "WASD / arrows", "Hold LMB", "Release LMB", "Tap LMB or SPACE",
+        "RMB", "1 - 4", "TAB", "R", "ESC"
+    };
+    static const char *WHAT[] = {
+        "Move", "Aim - draws the shot on the ground", "Fire along the preview",
+        "Quick shot, auto-aimed at the nearest enemy", "Super, once charged",
+        "Swap kit on the spot", "Command center", "Restart the match",
+        "Back a screen, or quit from here"
+    };
+
+    int rows = (int)(sizeof(KEYS)/sizeof(KEYS[0]));
+    for (int i = 0; i < rows; i++)
+    {
+        int y = (int)panel.y + 66 + i*32;
+        DrawText(KEYS[i], (int)panel.x + 26, y, 15, ACCENT);
+        DrawText(WHAT[i], (int)panel.x + 205, y, 15, TEXT_MAIN);
+    }
+
+    Rectangle close = { panel.x + panel.width/2 - 60, panel.y + panel.height - 52, 120, 38 };
+    if (Card(w, close, "CLOSE", NULL, StyleNormal(), 0)) g_showControls = false;
+
+    // Clicking anywhere off the panel dismisses it too.
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !MouseIn(panel)) g_showControls = false;
 }
 
 //------------------------------------------------------------------------------------
 // Character select
 //------------------------------------------------------------------------------------
+// Attack and super descriptions are derived from the weapon data rather than written
+// out, so they stay true after the numbers are tuned in the command center.
+static const char *AttackSummary(const WeaponDef *k)
+{
+    if (k->arcing) return TextFormat("Arcing lob, %.1f splash, clears walls", k->projRadius);
+    if (k->rangeScaled) return "Single shot, damage grows with distance";
+    if (k->pellets > 1) return TextFormat("%d pellets, %.0f degree spread", k->pellets, k->spreadDeg);
+    return "Single shot";
+}
+
+static const char *SuperSummary(const WeaponDef *k)
+{
+    if (k->sDash) return TextFormat("Charge: %d on contact, smashes crates", k->sDamage);
+    if (k->sPiercing) return TextFormat("Piercing shot: %d, hits everyone in line", k->sDamage);
+    if (k->arcing) return TextFormat("%d shells, %d each, breaks walls", k->sPellets, k->sDamage);
+    return TextFormat("%d pellets, %d each, breaks walls", k->sPellets, k->sDamage);
+}
+
+static void DrawRosterEntry(World *w, Rectangle r, int kitIndex, bool selected, bool hover)
+{
+    (void)w;
+    const WeaponDef *k = &WEAPONS[kitIndex];
+    Color accent = KIT_ACCENT[kitIndex];
+
+    Color fill = selected ? (Color){ 34, 56, 92, 248 } : (hover ? CARD_HOVER : CARD_BG);
+    DrawRectangleRounded(r, 0.10f, 8, fill);
+    DrawRectangleRoundedLines(r, 0.10f, 8, selected ? accent : CARD_EDGE);
+
+    // Accent spine down the left edge, the only colour that identifies the kit here.
+    DrawRectangleRounded((Rectangle){ r.x + 6, r.y + 10, 6, r.height - 20 }, 0.9f, 5, accent);
+
+    DrawText(k->name, (int)r.x + 24, (int)r.y + 12, 24, TEXT_MAIN);
+    DrawText(k->flavor, (int)r.x + 24, (int)r.y + 40, 13, TEXT_DIM);
+
+    if (selected)
+    {
+        const char *tag = "SELECTED";
+        int tw = MeasureText(tag, 12);
+        DrawText(tag, (int)(r.x + r.width) - tw - 18, (int)r.y + 16, 12, accent);
+    }
+
+    // Stats in two columns so the block scans quickly.
+    //
+    // Each string is drawn immediately after it is formatted. TextFormat hands back a
+    // pointer into a small rotating buffer, so holding several results at once silently
+    // corrupts the earliest ones.
+    int sx = (int)r.x + 24, rx = (int)r.x + 210, sy = (int)r.y + 66;
+
+    DrawText(TextFormat("HEALTH   %d", k->maxHealth), sx, sy, 13, TEXT_MAIN);
+    DrawText(TextFormat("DAMAGE   %d", k->damage*k->pellets), sx, sy + 19, 13, TEXT_MAIN);
+    DrawText(TextFormat("RANGE    %.0f", k->range), sx, sy + 38, 13, TEXT_MAIN);
+
+    DrawText(TextFormat("RELOAD   %.2fs", k->reloadPerAmmo), rx, sy, 13, TEXT_MAIN);
+    DrawText(TextFormat("COOLDOWN %.2fs", k->cooldown), rx, sy + 19, 13, TEXT_MAIN);
+    DrawText(TextFormat("AMMO     %d", MAX_AMMO), rx, sy + 38, 13, TEXT_MAIN);
+
+    // Descriptions share one column, set wide enough for the longest super name.
+    const int descX = 112;
+
+    DrawText("ATTACK", (int)r.x + 24, (int)r.y + 128, 11, ACCENT);
+    DrawText(AttackSummary(k), (int)r.x + descX, (int)r.y + 127, 13, TEXT_MAIN);
+
+    DrawText(k->superName, (int)r.x + 24, (int)r.y + 148, 11, PLAY_GOLD);
+    DrawText(SuperSummary(k), (int)r.x + descX, (int)r.y + 147, 13, TEXT_MAIN);
+}
+
 static void DrawBrawlerSelect(World *w)
 {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     Tuning *t = &w->tune;
 
-    DrawLabel("CHOOSE YOUR BRAWLER", sw/2, 28, 26, TEXT_MAIN);
+    if (Card(w, (Rectangle){ 24, 24, 130, 52 }, "BACK", NULL, StyleNormal(), 0))
+        ShellRequestScreen(w, SCREEN_MENU);
 
-    g_hoverKit = -1;
+    Rectangle panel = { sw*0.46f, 92.0f, sw*0.50f, sh - 150.0f };
 
-    // Cards along the bottom. Sized from the count, so adding kits needs no layout work.
-    int count = CLASS_COUNT;
-    int cardW = 168, gap = 14;
-    int totalW = count*cardW + (count - 1)*gap;
-    int startX = sw/2 - totalW/2;
-    int cardY = sh - 214;
+    DrawText("ROSTER", (int)panel.x + 2, (int)panel.y - 26, 16, ACCENT);
+    DrawText("scroll to browse", (int)panel.x + 78, (int)panel.y - 23, 12, TEXT_DIM);
 
-    for (int i = 0; i < count; i++)
+    //--- Scroll input --------------------------------------------------------
+    float total = CLASS_COUNT*(float)ENTRY_H;
+    Vector2 mouse = GetMousePosition();
+    bool overPanel = MouseIn(panel);
+
+    if (overPanel) g_scroll -= GetMouseWheelMove()*58.0f;
+
+    // Dragging the list is the natural gesture here, so a press only counts as a
+    // selection if the pointer barely moved.
+    if (overPanel && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
-        const WeaponDef *k = &WEAPONS[i];
-        Rectangle r = { (float)(startX + i*(cardW + gap)), (float)cardY, (float)cardW, 152.0f };
-
-        bool selected = (t->selectedKit == i);
-        bool hover = MouseIn(r);
-        if (hover) g_hoverKit = i;
-
-        Rectangle draw = r;
-        if (hover && !selected) draw.y -= 4.0f;
-
-        DrawRectangleRounded((Rectangle){ draw.x + 3, draw.y + 5, draw.width, draw.height },
-                             0.16f, 8, (Color){ 0, 0, 0, 130 });
-        DrawRectangleRounded(draw, 0.16f, 8, selected ? (Color){ 38, 62, 100, 250 }
-                                                      : (hover ? CARD_HOVER : CARD_BG));
-        DrawRectangleRoundedLines(draw, 0.16f, 8, selected ? ACCENT : CARD_EDGE);
-
-        // A colour swatch stands in for a portrait; the live 3D model above is the
-        // real preview, so a second small render of it would only compete.
-        Color swatch = KIT_ACCENT[i];
-        DrawRectangleRounded((Rectangle){ draw.x + 12, draw.y + 12, draw.width - 24, 44 }, 0.22f, 6, swatch);
-
-        DrawLabel(k->name, (int)(draw.x + draw.width/2), (int)draw.y + 64, 18, TEXT_MAIN);
-        DrawText(TextFormat("HP  %d", k->maxHealth), (int)draw.x + 14, (int)draw.y + 90, 13, TEXT_DIM);
-        DrawText(TextFormat("DMG %d", k->damage*k->pellets), (int)draw.x + 14, (int)draw.y + 108, 13, TEXT_DIM);
-        DrawText(TextFormat("RNG %.0f", k->range), (int)draw.x + 14, (int)draw.y + 126, 13, TEXT_DIM);
-
-        if (selected)
-            DrawLabel("SELECTED", (int)(draw.x + draw.width/2), (int)(draw.y + draw.height) - 2, 12, ACCENT);
-
-        if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !selected)
+        g_dragging = true;
+        g_dragMoved = false;
+        g_dragStartY = mouse.y;
+        g_dragStartScroll = g_scroll;
+    }
+    if (g_dragging)
+    {
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
         {
-            t->selectedKit = i;
+            float delta = mouse.y - g_dragStartY;
+            if (fabsf(delta) > 6.0f) g_dragMoved = true;
+            g_scroll = g_dragStartScroll - delta;
+        }
+        else g_dragging = false;
+    }
+
+    // Wrap rather than clamp: the roster has no ends.
+    while (g_scroll < 0.0f) g_scroll += total;
+    while (g_scroll >= total) g_scroll -= total;
+
+    //--- Entries -------------------------------------------------------------
+    BeginScissorMode((int)panel.x, (int)panel.y, (int)panel.width, (int)panel.height);
+
+    int first = (int)floorf(g_scroll/ENTRY_H) - 1;
+    int visible = (int)(panel.height/ENTRY_H) + 3;
+
+    for (int n = 0; n < visible; n++)
+    {
+        int slot = first + n;
+        int kit = ((slot % CLASS_COUNT) + CLASS_COUNT) % CLASS_COUNT;
+
+        Rectangle r = { panel.x + 6, panel.y + slot*(float)ENTRY_H - g_scroll,
+                        panel.width - 12, ENTRY_H - 12.0f };
+
+        bool hover = !g_blockCards && MouseIn(r) && MouseIn(panel);
+        bool selected = (t->selectedKit == kit);
+
+        DrawRosterEntry(w, r, kit, selected, hover);
+
+        if (hover) g_hoverKit = kit;
+
+        // Released without dragging, over this entry: that is a pick.
+        if (hover && IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && !g_dragMoved && !selected)
+        {
+            t->selectedKit = kit;
             ConfigMarkDirty();
             RebuildPreview(w);
         }
     }
 
-    // Name of whatever the cursor is over, above the podium.
-    int shown = (g_hoverKit >= 0) ? g_hoverKit : t->selectedKit;
-    DrawLabel(WEAPONS[shown].flavor, sw/2, 66, 15, TEXT_DIM);
+    EndScissorMode();
 
-    if (Card(w, (Rectangle){ 24, 24, 130, 52 }, "BACK", NULL, StyleNormal(), 0))
-        ShellRequestScreen(w, SCREEN_MENU);
+    // Fades top and bottom, so entries dissolve at the edges instead of being sliced.
+    DrawRectangleGradientV((int)panel.x, (int)panel.y, (int)panel.width, 34,
+                           (Color){ BG_TOP.r, BG_TOP.g, BG_TOP.b, 235 },
+                           (Color){ BG_TOP.r, BG_TOP.g, BG_TOP.b, 0 });
+    DrawRectangleGradientV((int)panel.x, (int)(panel.y + panel.height) - 34, (int)panel.width, 34,
+                           (Color){ BG_BOTTOM.r, BG_BOTTOM.g, BG_BOTTOM.b, 0 },
+                           (Color){ BG_BOTTOM.r, BG_BOTTOM.g, BG_BOTTOM.b, 235 });
+
+    //--- Name of the model on the left ---------------------------------------
+    const WeaponDef *shown = &WEAPONS[t->selectedKit];
+    int nameX = (int)(sw*0.22f);
+    DrawLabel(shown->name, nameX, 96, 34, TEXT_MAIN);
+    DrawLabel(shown->flavor, nameX, 134, 14, TEXT_DIM);
 }
 
 //------------------------------------------------------------------------------------
@@ -382,8 +552,19 @@ void MenuDraw(World *w)
     DrawBackdrop();
     DrawPodiumScene(w);
 
-    if (w->screen == SCREEN_BRAWLERS) DrawBrawlerSelect(w);
-    else DrawMainMenu(w);
+    if (w->screen == SCREEN_BRAWLERS)
+    {
+        g_showControls = false;             // the modal belongs to the main menu only
+        DrawBrawlerSelect(w);
+        return;
+    }
+
+    // Underlying cards are drawn inert while the modal is up, then the modal on top.
+    g_blockCards = g_showControls;
+    DrawMainMenu(w);
+    g_blockCards = false;
+
+    if (g_showControls) DrawControlsModal(w);
 }
 
 //------------------------------------------------------------------------------------
@@ -395,6 +576,10 @@ void ShellRequestScreen(World *w, AppScreen screen)
 {
     if (w->fadingOut) return;               // ignore double clicks mid-transition
     if (screen == w->screen) return;
+
+    // Get any pending tweak onto disk now rather than relying on the debounce, so a
+    // change made a moment before quitting from the menu still survives.
+    ConfigFlush(w);
 
     w->pending = screen;
     w->fadingOut = true;
@@ -411,8 +596,9 @@ void ShellUpdate(World *w, float dt)
             w->fadingOut = false;
             w->screen = w->pending;
 
-            // Entering the menu should always show the current selection.
-            if (w->screen != SCREEN_MATCH) RebuildPreview(w);
+            // Entering the menu should always show the current selection, and leaving a
+            // sandbox should not leave the flag set for the next thing you start.
+            if (w->screen != SCREEN_MATCH) { w->sandbox = false; RebuildPreview(w); }
         }
     }
     else if (w->fade > 0.0f)

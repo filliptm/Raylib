@@ -14,3 +14,6 @@ brawl_arena/tuning.cfg
 
 # Local logs
 logs/
+
+# Imported character source art (large; the repacked .glb is what the game uses)
+brawl_arena/*.zip

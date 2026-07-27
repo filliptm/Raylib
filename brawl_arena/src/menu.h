@@ -6,6 +6,9 @@
 
 void MenuInit(Assets *a);
 
+// Lets an open menu overlay swallow ESC. Returns true when it did.
+bool MenuConsumeEscape(void);
+
 // Advances the podium camera and idle animation. Feed it unscaled real time.
 void MenuUpdate(World *w, float dt);
 
