@@ -52,10 +52,10 @@ void HudDrawBars(World *w)
         if (!b->alive || !b->visible) continue;
 
         Vector3 head = b->position;
-        // Brawlers stand about one tile tall. Your own cluster is taller than an
-        // enemy's - number above, ammo tabs below - so it needs extra clearance or the
-        // tabs sit on the helmet.
-        head.y = b->isPlayer ? 3.05f : 2.60f;
+        // Cleared above the tallest head in play - the rigged model stands 3.1 world
+        // units. Your own cluster is taller than an enemy's (number above, ammo tabs
+        // below), so it gets extra room.
+        head.y = b->isPlayer ? 4.05f : 3.60f;
         Vector2 sp = GetWorldToScreen(head, w->camera);
 
         if (sp.x < -80 || sp.x > GetScreenWidth() + 80) continue;

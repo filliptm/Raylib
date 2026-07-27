@@ -280,14 +280,14 @@ int main(void)
                     RenderWorld(&world);
                 EndTextureMode();
 
-                float bloom = world.tune.bloom;
-                float vignette = 0.85f;
-                SetShaderValue(assets.post, assets.locBloom, &bloom, SHADER_UNIFORM_FLOAT);
-                SetShaderValue(assets.post, assets.locVignette, &vignette, SHADER_UNIFORM_FLOAT);
+                float outline = (world.tune.toon && assets.depthOk) ? world.tune.toonOutline : 0.0f;
+                AssetsSetStyle(&assets, &world.tune, world.time, outline);
 
                 BeginDrawing();
                     ClearBackground(BLACK);
                     BeginShaderMode(assets.post);
+                        if (assets.depthOk)
+                            SetShaderValueTexture(assets.post, assets.locDepthTex, assets.sceneTarget.depth);
                         DrawTextureRec(assets.sceneTarget.texture,
                                        (Rectangle){ 0, 0, (float)assets.sceneTarget.texture.width,
                                                     -(float)assets.sceneTarget.texture.height },

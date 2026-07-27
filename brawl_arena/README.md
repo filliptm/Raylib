@@ -229,6 +229,22 @@ Shadows are soft radial ground decals rather than hard cylinders.
 **Post-processing** adds thresholded bloom, a vignette and a gentle contrast S-curve.
 Toggle it and dial bloom strength on the WORLD tab.
 
+**The STYLE tab** in the command center is a full mix-and-match viewport rig: toon
+banding and ink outlines, painterly (Kuwahara), pixelate, halftone comic dots,
+posterize, saturation, brightness, bloom, vignette, film grain and chromatic fringe -
+every effect an independent live slider, all persisted, all composable in one post
+pass. HUD and menus draw after the pass, so the interface stays crisp whatever the
+world looks like.
+
+**The toon look** (STYLE tab, on by default) turns the scene illustrative: lighting is
+quantised into hard cel bands with specular and rim killed, ambient lifted and colours
+saturated so shadow bands stay vivid, and a depth-based ink outline is drawn around
+every silhouette in the post pass. The outline needs a sampleable depth texture, so the
+scene renders into a hand-built framebuffer (raylib's stock render texture keeps depth
+in a renderbuffer); if that setup fails, outlines quietly turn off and everything else
+still works. Band count and ink strength are sliders, everything is live, and toggling
+it off returns the original smooth-lit look.
+
 ## Imported characters
 
 The SCRAPPER is played as a rigged, animated character model - on the menu podium, in
@@ -239,9 +255,13 @@ and carries a red cast on enemies and a blue one on allied bots so a grey model 
 reads friend-or-foe at a glance. The WORLD-tab toggle turns it off, and the game falls
 back to primitives automatically if the file is missing.
 
-The model is an AI-generated Meshy export at `resources/sentinel.glb`, repacked from
-117 MB across four files to under 1 MB. raylib has no animation crossfade, so clip
-changes restart the cycle - the known pop when breaking into a run.
+In a match the clip is picked from the movement direction relative to facing -
+forward, backward and four diagonals - so backpedaling and circle-strafing animate
+correctly instead of moonwalking, with playback rate following actual speed. Going
+down plays a death clip that holds until just before the respawn, and a brawler that
+just fired holds a combat stance. The model is an AI-generated Meshy export at
+`resources/sentinel.glb` (12 clips, repacked from 24 MB to 1.7 MB). raylib has no
+animation crossfade, so clip changes restart the cycle - a known small pop.
 
 Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
 check and then render as a collapsed spike-ball. The full story of why (raylib's

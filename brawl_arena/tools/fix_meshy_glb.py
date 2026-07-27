@@ -35,8 +35,10 @@ What this does
   - Downscales the absurd 4K texture (99.9% of the file) for small on-screen use.
 
 Usage:  python3 fix_meshy_glb.py <dir-with-meshy-glbs> <output.glb> [texture-size]
-The base (T-pose) file must contain 'Character_output' in its name; every other
-.glb in the directory is treated as an animation clip named from its filename.
+Both Meshy export styles are handled: one GLB per animation (clip named from its
+filename) and the newer single merged-animations GLB (each clip keeps its own name,
+lowercased). The file carrying the most clips becomes the base; a T-pose
+Character_output file just contributes its clip.
 """
 import struct, json, math, io, os, re, sys
 
@@ -145,8 +147,17 @@ def node_local_mat(node):
 
 def main(src_dir, out_path, tex_size=512):
     glbs = sorted(f for f in os.listdir(src_dir) if f.lower().endswith('.glb'))
-    base_name = next(f for f in glbs if 'Character_output' in f)
+
+    # Newer Meshy exports ship one merged-animations GLB alongside the T-pose file.
+    # Whichever file carries the most clips becomes the base (its mesh, skin, texture
+    # and animations are internally consistent); everything else contributes clips.
+    def anim_count(f):
+        jj, _ = parse_glb(os.path.join(src_dir, f))
+        return len(jj.get('animations', []))
+    counts = {f: anim_count(f) for f in glbs}
+    base_name = max(glbs, key=lambda f: (counts[f], 'Character_output' in f))
     clip_files = [f for f in glbs if f != base_name]
+    print('base file: %s (%d clips)' % (base_name, counts[base_name]))
 
     j, bin_ = parse_glb(os.path.join(src_dir, base_name))
     nodes = j['nodes']
@@ -297,16 +308,33 @@ def main(src_dir, out_path, tex_size=512):
                 dur = max(dur, max(vals))
         return dur
 
-    j['animations'][0]['name'] = 'tpose'
-    add_filler_channels(j['animations'][0], clip_duration(j, bin_, j['animations'][0]))
+    def clip_name(raw):
+        n = (raw or 'clip').strip().lower()
+        if '|' in n:                            # 'Armature|clip0|baselayer'
+            parts = n.split('|')
+            n = parts[1] if len(parts) > 1 else parts[0]
+        return 'tpose' if n in ('clip0', 'baselayer', 'clip') else n
+
+    used_names = set()
+    def unique(n):
+        m, k = n, 2
+        while m in used_names: m, k = '%s_%d' % (n, k), k + 1
+        used_names.add(m)
+        return m
+
+    for an in j['animations']:
+        an['name'] = unique(clip_name(an.get('name')))
+        add_filler_channels(an, clip_duration(j, bin_, an))
 
     for f in clip_files:
         cj, cb = parse_glb(os.path.join(src_dir, f))
         m = re.search(r'Animation_(.+?)(?:_\d+)?_withSkin', f)
-        clip_name = (m.group(1) if m else os.path.splitext(f)[0]).lower()
-        clip_name = {'running': 'running', 'walking': 'walking'}.get(clip_name, clip_name)
+        file_name = (m.group(1) if m else os.path.splitext(f)[0]).lower()
+        multi = len(cj.get('animations', [])) > 1
         for an in cj.get('animations', []):
-            merged = {'name': clip_name,
+            # A single-clip file is named from its filename (the old per-animation
+            # export style); a multi-clip file keeps each animation's own name.
+            merged = {'name': unique(clip_name(an.get('name')) if multi else file_name),
                       'samplers': [{'input': clone_accessor(cj, cb, s['input']),
                                     'output': clone_accessor(cj, cb, s['output']),
                                     'interpolation': s.get('interpolation', 'LINEAR')}
@@ -315,8 +343,8 @@ def main(src_dir, out_path, tex_size=512):
                                    for c in an['channels']]}
             filled = add_filler_channels(merged, clip_duration(cj, cb, an))
             j['animations'].append(merged)
-            print('merged clip %-10s (%d channels, %d filler)' %
-                  (clip_name, len(merged['channels']), filled))
+            print('merged clip %-34s (%d channels, %d filler)' %
+                  (merged['name'], len(merged['channels']), filled))
 
     # ---- 3. texture: 4K is 99.9% of the file, for a character ~70px tall -------
     try:

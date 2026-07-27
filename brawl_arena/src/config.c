@@ -10,7 +10,17 @@
 #include "config.h"
 #include "weapons.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+// Test harnesses set BRAWL_TUNING to an isolated path so automated runs can never
+// delete or overwrite a player's real settings - which is exactly what kept
+// happening before this existed.
+static const char *ConfigPath(void)
+{
+    const char *env = getenv("BRAWL_TUNING");
+    return (env && env[0]) ? env : CONFIG_PATH;
+}
 
 #define MAX_FIELDS 128
 #define SAVE_DELAY 0.6f
@@ -55,6 +65,18 @@ static int BuildFields(World *w, Field *f)
     n = AddField(f, n, "infinite_ammo",  F_BOOL,  &t->infiniteAmmo);
     n = AddField(f, n, "show_debug",     F_BOOL,  &t->showDebug);
     n = AddField(f, n, "model_character", F_BOOL,  &t->modelCharacter);
+    n = AddField(f, n, "toon",           F_BOOL,  &t->toon);
+    n = AddField(f, n, "toon_bands",     F_FLOAT, &t->toonBands);
+    n = AddField(f, n, "toon_outline",   F_FLOAT, &t->toonOutline);
+    n = AddField(f, n, "style_pixelate", F_FLOAT, &t->stylePixelate);
+    n = AddField(f, n, "style_painterly", F_FLOAT, &t->stylePainterly);
+    n = AddField(f, n, "style_halftone", F_FLOAT, &t->styleHalftone);
+    n = AddField(f, n, "style_posterize", F_FLOAT, &t->stylePosterize);
+    n = AddField(f, n, "style_grain",    F_FLOAT, &t->styleGrain);
+    n = AddField(f, n, "style_ca",       F_FLOAT, &t->styleCA);
+    n = AddField(f, n, "style_saturation", F_FLOAT, &t->styleSaturation);
+    n = AddField(f, n, "style_brightness", F_FLOAT, &t->styleBrightness);
+    n = AddField(f, n, "style_vignette", F_FLOAT, &t->styleVignette);
     n = AddField(f, n, "post_fx",        F_BOOL,  &t->postFx);
     n = AddField(f, n, "bloom",          F_FLOAT, &t->bloom);
     n = AddField(f, n, "selected_kit",   F_INT,   &t->selectedKit);
@@ -113,7 +135,7 @@ void ConfigSave(const World *w)
     Field fields[MAX_FIELDS];
     int count = BuildFields((World *)w, fields);
 
-    FILE *file = fopen(CONFIG_PATH, "w");
+    FILE *file = fopen(ConfigPath(), "w");
     if (!file) return;
 
     fprintf(file, "# Brawl Arena tuning - written automatically by the command center.\n");
@@ -135,7 +157,7 @@ void ConfigSave(const World *w)
 
 bool ConfigLoad(World *w)
 {
-    FILE *file = fopen(CONFIG_PATH, "r");
+    FILE *file = fopen(ConfigPath(), "r");
     if (!file) return false;
 
     Field fields[MAX_FIELDS];
@@ -174,6 +196,20 @@ bool ConfigLoad(World *w)
     if (t->timeScale < 0.01f) t->timeScale = 0.01f;
     if (t->playerRespawn < 0.1f) t->playerRespawn = 0.1f;
     if (t->enemyRespawn < 0.1f) t->enemyRespawn = 0.1f;
+    if (t->toonBands < 2.0f) t->toonBands = 2.0f;
+    if (t->toonBands > 5.0f) t->toonBands = 5.0f;
+    if (t->toonOutline < 0.0f) t->toonOutline = 0.0f;
+    #define CLAMP01(x) do { if ((x) < 0.0f) (x) = 0.0f; if ((x) > 1.0f) (x) = 1.0f; } while (0)
+    CLAMP01(t->stylePixelate); CLAMP01(t->stylePainterly); CLAMP01(t->styleHalftone);
+    CLAMP01(t->stylePosterize); CLAMP01(t->styleGrain); CLAMP01(t->styleCA);
+    #undef CLAMP01
+    if (t->styleSaturation < 0.0f) t->styleSaturation = 0.0f;
+    if (t->styleSaturation > 2.0f) t->styleSaturation = 2.0f;
+    if (t->styleBrightness < 0.6f) t->styleBrightness = 0.6f;
+    if (t->styleBrightness > 1.5f) t->styleBrightness = 1.5f;
+    if (t->styleVignette < 0.0f) t->styleVignette = 0.0f;
+    if (t->styleVignette > 1.5f) t->styleVignette = 1.5f;
+    if (t->toonOutline > 1.0f) t->toonOutline = 1.0f;
     if (t->grassHeight < 0.1f) t->grassHeight = 0.1f;
     if (t->grassBendRadius < 0.05f) t->grassBendRadius = 0.05f;
     if (t->concealDither < 0.0f) t->concealDither = 0.0f;

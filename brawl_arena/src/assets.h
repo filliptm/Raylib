@@ -19,7 +19,15 @@ typedef struct Assets {
     int locLightPos, locLightColor, locLightCount;
 
     // post uniforms
-    int locResolution, locBloom, locVignette;
+    int locResolution, locBloom, locVignette, locDepthTex, locOutline;
+    int locStyleTime, locPixelate, locPainterly, locHalftone, locPosterize;
+    int locGrain, locCA, locSaturation, locBrightness;
+    bool depthOk;           // scene target carries a sampleable depth texture
+
+    // toon uniforms, one pair per lit shader
+    int locToon, locToonBands;      // scene
+    int kToon, kToonBands;          // skinned
+    int gToon, gToonBands;          // grass
 
     // Grass: instanced, wind-animated, alpha-cutout blades
     Shader grass;
@@ -47,7 +55,11 @@ typedef struct Assets {
     ModelAnimation *charAnims;
     int charAnimCount;
     bool characterOk;
-    int clipIdle, clipRunning, clipWalking;   // resolved by name, not by file order
+    // Clips resolved by name, not file order. Directionals are -1 when the model
+    // lacks them and the draw code falls back to the forward run.
+    int clipIdle, clipCombat, clipWalk;
+    int clipRunF, clipRunB, clipRunFL, clipRunFR, clipRunBL, clipRunBR;
+    int clipDeath;
     float charScale;        // normalises the source model to CHARACTER_TARGET_H
     float charFootOffset;   // lifts it so the feet land on y = 0
 
@@ -88,13 +100,20 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos);
 // Bayer pattern. Avoids the sorting problems real alpha blending would bring.
 void AssetsSetDither(Assets *a, float amount);
 
+// Pushes the toon state to every lit shader. Call once per frame before drawing.
+void AssetsSetToon(Assets *a, bool enabled, float bands);
+
+// Uploads the whole viewport-style block to the post shader in one call.
+void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrength);
+
 // Poses and draws the skinned character. `frame` is fractional; it is floored, so a
 // caller can advance it at whatever rate suits. `dither` is the screen-door amount for
 // bush concealment and `emissive` lifts the surface out of lighting (used for hit flash).
+// `loop` wraps the frame; one-shot clips (death) clamp on their last frame instead.
 void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
-                         int animIndex, float frame, Color tint, float dither, float emissive,
-                         const Vector3 *lightPos, const Vector3 *lightColor, int lightCount,
-                         Vector3 viewPos);
+                         int animIndex, float frame, bool loop, Color tint, float dither,
+                         float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
+                         int lightCount, Vector3 viewPos);
 
 // Per-frame grass uniforms. Actors are the brawlers that push blades aside.
 void AssetsGrassFrame(Assets *a, const Tuning *t, float time, Vector3 viewPos,

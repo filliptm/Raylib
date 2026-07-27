@@ -31,7 +31,12 @@ $(OBJ_DIR):
 $(TARGET): $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
+# Every object depends on every header. Header edits (especially types.h, which
+# defines struct layouts shared by all modules) must rebuild everything, or stale
+# objects read struct fields at old offsets and fail silently at runtime.
+HDRS = $(wildcard $(SRC_DIR)/*.h)
+
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c $(HDRS) | $(OBJ_DIR)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) -c $< -o $@
 
 run: $(TARGET)

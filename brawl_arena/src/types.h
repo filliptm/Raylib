@@ -30,7 +30,7 @@
 #define MAX_PROJECTILES 512
 #define MAX_PARTICLES 1024
 #define MAX_FLOATTEXTS 64
-#define CHARACTER_TARGET_H 2.0f   // world height every character model is normalised to
+#define CHARACTER_TARGET_H 3.1f   // world height every character model is normalised to
 #define MATCH_RESULT_HOLD 4.5f  // seconds the result is shown before returning to the menu
 #define MAX_GEMS 40
 #define MAX_SPAWNS 8
@@ -323,6 +323,22 @@ typedef struct Tuning {
 
     // Presentation
     bool modelCharacter;    // draw the rigged model instead of the primitive brawler
+    bool toon;              // cel-banded light + ink outlines: the illustrated look
+    float toonBands;        // light bands, 2..4
+    float toonOutline;      // ink outline strength, 0..1
+
+    // Viewport stylization. Every effect is a 0..1 strength (0 = off) so any mix of
+    // them composes; they all live in the single post-pass shader.
+    float stylePixelate;
+    float stylePainterly;
+    float styleHalftone;
+    float stylePosterize;
+    float styleGrain;
+    float styleCA;          // chromatic aberration
+    float styleSaturation;  // 0..2, 1 = neutral
+    float styleBrightness;  // 0.6..1.5, 1 = neutral
+    float styleVignette;    // 0..1.5
+
     bool postFx;            // bloom + vignette pass
     float bloom;            // bloom strength
 

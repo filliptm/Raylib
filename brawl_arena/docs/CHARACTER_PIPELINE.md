@@ -120,10 +120,18 @@ Rules that matter more than the list:
   Meshy filenames (`Animation_<Name>_withSkin`) and the game resolves clips by name.
 - Locomotion and idle loop; shoot, death and emote are one-shots.
 
-Engine-side status: today the game plays idle/walk/run by speed only, which is why a
-character with just a forward cycle moonwalks when strafing. Directional selection
-(clip picked from the angle between velocity and facing), one-shot playback, and the
-shoot/death/emote triggers are the follow-up work once assets with the full set exist.
+Engine-side status: implemented. The clip is chosen from the movement direction
+relative to facing (forward, backward and four diagonals - a pure strafe picks the
+nearest diagonal), playback rate follows actual speed so feet track the ground, death
+plays as a one-shot that holds its final pose until just before respawn, and a
+recently-fired brawler holds the combat stance instead of relaxing to idle. Clips are
+resolved by substring (idle, combat, running, walking, backward, forwardleft/right,
+backleft/right, dead) with graceful fallbacks when a set is incomplete. Still open:
+shoot and emote one-shots, and crossfade blending.
+
+The tool accepts both Meshy export styles: one GLB per animation (clip named from the
+filename) and the newer single merged-animations GLB (each clip keeps its own name,
+lowercased). The file carrying the most clips becomes the base.
 
 ## Checklist for adding a new character
 
@@ -179,6 +187,17 @@ Worth keeping, because every step here either found a bug or disproved a theory:
 - **Two probes firing on the same frame** produced two identical screenshots and a
   false "animation is frozen". Space captures by a second or more and diff them
   numerically.
+- **The Makefile had no header dependencies.** Editing `types.h` (struct layouts
+  shared by every module) rebuilt only the touched `.c` files, so stale objects read
+  struct fields at old offsets. The symptoms looked impossible - a function verified
+  correct set a field its caller then read as zero, and the menu podium vanished -
+  because writer and reader disagreed about where fields lived. Every `.o` now depends
+  on every header. If behaviour turns impossible right after a header edit, suspect
+  stale objects first.
+- **Test runs kept destroying the player's saved settings.** Verification runs deleted
+  `tuning.cfg` for deterministic defaults, and parallel test instances autosaved over
+  it - which surfaced as "my settings randomly reset". Automated runs must set
+  `BRAWL_TUNING=/tmp/some.cfg` so they never touch the real file.
 - **zsh aborts a whole command when any glob fails to match.** `rm -f tuning.cfg
   ig_*.png` deleted *nothing* when no `ig_*.png` existed, so a stale `tuning.cfg`
   survived and the next run spawned the wrong kit - which looked exactly like a code

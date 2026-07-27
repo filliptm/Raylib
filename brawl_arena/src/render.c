@@ -200,7 +200,7 @@ static void SubmitLights(World *w, Assets *a)
         Projectile *p = &w->projectiles[i];
         if (!p->active) continue;
 
-        float intensity = p->isSuper ? 1.5f : 0.5f;
+        float intensity = p->isSuper ? 0.75f : 0.25f;   // halved: the glow was lighting the whole lane
         Vector3 color = {
             p->color.r/255.0f*intensity,
             p->color.g/255.0f*intensity,
@@ -471,6 +471,20 @@ static void DrawSolidEffects(World *w, Assets *a)
         DrawLit(a, a->sphere, band, a->texFlat, p->color, (Vector2){ 1.0f, 1.0f }, 0.55f);
     }
 
+    // Bullet bodies: solid emissive rounds in the projectile's colour. Solid geometry
+    // keeps them crisp - stacked additive sprites washed out to white blobs - and the
+    // depth they write means the toon ink pass outlines them too.
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        Projectile *p = &w->projectiles[i];
+        if (!p->active || p->arcing) continue;
+
+        float r = fmaxf(p->radius, 0.16f)*2.0f;
+        Matrix m = MatrixMultiply(MatrixScale(r, r, r),
+                                  MatrixTranslate(p->position.x, p->position.y, p->position.z));
+        DrawLit(a, a->sphere, m, a->texFlat, p->color, (Vector2){ 1.0f, 1.0f }, 0.85f);
+    }
+
     // Debris chunks from a blast, tumbling on their own axes.
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
@@ -568,7 +582,9 @@ static void DrawProjectiles(World *w, Assets *a)
         if (!p->active) continue;
 
         Color glow = p->color;
-        float coreSize = p->arcing ? 0.30f : fmaxf(p->radius, 0.16f)*2.6f;
+        // Visual size only: p->radius stays the gameplay hitbox. The solid body is
+        // drawn in the lit pass; this pass only adds a restrained halo and trail.
+        float coreSize = p->arcing ? 0.55f : fmaxf(p->radius, 0.16f)*2.6f;
 
         if (!p->arcing)
         {
@@ -582,7 +598,7 @@ static void DrawProjectiles(World *w, Assets *a)
                 float t = (float)s/steps;
                 Vector3 tp = Vector3Subtract(p->position, Vector3Scale(dir, spacing*s));
                 Color c = glow;
-                c.a = (unsigned char)(105*(1.0f - t));
+                c.a = (unsigned char)(78*(1.0f - t));
                 DrawBillboard(w->camera, a->texGlow, tp, coreSize*(1.0f - t*0.55f), c);
             }
         }
@@ -596,9 +612,8 @@ static void DrawProjectiles(World *w, Assets *a)
             continue;
         }
 
-        Color hot = { 255, 255, 255, 165 };
-        DrawBillboard(w->camera, a->texGlow, p->position, coreSize*1.45f, (Color){ glow.r, glow.g, glow.b, 88 });
-        DrawBillboard(w->camera, a->texGlow, p->position, coreSize*0.58f, hot);
+        // One colored halo; the white-hot centre is gone - the solid body is the core.
+        DrawBillboard(w->camera, a->texGlow, p->position, coreSize*1.5f, (Color){ glow.r, glow.g, glow.b, 70 });
     }
 
     if (w->tune.gemGrab)
@@ -835,6 +850,15 @@ static void DrawAimPreview(World *w, Assets *a)
 // Clip follows movement: idle standing still, walking at a stroll, running flat out
 // or dashing. There is no crossfade in raylib, so a clip change restarts its cycle -
 // starting at frame zero pops less than landing mid-stride.
+// In-match draw for the imported rigged character (currently the Scrapper's model).
+//
+// The clip is chosen from the movement direction RELATIVE TO FACING, which is what
+// stops the moonwalk: a brawler aims one way and moves another, so backpedaling picks
+// the backward clip and circling picks a diagonal. Facing +Z, the character's left is
+// +X, so a positive relative angle selects the left-side clips.
+//
+// There is no crossfade in raylib, so a clip change restarts its cycle - starting at
+// frame zero pops less than landing mid-stride.
 static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
 {
     static float animTime[MAX_BRAWLERS];
@@ -842,13 +866,50 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
 
     int idx = (int)(b - w->brawlers);
 
-    float speed = sqrtf(b->velocity.x*b->velocity.x + b->velocity.z*b->velocity.z);
-    int clip = a->clipIdle;
-    if (b->dashTimer > 0.0f || speed > 6.5f) clip = a->clipRunning;
-    else if (speed > 0.6f) clip = a->clipWalking;
+    int clip;
+    float rate = 1.0f;
+    bool loop = true;
+
+    if (!b->alive)
+    {
+        clip = a->clipDeath;        // gated by the caller; plays once and holds
+        loop = false;
+    }
+    else if (b->dashTimer > 0.0f)
+    {
+        clip = a->clipRunF;
+        rate = 1.35f;
+    }
+    else
+    {
+        float speed = sqrtf(b->velocity.x*b->velocity.x + b->velocity.z*b->velocity.z);
+
+        if (speed > 0.6f)
+        {
+            float rel = atan2f(b->velocity.x, b->velocity.z) - b->renderYaw;
+            while (rel > PI) rel -= 2.0f*PI;
+            while (rel < -PI) rel += 2.0f*PI;
+            float deg = rel*RAD2DEG;
+
+            if (fabsf(deg) <= 35.0f)       clip = (speed <= 6.5f) ? a->clipWalk : a->clipRunF;
+            else if (deg >  35.0f && deg <=  105.0f) clip = a->clipRunFL;
+            else if (deg < -35.0f && deg >= -105.0f) clip = a->clipRunFR;
+            else if (deg >  105.0f && deg <  155.0f) clip = a->clipRunBL;
+            else if (deg < -105.0f && deg > -155.0f) clip = a->clipRunBR;
+            else { clip = a->clipRunB; rate = 1.30f; }   // walk-paced clip, run-paced feet
+
+            // Feet track the ground better when playback follows actual speed.
+            rate *= Clamp(speed/w->tune.moveSpeed, 0.6f, 1.3f);
+        }
+        else
+        {
+            // Recently fired: hold the combat stance instead of relaxing to idle.
+            clip = (b->revealTimer > 0.0f) ? a->clipCombat : a->clipIdle;
+        }
+    }
 
     if (clip != animClip[idx]) { animClip[idx] = clip; animTime[idx] = 0.0f; }
-    animTime[idx] += GetFrameTime()*w->tune.timeScale;
+    animTime[idx] += GetFrameTime()*w->tune.timeScale*rate;
 
     DrawShadow(a, b->position, 0.52f*b->spawnScale);
 
@@ -859,39 +920,55 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
         tint = (b->team == TEAM_PLAYER)
              ? ColorLerpC(WHITE, (Color){ 168, 202, 255, 255 }, 0.45f)
              : ColorLerpC(WHITE, (Color){ 255, 118, 118, 255 }, 0.50f);
-    if (b->hitFlash > 0.0f) tint = ColorLerpC(tint, WHITE, b->hitFlash);
 
     float dither = 0.0f;
-    if (b->inBush)
+    float emissive = 0.0f;
+
+    if (b->alive)
     {
-        dither = w->tune.concealDither;
-        tint = ColorLerpC(tint, (Color){ 108, 190, 120, 255 }, 0.30f);
+        if (b->hitFlash > 0.0f)
+        {
+            tint = ColorLerpC(tint, WHITE, b->hitFlash);
+            emissive = b->hitFlash*0.85f;
+        }
+        if (b->inBush)
+        {
+            dither = w->tune.concealDither;
+            tint = ColorLerpC(tint, (Color){ 108, 190, 120, 255 }, 0.30f);
+        }
     }
 
     AssetsDrawCharacter(a, b->position, b->renderYaw, b->spawnScale,
-                        clip, animTime[idx]*60.0f, tint, dither, b->hitFlash*0.85f,
+                        clip, animTime[idx]*60.0f, loop, tint, dither, emissive,
                         g_lightPos, g_lightCol, g_lightCount, w->camera.position);
 
-    if (b->superCharge >= 1.0f)
+    if (b->alive && b->superCharge >= 1.0f)
     {
         float pulse = 0.5f + 0.5f*sinf(w->time*6.0f);
         DrawGroundGlow(a, b->position, 1.05f,
                        (Color){ 255, 210, 90, (unsigned char)(70 + pulse*90) });
     }
-    if (b->dashTimer > 0.0f)
+    if (b->alive && b->dashTimer > 0.0f)
         DrawGroundGlow(a, b->position, 1.3f, (Color){ 255, 190, 100, 150 });
 }
 
 static void DrawBrawler(World *w, Assets *a, Brawler *b)
 {
-    if (!b->alive || !b->visible) return;
+    bool modelKit = (b->cls == CLASS_SHOTGUNNER && a->characterOk && w->tune.modelCharacter);
 
-    if (b->cls == CLASS_SHOTGUNNER && a->characterOk && w->tune.modelCharacter)
+    // A downed model plays its death clip and holds the final pose until close to the
+    // respawn; primitives keep vanishing into their particle burst as before.
+    if (!b->alive)
     {
-        DrawBrawlerCharacterModel(w, a, b);
+        if (modelKit && a->clipDeath >= 0 && b->respawnTimer > 0.5f)
+            DrawBrawlerCharacterModel(w, a, b);
         return;
     }
-    RenderBrawlerModel(a, b, w->time, b->inBush ? w->tune.concealDither : 0.0f, NULL);
+
+    if (!b->visible) return;
+
+    if (modelKit) DrawBrawlerCharacterModel(w, a, b);
+    else RenderBrawlerModel(a, b, w->time, b->inBush ? w->tune.concealDither : 0.0f, NULL);
 }
 
 //------------------------------------------------------------------------------------
@@ -972,6 +1049,7 @@ void RenderWorld(World *w)
     if (!a) return;
 
     AssetsSetCamera(a, w->camera.position);
+    AssetsSetToon(a, w->tune.toon, w->tune.toonBands);
     SubmitLights(w, a);
 
     BeginMode3D(w->camera);

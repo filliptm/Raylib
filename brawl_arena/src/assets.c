@@ -57,6 +57,8 @@ static const char *FS_LIGHTING =
 "uniform float fogDensity;\n"
 "uniform float emissive;\n"
 "uniform float dither;\n"
+"uniform float toonMode;\n"
+"uniform float toonBands;\n"
 "#define MAX_LIGHTS 8\n"
 "uniform vec3 lightPos[MAX_LIGHTS];\n"
 "uniform vec3 lightColor[MAX_LIGHTS];\n"
@@ -81,9 +83,10 @@ static const char *FS_LIGHTING =
 "    vec3 L = normalize(-sunDir);\n"
 "    float ndl = max(dot(N, L), 0.0);\n"
 "    float wrapped = ndl*0.72 + 0.28;\n"          // half-Lambert keeps shadowed sides readable
-"    vec3 light = ambientColor + sunColor*wrapped;\n"
+"    if (toonMode > 0.5) wrapped = (floor(wrapped*toonBands) + 0.5)/toonBands;\n"
+"    vec3 light = ambientColor*(1.0 + 0.5*toonMode) + sunColor*wrapped;\n"
 "    vec3 H = normalize(L + V);\n"
-"    float spec = pow(max(dot(N, H), 0.0), 42.0)*0.22*ndl;\n"
+"    float spec = pow(max(dot(N, H), 0.0), 42.0)*0.22*ndl*(1.0 - toonMode);\n"
 "    for (int i = 0; i < lightCount; i++)\n"
 "    {\n"
 "        vec3 delta = lightPos[i] - fragPosition;\n"
@@ -92,7 +95,7 @@ static const char *FS_LIGHTING =
 "        float pdl = max(dot(N, normalize(delta)), 0.0)*0.65 + 0.35;\n"
 "        light += lightColor[i]*att*pdl;\n"
 "    }\n"
-"    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0)*0.30;\n"
+"    float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0)*0.30*(1.0 - toonMode);\n"
 "    vec3 color = albedo*light + vec3(spec) + rim*sunColor*albedo;\n"
 "    color = mix(color, albedo, clamp(emissive, 0.0, 1.0));\n"
 "    float viewDist = length(viewPos - fragPosition);\n"
@@ -158,36 +161,132 @@ static const char *FS_POST =
 "in vec2 fragTexCoord;\n"
 "in vec4 fragColor;\n"
 "uniform sampler2D texture0;\n"
+"uniform sampler2D depthTex;\n"
 "uniform vec2 resolution;\n"
 "uniform float bloomStrength;\n"
 "uniform float vignetteStrength;\n"
+"uniform float outlineStrength;\n"
+"uniform float styleTime;\n"
+"uniform float stylePixelate;\n"
+"uniform float stylePainterly;\n"
+"uniform float styleHalftone;\n"
+"uniform float stylePosterize;\n"
+"uniform float styleGrain;\n"
+"uniform float styleCA;\n"
+"uniform float styleSaturation;\n"
+"uniform float styleBrightness;\n"
 "out vec4 finalColor;\n"
+"float linDepth(vec2 uv)\n"
+"{\n"
+"    float z = texture(depthTex, uv).r*2.0 - 1.0;\n"
+"    return (2.0*0.01*1000.0)/(1000.01 - z*999.99);\n"     // raylib near/far planes
+"}\n"
 "vec3 sampleBright(vec2 uv)\n"
 "{\n"
 "    vec3 c = texture(texture0, uv).rgb;\n"
 "    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
 "    return c*smoothstep(0.55, 1.0, lum);\n"
 "}\n"
+"vec3 kuwahara(vec2 uv)\n"                                 // painterly: pick the flattest quadrant
+"{\n"
+"    vec2 px = 1.0/resolution;\n"
+"    vec3 bestMean = vec3(0.0);\n"
+"    float bestVar = 1e9;\n"
+"    for (int q = 0; q < 4; q++)\n"
+"    {\n"
+"        vec2 dir = vec2((q == 0 || q == 3) ? -1.0 : 1.0, (q < 2) ? -1.0 : 1.0);\n"
+"        vec3 sum = vec3(0.0), sq = vec3(0.0);\n"
+"        for (int i = 0; i <= 3; i++)\n"
+"        for (int j = 0; j <= 3; j++)\n"
+"        {\n"
+"            vec3 c = texture(texture0, uv + px*dir*vec2(float(i), float(j))).rgb;\n"
+"            sum += c; sq += c*c;\n"
+"        }\n"
+"        vec3 mean = sum/16.0;\n"
+"        vec3 vr = sq/16.0 - mean*mean;\n"
+"        float v = vr.r + vr.g + vr.b;\n"
+"        if (v < bestVar) { bestVar = v; bestMean = mean; }\n"
+"    }\n"
+"    return bestMean;\n"
+"}\n"
 "void main()\n"
 "{\n"
 "    vec2 uv = fragTexCoord;\n"
-"    vec3 base = texture(texture0, uv).rgb;\n"
-"    vec3 bloom = vec3(0.0);\n"
+"\n"
+"    if (stylePixelate > 0.003)\n"                          // chunky retro blocks
+"    {\n"
+"        float block = 1.0 + stylePixelate*11.0;\n"
+"        uv = (floor(uv*resolution/block) + 0.5)*block/resolution;\n"
+"    }\n"
+"\n"
+"    vec3 base;\n"
+"    if (styleCA > 0.003)\n"                                // lens fringe, radial from centre
+"    {\n"
+"        vec2 off = (uv - 0.5)*styleCA*0.012;\n"
+"        base = vec3(texture(texture0, uv + off).r,\n"
+"                    texture(texture0, uv).g,\n"
+"                    texture(texture0, uv - off).b);\n"
+"    }\n"
+"    else base = texture(texture0, uv).rgb;\n"
+"\n"
+"    if (stylePainterly > 0.003) base = mix(base, kuwahara(uv), stylePainterly);\n"
+"    vec3 color = base;\n"
+"\n"
 "    if (bloomStrength > 0.001)\n"
 "    {\n"
 "        vec2 px = 1.0/resolution;\n"
+"        vec3 bloom = vec3(0.0);\n"
 "        for (int i = 0; i < 12; i++)\n"
 "        {\n"
-"            float a = float(i)*0.5235988;\n"      // 12 taps around a circle
+"            float a = float(i)*0.5235988;\n"
 "            vec2 dir = vec2(cos(a), sin(a));\n"
 "            bloom += sampleBright(uv + dir*px*3.0);\n"
 "            bloom += sampleBright(uv + dir*px*7.0);\n"
 "        }\n"
-"        bloom /= 24.0;\n"
+"        color += (bloom/24.0)*bloomStrength;\n"
 "    }\n"
-"    vec3 color = base + bloom*bloomStrength;\n"
+"\n"
+"    if (styleHalftone > 0.003)\n"                          // comic shading dots in the darks
+"    {\n"
+"        float lum = dot(color, vec3(0.299, 0.587, 0.114));\n"
+"        vec2 p = mat2(0.707, -0.707, 0.707, 0.707)*(fragTexCoord*resolution/7.0);\n"
+"        float d = length(fract(p) - 0.5);\n"
+"        float radius = sqrt(clamp(1.0 - lum, 0.0, 1.0))*0.55;\n"
+"        float dot_ = smoothstep(radius, radius - 0.14, d);\n"
+"        float amt = dot_*(1.0 - smoothstep(0.55, 0.95, lum));\n"
+"        color = mix(color, color*0.22, amt*styleHalftone);\n"
+"    }\n"
+"\n"
+"    if (stylePosterize > 0.003)\n"                         // crush to flat paint steps
+"        color = mix(color, floor(color*5.0 + 0.5)/5.0, stylePosterize);\n"
+"\n"
+"    if (outlineStrength > 0.001)\n"                        // ink lines from depth edges
+"    {\n"
+"        vec2 px = 2.2/resolution;\n"
+"        float dc = linDepth(fragTexCoord);\n"
+"        float d = 0.0;\n"
+"        d = max(d, abs(linDepth(fragTexCoord + vec2(px.x, 0.0)) - dc));\n"
+"        d = max(d, abs(linDepth(fragTexCoord - vec2(px.x, 0.0)) - dc));\n"
+"        d = max(d, abs(linDepth(fragTexCoord + vec2(0.0, px.y)) - dc));\n"
+"        d = max(d, abs(linDepth(fragTexCoord - vec2(0.0, px.y)) - dc));\n"
+"        float t = 0.20 + dc*0.03;\n"
+"        float edge = clamp((d - t)/t, 0.0, 1.0);\n"
+"        color = mix(color, vec3(0.02, 0.02, 0.05), edge*outlineStrength);\n"
+"    }\n"
+"\n"
+"    float lum2 = dot(color, vec3(0.299, 0.587, 0.114));\n"
+"    color = mix(vec3(lum2), color, styleSaturation);\n"
+"    color *= styleBrightness;\n"
 "    color = mix(color, color*color*(3.0 - 2.0*color), 0.18);\n"   // soft S-curve contrast
-"    vec2 centred = uv - 0.5;\n"
+"\n"
+"    if (styleGrain > 0.003)\n"                             // animated film grain
+"    {\n"
+"        float n = fract(sin(dot(fragTexCoord*resolution + styleTime*137.0,\n"
+"                                vec2(12.9898, 78.233)))*43758.5453);\n"
+"        color += (n - 0.5)*0.16*styleGrain;\n"
+"    }\n"
+"\n"
+"    vec2 centred = fragTexCoord - 0.5;\n"
 "    float vig = 1.0 - dot(centred, centred)*vignetteStrength;\n"
 "    color *= clamp(vig, 0.0, 1.0);\n"
 "    finalColor = vec4(color, 1.0);\n"
@@ -271,6 +370,8 @@ static const char *FS_GRASS =
 "uniform float fogDensity;\n"
 "uniform vec3 baseColor;\n"
 "uniform vec3 tipColor;\n"
+"uniform float toonMode;\n"
+"uniform float toonBands;\n"
 "#define MAX_LIGHTS 8\n"
 "uniform vec3 lightPos[MAX_LIGHTS];\n"
 "uniform vec3 lightColor[MAX_LIGHTS];\n"
@@ -286,6 +387,7 @@ static const char *FS_GRASS =
 "    if (dot(N, V) < 0.0) N = -N;\n"                // foliage is two sided
 "    vec3 L = normalize(-sunDir);\n"
 "    float ndl = max(dot(N, L), 0.0)*0.6 + 0.4;\n"
+"    if (toonMode > 0.5) ndl = (floor(ndl*toonBands) + 0.5)/toonBands;\n"
 "    vec3 light = ambientColor + sunColor*ndl;\n"
 "    for (int i = 0; i < lightCount; i++)\n"
 "    {\n"
@@ -678,12 +780,25 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->locResolution = GetShaderLocation(a->post, "resolution");
         a->locBloom      = GetShaderLocation(a->post, "bloomStrength");
         a->locVignette   = GetShaderLocation(a->post, "vignetteStrength");
+        a->locDepthTex   = GetShaderLocation(a->post, "depthTex");
+        a->locOutline    = GetShaderLocation(a->post, "outlineStrength");
+        a->locStyleTime  = GetShaderLocation(a->post, "styleTime");
+        a->locPixelate   = GetShaderLocation(a->post, "stylePixelate");
+        a->locPainterly  = GetShaderLocation(a->post, "stylePainterly");
+        a->locHalftone   = GetShaderLocation(a->post, "styleHalftone");
+        a->locPosterize  = GetShaderLocation(a->post, "stylePosterize");
+        a->locGrain      = GetShaderLocation(a->post, "styleGrain");
+        a->locCA         = GetShaderLocation(a->post, "styleCA");
+        a->locSaturation = GetShaderLocation(a->post, "styleSaturation");
+        a->locBrightness = GetShaderLocation(a->post, "styleBrightness");
 
         Vector2 res = { (float)screenW, (float)screenH };
         SetShaderValue(a->post, a->locResolution, &res, SHADER_UNIFORM_VEC2);
     }
 
     a->locDither = GetShaderLocation(a->lighting, "dither");
+    a->locToon = GetShaderLocation(a->lighting, "toonMode");
+    a->locToonBands = GetShaderLocation(a->lighting, "toonBands");
 
     //--- Skinned character ----------------------------------------------------
     a->skinned = LoadShaderFromMemory(VS_SKINNED, FS_LIGHTING);
@@ -704,6 +819,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->kUvScale    = GetShaderLocation(a->skinned, "uvScale");
         a->kEmissive   = GetShaderLocation(a->skinned, "emissive");
         a->kDither     = GetShaderLocation(a->skinned, "dither");
+        a->kToon       = GetShaderLocation(a->skinned, "toonMode");
+        a->kToonBands  = GetShaderLocation(a->skinned, "toonBands");
         a->kLightPos   = GetShaderLocation(a->skinned, "lightPos");
         a->kLightColor = GetShaderLocation(a->skinned, "lightColor");
         a->kLightCount = GetShaderLocation(a->skinned, "lightCount");
@@ -733,15 +850,41 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     {
         a->charAnims = LoadModelAnimations(CHARACTER_MODEL_PATH, &a->charAnimCount);
 
-        // Resolve clips by name so a regenerated file with reordered tracks cannot
-        // silently swap running for T-pose.
-        a->clipIdle = 1; a->clipRunning = 2; a->clipWalking = 3;
+        // Resolve clips by substring so a regenerated file with reordered or renamed
+        // tracks cannot silently swap running for T-pose. Missing directionals fall
+        // back to the forward run at draw time.
+        a->clipIdle = a->clipCombat = a->clipWalk = -1;
+        a->clipRunF = a->clipRunB = a->clipRunFL = a->clipRunFR = -1;
+        a->clipRunBL = a->clipRunBR = a->clipDeath = -1;
+
         for (int i = 0; i < a->charAnimCount; i++)
         {
-            if (strcmp(a->charAnims[i].name, "idle") == 0) a->clipIdle = i;
-            else if (strcmp(a->charAnims[i].name, "running") == 0) a->clipRunning = i;
-            else if (strcmp(a->charAnims[i].name, "walking") == 0) a->clipWalking = i;
+            const char *n = a->charAnims[i].name;
+            if (strstr(n, "idle") && a->clipIdle < 0) a->clipIdle = i;
+            else if (strstr(n, "combat") && a->clipCombat < 0) a->clipCombat = i;
+            else if (strstr(n, "forwardleft") && a->clipRunFL < 0) a->clipRunFL = i;
+            else if (strstr(n, "forwardright") && a->clipRunFR < 0) a->clipRunFR = i;
+            else if (strstr(n, "backleft") && a->clipRunBL < 0) a->clipRunBL = i;
+            else if (strstr(n, "backright") && a->clipRunBR < 0) a->clipRunBR = i;
+            else if (strstr(n, "backward") && a->clipRunB < 0) a->clipRunB = i;
+            else if (strstr(n, "running") && a->clipRunF < 0) a->clipRunF = i;
+            else if (strstr(n, "walking") && a->clipWalk < 0) a->clipWalk = i;
+            else if ((strstr(n, "dead") || strstr(n, "death")) && a->clipDeath < 0) a->clipDeath = i;
         }
+
+        if (a->clipIdle < 0) a->clipIdle = 0;
+        if (a->clipRunF < 0) a->clipRunF = a->clipIdle;
+        if (a->clipWalk < 0) a->clipWalk = a->clipRunF;
+        if (a->clipCombat < 0) a->clipCombat = a->clipIdle;
+        if (a->clipRunB < 0) a->clipRunB = a->clipRunF;
+        if (a->clipRunFL < 0) a->clipRunFL = a->clipRunF;
+        if (a->clipRunFR < 0) a->clipRunFR = a->clipRunF;
+        if (a->clipRunBL < 0) a->clipRunBL = a->clipRunB;
+        if (a->clipRunBR < 0) a->clipRunBR = a->clipRunB;
+
+        TraceLog(LOG_INFO, "CHARACTER CLIPS: idle=%d combat=%d walk=%d F=%d B=%d FL=%d FR=%d BL=%d BR=%d death=%d",
+                 a->clipIdle, a->clipCombat, a->clipWalk, a->clipRunF, a->clipRunB,
+                 a->clipRunFL, a->clipRunFR, a->clipRunBL, a->clipRunBR, a->clipDeath);
 
         // Normalise whatever the source units are, so swapping in another model does not
         // mean re-tuning every scale in the game.
@@ -756,7 +899,7 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
 
         if (a->charAnims && a->charAnimCount > 0)
         {
-            UpdateModelAnimationBones(a->character, a->charAnims[0], 0);
+            UpdateModelAnimationBones(a->character, a->charAnims[a->clipIdle], 0);
 
             for (int i = 0; i < a->character.meshCount; i++)
             {
@@ -841,6 +984,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->gFogDensity    = GetShaderLocation(a->grass, "fogDensity");
         a->gBaseColor     = GetShaderLocation(a->grass, "baseColor");
         a->gTipColor      = GetShaderLocation(a->grass, "tipColor");
+        a->gToon          = GetShaderLocation(a->grass, "toonMode");
+        a->gToonBands     = GetShaderLocation(a->grass, "toonBands");
         a->gLightPos      = GetShaderLocation(a->grass, "lightPos");
         a->gLightColor    = GetShaderLocation(a->grass, "lightColor");
         a->gLightCount    = GetShaderLocation(a->grass, "lightCount");
@@ -891,7 +1036,42 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 
-    a->sceneTarget = LoadRenderTexture(screenW, screenH);
+    // Hand-built render target: LoadRenderTexture gives depth as a renderbuffer,
+    // which cannot be sampled. The ink-outline pass reads depth, so it needs a
+    // depth TEXTURE attached instead.
+    a->sceneTarget.id = rlLoadFramebuffer();
+    if (a->sceneTarget.id > 0)
+    {
+        rlEnableFramebuffer(a->sceneTarget.id);
+
+        a->sceneTarget.texture.id = rlLoadTexture(NULL, screenW, screenH,
+                                                  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        a->sceneTarget.texture.width = screenW;
+        a->sceneTarget.texture.height = screenH;
+        a->sceneTarget.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        a->sceneTarget.texture.mipmaps = 1;
+
+        a->sceneTarget.depth.id = rlLoadTextureDepth(screenW, screenH, false);
+        a->sceneTarget.depth.width = screenW;
+        a->sceneTarget.depth.height = screenH;
+        a->sceneTarget.depth.mipmaps = 1;
+
+        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.texture.id,
+                            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.depth.id,
+                            RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+
+        a->depthOk = rlFramebufferComplete(a->sceneTarget.id);
+        rlDisableFramebuffer();
+    }
+
+    if (!a->depthOk)
+    {
+        // No sampleable depth: outlines are off, everything else still works.
+        if (a->sceneTarget.id > 0) rlUnloadFramebuffer(a->sceneTarget.id);
+        a->sceneTarget = LoadRenderTexture(screenW, screenH);
+        TraceLog(LOG_WARNING, "TOON: depth texture unavailable, ink outlines disabled");
+    }
     SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
 
     return a->lightingOk;
@@ -915,7 +1095,13 @@ void AssetsUnload(Assets *a)
     UnloadTexture(a->texGlow);
     UnloadTexture(a->texGrass);
 
-    UnloadRenderTexture(a->sceneTarget);
+    if (a->depthOk)
+    {
+        rlUnloadFramebuffer(a->sceneTarget.id);
+        rlUnloadTexture(a->sceneTarget.texture.id);
+        rlUnloadTexture(a->sceneTarget.depth.id);
+    }
+    else UnloadRenderTexture(a->sceneTarget);
 
     // The material borrows the shader, so drop its reference before unloading it.
     a->mat.shader = (Shader){ 0 };
@@ -974,9 +1160,9 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos)
 }
 
 void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
-                         int animIndex, float frame, Color tint, float dither, float emissive,
-                         const Vector3 *lightPos, const Vector3 *lightColor, int lightCount,
-                         Vector3 viewPos)
+                         int animIndex, float frame, bool loop, Color tint, float dither,
+                         float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
+                         int lightCount, Vector3 viewPos)
 {
     if (!a->characterOk) return;
 
@@ -1002,8 +1188,13 @@ void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
         ModelAnimation anim = a->charAnims[idx];
         if (anim.frameCount > 0)
         {
-            int f = (int)frame % anim.frameCount;
-            if (f < 0) f += anim.frameCount;
+            int f = (int)frame;
+            if (loop)
+            {
+                f %= anim.frameCount;
+                if (f < 0) f += anim.frameCount;
+            }
+            else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
             UpdateModelAnimationBones(a->character, anim, f);
         }
     }
@@ -1020,6 +1211,46 @@ void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
         Material mat = a->character.materials[a->character.meshMaterial[i]];
         mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
         DrawMesh(a->character.meshes[i], mat, m);
+    }
+}
+
+void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrength)
+{
+    if (!a->postOk) return;
+
+    SetShaderValue(a->post, a->locBloom, &t->bloom, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locVignette, &t->styleVignette, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locOutline, &outlineStrength, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locStyleTime, &time, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locPixelate, &t->stylePixelate, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locPainterly, &t->stylePainterly, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locHalftone, &t->styleHalftone, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locPosterize, &t->stylePosterize, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locGrain, &t->styleGrain, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locCA, &t->styleCA, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locSaturation, &t->styleSaturation, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locBrightness, &t->styleBrightness, SHADER_UNIFORM_FLOAT);
+}
+
+void AssetsSetToon(Assets *a, bool enabled, float bands)
+{
+    float mode = enabled ? 1.0f : 0.0f;
+    if (bands < 2.0f) bands = 2.0f;
+
+    if (a->lightingOk)
+    {
+        SetShaderValue(a->lighting, a->locToon, &mode, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->lighting, a->locToonBands, &bands, SHADER_UNIFORM_FLOAT);
+    }
+    if (a->skinnedOk)
+    {
+        SetShaderValue(a->skinned, a->kToon, &mode, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->skinned, a->kToonBands, &bands, SHADER_UNIFORM_FLOAT);
+    }
+    if (a->grassOk)
+    {
+        SetShaderValue(a->grass, a->gToon, &mode, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->grass, a->gToonBands, &bands, SHADER_UNIFORM_FLOAT);
     }
 }
 

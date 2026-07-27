@@ -26,9 +26,9 @@
 #define LABEL_W 132
 #define VALUE_W 62      // right-hand column reserved for a slider's numeric readout
 
-typedef enum { TAB_MATCH = 0, TAB_BOTS, TAB_PLAYER, TAB_KIT, TAB_WORLD, TAB_COUNT } PanelTab;
+typedef enum { TAB_MATCH = 0, TAB_BOTS, TAB_PLAYER, TAB_KIT, TAB_STYLE, TAB_WORLD, TAB_COUNT } PanelTab;
 
-static const char *TAB_NAMES[TAB_COUNT] = { "MATCH", "BOTS", "PLAYER", "KIT", "WORLD" };
+static const char *TAB_NAMES[TAB_COUNT] = { "MATCH", "BOTS", "PLAYER", "KIT", "STYLE", "WORLD" };
 
 // Open on launch: this build is a sandbox, so the tuning panel is the point of entry.
 static bool g_open = true;
@@ -468,6 +468,54 @@ static void TabKit(UI *ui)
     }
 }
 
+static void TabStyle(UI *ui)
+{
+    World *w = ui->world;
+    Tuning *t = &w->tune;
+
+    uiSection(ui, "MASTER");
+    uiToggle(ui, "Post effects", &t->postFx);
+    if (!t->postFx)
+    {
+        uiText(ui, "Everything below needs the post pass on.", TEXT_DIM);
+        return;
+    }
+
+    uiSection(ui, "ILLUSTRATED");
+    uiToggle(ui, "Toon light bands", &t->toon);
+    uiSliderF(ui, "Bands", &t->toonBands, 2.0f, 4.0f, "%.0f");
+    uiSliderF(ui, "Ink outline", &t->toonOutline, 0.0f, 1.0f, "%.2f");
+
+    uiSection(ui, "CANVAS");
+    uiSliderF(ui, "Painterly", &t->stylePainterly, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Pixelate", &t->stylePixelate, 0.0f, 1.0f, "%.2f");
+
+    uiSection(ui, "PRINT");
+    uiSliderF(ui, "Halftone dots", &t->styleHalftone, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Posterize", &t->stylePosterize, 0.0f, 1.0f, "%.2f");
+
+    uiSection(ui, "GRADE");
+    uiSliderF(ui, "Saturation", &t->styleSaturation, 0.0f, 2.0f, "%.2f");
+    uiSliderF(ui, "Brightness", &t->styleBrightness, 0.6f, 1.5f, "%.2f");
+    uiSliderF(ui, "Bloom", &t->bloom, 0.0f, 3.0f, "%.2f");
+    uiSliderF(ui, "Vignette", &t->styleVignette, 0.0f, 1.5f, "%.2f");
+
+    uiSection(ui, "FILM");
+    uiSliderF(ui, "Grain", &t->styleGrain, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Chromatic fringe", &t->styleCA, 0.0f, 1.0f, "%.2f");
+
+    uiSection(ui, "");
+    if (uiButton(ui, "Reset style to defaults"))
+    {
+        t->toon = true; t->toonBands = 3.0f; t->toonOutline = 0.85f;
+        t->stylePixelate = t->stylePainterly = t->styleHalftone = 0.0f;
+        t->stylePosterize = t->styleGrain = t->styleCA = 0.0f;
+        t->styleSaturation = 1.25f; t->styleBrightness = 1.10f;
+        t->styleVignette = 0.85f; t->bloom = 0.85f;
+        ConfigMarkDirty();
+    }
+}
+
 static void TabWorld(UI *ui)
 {
     World *w = ui->world;
@@ -491,7 +539,6 @@ static void TabWorld(UI *ui)
 
     uiSection(ui, "LOOK");
     uiToggle(ui, "Scrapper rigged model", &t->modelCharacter);
-    uiToggle(ui, "Bloom + vignette", &t->postFx);
     uiSliderF(ui, "Bloom strength", &t->bloom, 0.0f, 3.0f, "%.2f");
 
     uiSection(ui, "DEBUG");
@@ -585,6 +632,7 @@ void CommandCenterDraw(World *w)
         case TAB_BOTS:   TabBots(&ui); break;
         case TAB_PLAYER: TabPlayer(&ui); break;
         case TAB_KIT:    TabKit(&ui); break;
+        case TAB_STYLE:  TabStyle(&ui); break;
         case TAB_WORLD:  TabWorld(&ui); break;
         default: break;
     }

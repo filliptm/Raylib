@@ -95,6 +95,18 @@ void TuningSetDefaults(Tuning *t)
     t->infiniteAmmo  = false;
     t->showDebug     = false;
     t->modelCharacter = true;    // rigged model on the menu podium; toggle on WORLD tab
+    t->toon           = true;    // the illustrated look; toggle on WORLD tab
+    t->toonBands      = 3.0f;
+    t->toonOutline    = 0.85f;
+    t->stylePixelate  = 0.0f;
+    t->stylePainterly = 0.0f;
+    t->styleHalftone  = 0.0f;
+    t->stylePosterize = 0.0f;
+    t->styleGrain     = 0.0f;
+    t->styleCA        = 0.0f;
+    t->styleSaturation = 1.25f;  // replicates the original toon grade
+    t->styleBrightness = 1.10f;
+    t->styleVignette   = 0.85f;
     t->postFx        = true;
     t->bloom         = 0.85f;
 

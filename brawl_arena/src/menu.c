@@ -212,6 +212,7 @@ static void DrawPodiumScene(World *w)
     Vector3 lightCol[2] = { { 0.85f, 0.72f, 0.45f }, { 0.32f, 0.48f, 0.80f } };
     (void)lightCol;
     AssetsSetCamera(a, g_podium.position);
+    AssetsSetToon(a, w->tune.toon, w->tune.toonBands);
     AssetsSetLights(a, lightPos, lightCol, 2);
 
     Camera3D cam = g_podium;
@@ -248,7 +249,7 @@ static void DrawPodiumScene(World *w)
             // stays white so the model's own texture reads - the kit accent lives on
             // the podium ring instead.
             AssetsDrawCharacter(a, g_preview.position, g_preview.renderYaw, 1.0f,
-                                a->clipIdle, g_time*60.0f, WHITE, 0.0f, 0.0f,
+                                a->clipIdle, g_time*60.0f, true, WHITE, 0.0f, 0.0f,
                                 lightPos, lightCol, 2, cam.position);
         }
         else RenderBrawlerModel(a, &g_preview, g_time, 0.0f, &accent);
