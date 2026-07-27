@@ -23,14 +23,15 @@ static void DrawCenteredLabel(const char *text, int centerX, int y, int size, Co
 
 // Reload state as segmented tabs, one per ammo pip. Ammo is fractional, so a partly
 // refilled pip shows how far along the reload is.
-static void DrawAmmoTabs(int x, int y, int width, float ammo)
+static void DrawAmmoTabs(int x, int y, int width, float ammo, int maxAmmo)
 {
     const int gap = 3;
     const int h = 5;
-    int tabW = (width - gap * (MAX_AMMO - 1)) / MAX_AMMO;
+    if (maxAmmo < 1) return;
+    int tabW = (width - gap * (maxAmmo - 1)) / maxAmmo;
     if (tabW < 1) return;
 
-    for (int i = 0; i < MAX_AMMO; i++)
+    for (int i = 0; i < maxAmmo; i++)
     {
         int tx = x + i * (tabW + gap);
         float fill = Clamp(ammo - i, 0.0f, 1.0f);
@@ -88,7 +89,7 @@ void HudDrawBars(World *w)
         }
         DrawRectangle(x, y, (int)(bw * ratio), bh, fill);
 
-        if (mine) DrawAmmoTabs(x, y + bh + 5, bw, b->ammo);
+        if (mine) DrawAmmoTabs(x, y + bh + 5, bw, b->ammo, WEAPONS[b->cls].maxAmmo);
 
         // Super-ready pip beside the bar.
         if (b->superCharge >= 1.0f)
@@ -249,7 +250,7 @@ void HudDrawPanel(World *w)
 
         if (w->match.overTimer > 0.9f)
         {
-            int remain = (int)ceilf(MATCH_RESULT_HOLD - w->match.overTimer);
+            int remain = (int)ceilf(w->tune.matchResultHold - w->match.overTimer);
             if (remain < 0) remain = 0;
 
             const char *back = TextFormat("Returning to the menu in %d", remain);

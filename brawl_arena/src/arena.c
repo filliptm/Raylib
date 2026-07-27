@@ -7,38 +7,41 @@
 // Hand-authored map.
 //   '#' wall   'c' crate   'b' bush   '.' floor   'P' player spawn   'E' enemy spawn
 //
-// Three spawns a side. The first 'P' found is the human's, so it sits centre-back.
-// The middle of the map is deliberately left open: that corridor is where the gem
-// vent sits, and it has to be worth fighting over.
+// Helios-9 is a vertically mirrored open station atrium: short docking-bay shields,
+// destructible flank stations, hydroponic concealment pockets, and four strategic
+// reactor pylons leave broad movement bands around the gem vent. The first 'P' found
+// is the human's, so the centre-back player spawn intentionally appears one row before
+// the two side spawns.
 //
 // Rows shorter than ARENA_W are padded with floor, and the border is forced to wall,
 // so the layout stays easy to edit without counting characters.
 //------------------------------------------------------------------------------------
-// Enemy spawns sit along the top edge and the player along the bottom, far enough
-// apart that nobody is in weapon range the instant they respawn.
+// Cover is clustered into landmarks rather than repeated across every row. This keeps
+// the arena readable, gives long-range kits room to work, and still offers short walls,
+// bushes, and breakable objects for rotations or retreats.
 static const char *MAP[] = {
     "#################################",
     "#...............................#",
-    "#..bb.....cc....E....cc.....bb..#",
-    "#..bb.....cc.........cc.....bb..#",
-    "#....E....cc.........cc....E....#",
-    "#..###......................###.#",
-    "#..###........bbbbb.........###.#",
-    "#.............bbbbb.............#",
-    "#.....cc......bbbbb.......cc....#",
-    "#.....cc..................cc....#",
+    "#......E.................E......#",
+    "#...............E...............#",
+    "#.....##.......###.......##.....#",
+    "#.........cc.........cc.........#",
     "#...............................#",
-    "#..###.....####...####.....###..#",
-    "#..###.....####...####.....###..#",
+    "#...bbb...##.........##...bbb...#",
+    "#...bbb...#c.........c#...bbb...#",
+    "#.......c...##.....##...c.......#",
+    "#............#.....#............#",
+    "#...bbb...c...........c...bbb...#",
+    "#............#.....#............#",
+    "#.......c...##.....##...c.......#",
+    "#...bbb...#c.........c#...bbb...#",
+    "#...bbb...##.........##...bbb...#",
     "#...............................#",
-    "#.....cc......bbbbb.......cc....#",
-    "#.....cc......bbbbb.......cc....#",
-    "#.............bbbbb.............#",
-    "#..###......................###.#",
-    "#..###......................###.#",
-    "#.........cc....P....cc.........#",
-    "#..bb.P...cc.........cc...P.bb..#",
-    "#..bb.....cc.........cc.....bb..#",
+    "#.........cc.........cc.........#",
+    "#.....##.......###.......##.....#",
+    "#...............P...............#",
+    "#......P.................P......#",
+    "#...............................#",
     "#################################",
 };
 
@@ -59,7 +62,7 @@ bool ArenaInBounds(int tx, int tz)
     return tx >= 0 && tx < ARENA_W && tz >= 0 && tz < ARENA_H;
 }
 
-void ArenaLoad(Arena *a)
+void ArenaLoad(Arena *a, int crateHealth)
 {
     memset(a, 0, sizeof(Arena));
 
@@ -80,7 +83,7 @@ void ArenaLoad(Arena *a)
             switch (c)
             {
                 case '#': t->type = TILE_WALL; break;
-                case 'c': t->type = TILE_CRATE; t->health = CRATE_HEALTH; break;
+                case 'c': t->type = TILE_CRATE; t->health = crateHealth; break;
                 case 'b': t->type = TILE_BUSH; break;
                 case 'P':
                     t->type = TILE_FLOOR;

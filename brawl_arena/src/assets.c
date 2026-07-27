@@ -1,18 +1,50 @@
 /*******************************************************************************************
 *   ASSETS
 *
-*   Procedural texture generation, unit meshes, and the scene / post shaders.
-*   Nothing here is loaded from disk: textures are synthesised from value noise and the
-*   shader source is embedded, so the game has no resource directory to lose.
+*   Procedural texture generation, unit meshes, the scene/post shaders, optional
+*   per-kit rigged GLBs, and the static Kenney station models. Imported characters and
+*   environment pieces fall back independently, so a missing file cannot stop startup.
 ********************************************************************************************/
 #include "assets.h"
 
-#define CHARACTER_MODEL_PATH "resources/sentinel.glb"
 #include "rlgl.h"
 #include "raymath.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+static const char *CHARACTER_MODEL_PATHS[CLASS_COUNT] = {
+    [CLASS_SHOTGUNNER] = "resources/sentinel.glb",
+    [CLASS_BRUISER] = "resources/ironclad_guardian.glb",
+    [CLASS_HEALER] = "resources/gaia_guardian.glb"
+};
+
+#define STATION_ROOT "resources/environment/kenney_space_station/models/"
+
+static const char *STATION_MODEL_PATHS[STATION_MODEL_COUNT] = {
+    [STATION_FLOOR_PANEL] = STATION_ROOT "floor-panel.glb",
+    [STATION_FLOOR_DETAIL] = STATION_ROOT "floor-detail.glb",
+    [STATION_STRUCTURE_PANEL] = STATION_ROOT "structure-panel.glb",
+    [STATION_STRUCTURE] = STATION_ROOT "structure.glb",
+    [STATION_STRUCTURE_BARRIER] = STATION_ROOT "structure-barrier.glb",
+    [STATION_WALL] = STATION_ROOT "wall.glb",
+    [STATION_WALL_CORNER] = STATION_ROOT "wall-corner.glb",
+    [STATION_WALL_PILLAR] = STATION_ROOT "wall-pillar.glb",
+    [STATION_WALL_WINDOW] = STATION_ROOT "wall-window.glb",
+    [STATION_WALL_BANNER] = STATION_ROOT "wall-banner.glb",
+    [STATION_DOOR_DOUBLE_CLOSED] = STATION_ROOT "door-double-closed.glb",
+    [STATION_CONTAINER] = STATION_ROOT "container.glb",
+    [STATION_CONTAINER_WIDE] = STATION_ROOT "container-wide.glb",
+    [STATION_CONTAINER_TALL] = STATION_ROOT "container-tall.glb",
+    [STATION_COMPUTER_SYSTEM] = STATION_ROOT "computer-system.glb",
+    [STATION_COMPUTER_WIDE] = STATION_ROOT "computer-wide.glb",
+    [STATION_DISPLAY_WALL] = STATION_ROOT "display-wall.glb",
+    [STATION_PIPE] = STATION_ROOT "pipe.glb",
+    [STATION_PIPE_BEND] = STATION_ROOT "pipe-bend.glb",
+    [STATION_RAIL] = STATION_ROOT "rail.glb",
+    [STATION_TABLE_DISPLAY_PLANET] = STATION_ROOT "table-display-planet.glb",
+    [STATION_SKIP] = STATION_ROOT "skip.glb"
+};
 
 //------------------------------------------------------------------------------------
 // Scene shader. Half-Lambert key light, cheap Blinn specular, a rim term to lift
@@ -733,6 +765,134 @@ static Mesh MakeGrassBlade(void)
     return m;
 }
 
+static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
+                                const char *path, const char *label)
+{
+    character->model = LoadModel(path);
+    character->ok = IsModelValid(character->model) && character->model.meshCount > 0;
+
+    if (!character->ok)
+    {
+        TraceLog(LOG_WARNING, "CHARACTER %s: %s not loaded, falling back to primitives",
+                 label, path);
+        return;
+    }
+
+    character->anims = LoadModelAnimations(path, &character->animCount);
+    character->clipIdle = character->clipCombat = character->clipWalk = -1;
+    character->clipRunF = character->clipRunB = character->clipRunFL = character->clipRunFR = -1;
+    character->clipRunBL = character->clipRunBR = character->clipDeath = -1;
+
+    // Resolve by substring so reordered source tracks cannot silently swap clips.
+    for (int i = 0; i < character->animCount; i++)
+    {
+        const char *n = character->anims[i].name;
+        if (strstr(n, "idle") && character->clipIdle < 0) character->clipIdle = i;
+        else if (strstr(n, "combat") && character->clipCombat < 0) character->clipCombat = i;
+        else if (strstr(n, "forwardleft") && character->clipRunFL < 0) character->clipRunFL = i;
+        else if (strstr(n, "forwardright") && character->clipRunFR < 0) character->clipRunFR = i;
+        else if (strstr(n, "backleft") && character->clipRunBL < 0) character->clipRunBL = i;
+        else if (strstr(n, "backright") && character->clipRunBR < 0) character->clipRunBR = i;
+        else if (strstr(n, "backward") && character->clipRunB < 0) character->clipRunB = i;
+        else if (strstr(n, "running") && character->clipRunF < 0) character->clipRunF = i;
+        else if (strstr(n, "walking") && character->clipWalk < 0) character->clipWalk = i;
+        else if ((strstr(n, "dead") || strstr(n, "death")) && character->clipDeath < 0)
+            character->clipDeath = i;
+    }
+
+    character->clipIdle = character->clipIdle < 0 ? 0 : character->clipIdle;
+    character->clipRunF = character->clipRunF < 0 ? character->clipIdle : character->clipRunF;
+    character->clipWalk = character->clipWalk < 0 ? character->clipRunF : character->clipWalk;
+    character->clipCombat = character->clipCombat < 0 ? character->clipIdle : character->clipCombat;
+    character->clipRunB = character->clipRunB < 0 ? character->clipRunF : character->clipRunB;
+    character->clipRunFL = character->clipRunFL < 0 ? character->clipRunF : character->clipRunFL;
+    character->clipRunFR = character->clipRunFR < 0 ? character->clipRunF : character->clipRunFR;
+    character->clipRunBL = character->clipRunBL < 0 ? character->clipRunB : character->clipRunBL;
+    character->clipRunBR = character->clipRunBR < 0 ? character->clipRunB : character->clipRunBR;
+
+    // Reproduce the skinned vertex shader's pose when measuring. Meshy models can
+    // encode most of their apparent size in bone matrices, making raw bounds useless.
+    float lo = 1e30f, hi = -1e30f;
+    if (character->anims && character->animCount > 0)
+    {
+        UpdateModelAnimationBones(character->model,
+                                  character->anims[character->clipIdle], 0);
+        for (int i = 0; i < character->model.meshCount; i++)
+        {
+            Mesh *mesh = &character->model.meshes[i];
+            if (!mesh->vertices || !mesh->boneMatrices ||
+                !mesh->boneIds || !mesh->boneWeights) continue;
+
+            for (int k = 0; k < mesh->vertexCount; k++)
+            {
+                Vector3 v = { mesh->vertices[k*3], mesh->vertices[k*3 + 1],
+                              mesh->vertices[k*3 + 2] };
+                float y = 0.0f;
+                for (int j = 0; j < 4; j++)
+                {
+                    float weight = mesh->boneWeights[k*4 + j];
+                    int bone = mesh->boneIds[k*4 + j];
+                    if (weight <= 0.0f || bone < 0 || bone >= mesh->boneCount) continue;
+                    y += Vector3Transform(v, mesh->boneMatrices[bone]).y*weight;
+                }
+                if (y < lo) lo = y;
+                if (y > hi) hi = y;
+            }
+        }
+    }
+
+    if (hi <= lo)
+    {
+        BoundingBox bb = GetModelBoundingBox(character->model);
+        lo = bb.min.y;
+        hi = bb.max.y;
+    }
+
+    float height = hi - lo;
+    character->scale = height > 0.000001f ? CHARACTER_TARGET_H/height : 1.0f;
+    character->footOffset = -lo*character->scale;
+
+    if (a->skinnedOk)
+        for (int i = 0; i < character->model.materialCount; i++)
+            character->model.materials[i].shader = a->skinned;
+
+    TraceLog(LOG_INFO,
+             "CHARACTER %s: %d verts, %d bones, %d clips, posed height %.2f, scale %.5f",
+             label, character->model.meshes[0].vertexCount, character->model.boneCount,
+             character->animCount, height, character->scale);
+}
+
+static void LoadStationAssets(Assets *a)
+{
+    a->texStationOrange = LoadTexture(STATION_ROOT "Textures/colormap.png");
+    a->texStationPurple = LoadTexture(STATION_ROOT "Textures/variation-a.png");
+    a->stationTexturesOk = a->texStationOrange.id > 0 && a->texStationPurple.id > 0;
+
+    if (a->texStationOrange.id > 0)
+        SetTextureFilter(a->texStationOrange, TEXTURE_FILTER_BILINEAR);
+    if (a->texStationPurple.id > 0)
+        SetTextureFilter(a->texStationPurple, TEXTURE_FILTER_BILINEAR);
+
+    int loaded = 0;
+    for (int id = 0; id < STATION_MODEL_COUNT; id++)
+    {
+        StationModel *station = &a->station[id];
+        const char *path = STATION_MODEL_PATHS[id];
+        if (!path) continue;
+
+        station->model = LoadModel(path);
+        station->ok = IsModelValid(station->model) && station->model.meshCount > 0;
+        if (station->ok) loaded++;
+        else
+            TraceLog(LOG_WARNING, "STATION: %s not loaded; using procedural fallback", path);
+    }
+
+    TraceLog(LOG_INFO, "STATION: loaded %d/%d models, orange atlas=%s, purple atlas=%s",
+             loaded, STATION_MODEL_COUNT,
+             a->texStationOrange.id > 0 ? "ready" : "missing",
+             a->texStationPurple.id > 0 ? "ready" : "missing");
+}
+
 //------------------------------------------------------------------------------------
 bool AssetsLoad(Assets *a, int screenW, int screenH)
 {
@@ -843,115 +1003,10 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         SetShaderValue(a->skinned, a->kDither, &zero, SHADER_UNIFORM_FLOAT);
     }
 
-    a->character = LoadModel(CHARACTER_MODEL_PATH);
-    a->characterOk = IsModelValid(a->character) && a->character.meshCount > 0;
-
-    if (a->characterOk)
-    {
-        a->charAnims = LoadModelAnimations(CHARACTER_MODEL_PATH, &a->charAnimCount);
-
-        // Resolve clips by substring so a regenerated file with reordered or renamed
-        // tracks cannot silently swap running for T-pose. Missing directionals fall
-        // back to the forward run at draw time.
-        a->clipIdle = a->clipCombat = a->clipWalk = -1;
-        a->clipRunF = a->clipRunB = a->clipRunFL = a->clipRunFR = -1;
-        a->clipRunBL = a->clipRunBR = a->clipDeath = -1;
-
-        for (int i = 0; i < a->charAnimCount; i++)
-        {
-            const char *n = a->charAnims[i].name;
-            if (strstr(n, "idle") && a->clipIdle < 0) a->clipIdle = i;
-            else if (strstr(n, "combat") && a->clipCombat < 0) a->clipCombat = i;
-            else if (strstr(n, "forwardleft") && a->clipRunFL < 0) a->clipRunFL = i;
-            else if (strstr(n, "forwardright") && a->clipRunFR < 0) a->clipRunFR = i;
-            else if (strstr(n, "backleft") && a->clipRunBL < 0) a->clipRunBL = i;
-            else if (strstr(n, "backright") && a->clipRunBR < 0) a->clipRunBR = i;
-            else if (strstr(n, "backward") && a->clipRunB < 0) a->clipRunB = i;
-            else if (strstr(n, "running") && a->clipRunF < 0) a->clipRunF = i;
-            else if (strstr(n, "walking") && a->clipWalk < 0) a->clipWalk = i;
-            else if ((strstr(n, "dead") || strstr(n, "death")) && a->clipDeath < 0) a->clipDeath = i;
-        }
-
-        if (a->clipIdle < 0) a->clipIdle = 0;
-        if (a->clipRunF < 0) a->clipRunF = a->clipIdle;
-        if (a->clipWalk < 0) a->clipWalk = a->clipRunF;
-        if (a->clipCombat < 0) a->clipCombat = a->clipIdle;
-        if (a->clipRunB < 0) a->clipRunB = a->clipRunF;
-        if (a->clipRunFL < 0) a->clipRunFL = a->clipRunF;
-        if (a->clipRunFR < 0) a->clipRunFR = a->clipRunF;
-        if (a->clipRunBL < 0) a->clipRunBL = a->clipRunB;
-        if (a->clipRunBR < 0) a->clipRunBR = a->clipRunB;
-
-        TraceLog(LOG_INFO, "CHARACTER CLIPS: idle=%d combat=%d walk=%d F=%d B=%d FL=%d FR=%d BL=%d BR=%d death=%d",
-                 a->clipIdle, a->clipCombat, a->clipWalk, a->clipRunF, a->clipRunB,
-                 a->clipRunFL, a->clipRunFR, a->clipRunBL, a->clipRunBR, a->clipDeath);
-
-        // Normalise whatever the source units are, so swapping in another model does not
-        // mean re-tuning every scale in the game.
-        //
-        // This must reproduce exactly what the vertex shader does. A rigged export can
-        // store the mesh at an arbitrary scale and carry the real size in the bone
-        // matrices - this one has 0.017-unit vertices and bone matrices that blow them
-        // up by four orders of magnitude. Measuring raw vertices, or CPU-skinned ones,
-        // both gave the wrong answer; only the GPU bone matrices agree with what is
-        // actually drawn.
-        float lo = 1e30f, hi = -1e30f;
-
-        if (a->charAnims && a->charAnimCount > 0)
-        {
-            UpdateModelAnimationBones(a->character, a->charAnims[a->clipIdle], 0);
-
-            for (int i = 0; i < a->character.meshCount; i++)
-            {
-                Mesh *mesh = &a->character.meshes[i];
-                if (!mesh->vertices || !mesh->boneMatrices || !mesh->boneIds || !mesh->boneWeights)
-                    continue;
-
-                for (int k = 0; k < mesh->vertexCount; k++)
-                {
-                    Vector3 v = { mesh->vertices[k*3 + 0],
-                                  mesh->vertices[k*3 + 1],
-                                  mesh->vertices[k*3 + 2] };
-                    float y = 0.0f;
-
-                    for (int j = 0; j < 4; j++)
-                    {
-                        float wgt = mesh->boneWeights[k*4 + j];
-                        if (wgt <= 0.0f) continue;
-
-                        int bone = mesh->boneIds[k*4 + j];
-                        if (bone < 0 || bone >= mesh->boneCount) continue;
-
-                        Vector3 t = Vector3Transform(v, mesh->boneMatrices[bone]);
-                        y += t.y*wgt;
-                    }
-
-                    if (y < lo) lo = y;
-                    if (y > hi) hi = y;
-                }
-            }
-        }
-
-        if (hi <= lo)
-        {
-            BoundingBox bb = GetModelBoundingBox(a->character);
-            lo = bb.min.y; hi = bb.max.y;
-        }
-
-        float height = hi - lo;
-        a->charScale = (height > 0.000001f) ? (CHARACTER_TARGET_H/height) : 1.0f;
-        a->charFootOffset = -lo*a->charScale;
-
-        if (a->skinnedOk)
-            for (int i = 0; i < a->character.materialCount; i++)
-                a->character.materials[i].shader = a->skinned;
-
-        TraceLog(LOG_INFO, "CHARACTER: %d verts, %d bones, %d clips, posed height %.2f, scale %.5f",
-                 a->character.meshes[0].vertexCount, a->character.boneCount,
-                 a->charAnimCount, height, a->charScale);
-    }
-    else TraceLog(LOG_WARNING, "CHARACTER: %s not loaded, falling back to primitives",
-                  CHARACTER_MODEL_PATH);
+    for (int cls = 0; cls < CLASS_COUNT; cls++)
+        if (CHARACTER_MODEL_PATHS[cls])
+            LoadRiggedCharacter(a, &a->characters[cls], CHARACTER_MODEL_PATHS[cls],
+                                CLASS_NAMES[cls]);
 
     //--- Grass shader ---------------------------------------------------------
     a->grass = LoadShaderFromMemory(VS_GRASS, FS_GRASS);
@@ -1031,6 +1086,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->mat = LoadMaterialDefault();
     if (a->lightingOk) a->mat.shader = a->lighting;
 
+    LoadStationAssets(a);
+
     a->grassMat = LoadMaterialDefault();
     if (a->grassOk) a->grassMat.shader = a->grass;
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
@@ -1079,6 +1136,15 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
 
 void AssetsUnload(Assets *a)
 {
+    for (int id = 0; id < STATION_MODEL_COUNT; id++)
+    {
+        StationModel *station = &a->station[id];
+        if (!station->ok) continue;
+        UnloadModel(station->model);
+    }
+    if (a->texStationOrange.id > 0) UnloadTexture(a->texStationOrange);
+    if (a->texStationPurple.id > 0) UnloadTexture(a->texStationPurple);
+
     UnloadMesh(a->cube);
     UnloadMesh(a->sphere);
     UnloadMesh(a->cylinder);
@@ -1114,12 +1180,15 @@ void AssetsUnload(Assets *a)
     if (a->postOk) UnloadShader(a->post);
     if (a->grassOk) UnloadShader(a->grass);
 
-    if (a->characterOk)
+    for (int cls = 0; cls < CLASS_COUNT; cls++)
     {
-        if (a->charAnims) UnloadModelAnimations(a->charAnims, a->charAnimCount);
-        for (int i = 0; i < a->character.materialCount; i++)
-            a->character.materials[i].shader = (Shader){ 0 };
-        UnloadModel(a->character);
+        RiggedCharacter *character = &a->characters[cls];
+        if (!character->ok) continue;
+        if (character->anims)
+            UnloadModelAnimations(character->anims, character->animCount);
+        for (int i = 0; i < character->model.materialCount; i++)
+            character->model.materials[i].shader = (Shader){ 0 };
+        UnloadModel(character->model);
     }
     if (a->skinnedOk) UnloadShader(a->skinned);
 }
@@ -1138,6 +1207,35 @@ void DrawLit(Assets *a, Mesh mesh, Matrix transform, Texture2D tex, Color tint,
     a->mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
 
     DrawMesh(mesh, a->mat, transform);
+}
+
+bool AssetsDrawStationModel(Assets *a, StationModelId id, Matrix transform,
+                            StationPalette palette, Color tint, float emissive)
+{
+    if (id < 0 || id >= STATION_MODEL_COUNT) return false;
+
+    StationModel *station = &a->station[id];
+    if (!station->ok || station->model.meshCount <= 0) return false;
+
+    Texture2D atlas = (palette == STATION_PALETTE_PURPLE)
+                    ? a->texStationPurple : a->texStationOrange;
+    Matrix modelTransform = MatrixMultiply(station->model.transform, transform);
+
+    for (int i = 0; i < station->model.meshCount; i++)
+    {
+        Texture2D texture = atlas;
+        if (texture.id == 0 && station->model.materialCount > 0)
+        {
+            int material = station->model.meshMaterial[i];
+            if (material < 0 || material >= station->model.materialCount) material = 0;
+            texture = station->model.materials[material].maps[MATERIAL_MAP_DIFFUSE].texture;
+        }
+        if (texture.id == 0) texture = a->texFlat;
+
+        DrawLit(a, station->model.meshes[i], modelTransform, texture, tint,
+                (Vector2){ 1.0f, 1.0f }, emissive);
+    }
+    return true;
 }
 
 void AssetsSetLights(Assets *a, const Vector3 *positions, const Vector3 *colors, int count)
@@ -1159,12 +1257,14 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos)
     SetShaderValue(a->lighting, a->locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
 }
 
-void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
+void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop, Color tint, float dither,
                          float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
                          int lightCount, Vector3 viewPos)
 {
-    if (!a->characterOk) return;
+    if (cls < 0 || cls >= CLASS_COUNT) return;
+    RiggedCharacter *character = &a->characters[cls];
+    if (!character->ok) return;
 
     if (a->skinnedOk)
     {
@@ -1182,10 +1282,10 @@ void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
 
     // Posing writes into the model's shared bone matrices, so it has to happen
     // immediately before this draw rather than once per frame.
-    if (a->charAnims && a->charAnimCount > 0)
+    if (character->anims && character->animCount > 0)
     {
-        int idx = (animIndex < 0 || animIndex >= a->charAnimCount) ? 0 : animIndex;
-        ModelAnimation anim = a->charAnims[idx];
+        int idx = (animIndex < 0 || animIndex >= character->animCount) ? 0 : animIndex;
+        ModelAnimation anim = character->anims[idx];
         if (anim.frameCount > 0)
         {
             int f = (int)frame;
@@ -1195,22 +1295,22 @@ void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
                 if (f < 0) f += anim.frameCount;
             }
             else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
-            UpdateModelAnimationBones(a->character, anim, f);
+            UpdateModelAnimationBones(character->model, anim, f);
         }
     }
 
-    float s = a->charScale*scaleMul;
+    float s = character->scale*scaleMul;
     Matrix m = MatrixScale(s, s, s);
     m = MatrixMultiply(m, MatrixRotateY(yaw));
     m = MatrixMultiply(m, MatrixTranslate(position.x,
-                                          position.y + a->charFootOffset*scaleMul,
+                                          position.y + character->footOffset*scaleMul,
                                           position.z));
 
-    for (int i = 0; i < a->character.meshCount; i++)
+    for (int i = 0; i < character->model.meshCount; i++)
     {
-        Material mat = a->character.materials[a->character.meshMaterial[i]];
+        Material mat = character->model.materials[character->model.meshMaterial[i]];
         mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
-        DrawMesh(a->character.meshes[i], mat, m);
+        DrawMesh(character->model.meshes[i], mat, m);
     }
 }
 

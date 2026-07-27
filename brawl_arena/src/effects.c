@@ -115,7 +115,6 @@ void FxExplosion(World *w, Vector3 pos, float radius, Color color)
     FxSpawnLight(w, (Vector3){ pos.x, pos.y + 0.9f, pos.z }, (Color){ 255, 240, 200, 255 }, radius*1.1f, 0.16f);
     FxSpawnLight(w, pos, color, radius*1.6f, 0.38f);
 
-    FxShake(w, radius*0.9f);
 }
 
 void FxDeathBurst(World *w, Vector3 pos, Color color)
@@ -131,7 +130,6 @@ void FxDeathBurst(World *w, Vector3 pos, Color color)
         FxSpawnParticle(w, pos, vel, c, 0.55f + GetRandomValue(0, 30) / 100.0f, 0.17f, PARTICLE_SPARK);
     }
     FxSpawnLight(w, pos, color, 2.6f, 0.3f);
-    FxShake(w, 1.6f);
 }
 
 void FxCrateBreak(World *w, Vector3 pos)
@@ -145,7 +143,6 @@ void FxCrateBreak(World *w, Vector3 pos)
         FxSpawnParticle(w, p, vel, c, 0.6f, 0.2f, PARTICLE_DEBRIS);
     }
     FxSpawnLight(w, pos, (Color){ 255, 210, 150, 255 }, 2.0f, 0.25f);
-    FxShake(w, 1.1f);
 }
 
 void FxFloatText(World *w, Vector3 pos, const char *text, Color color)
@@ -198,7 +195,7 @@ void FxShockwave(World *w, Vector3 pos, float maxRadius, float life, Color color
     }
 }
 
-void FxShake(World *w, float amount)
+void FxMatchShake(World *w, float amount)
 {
     if (amount > w->shake) w->shake = amount;
     if (w->shake > 4.0f) w->shake = 4.0f;

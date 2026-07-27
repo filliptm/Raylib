@@ -6,9 +6,6 @@
 #include "raymath.h"
 #include <math.h>
 
-#define RETREAT_HEALTH 0.30f
-#define PROBE_AHEAD 1.6f
-
 //------------------------------------------------------------------------------------
 // Cheap steering: if the way ahead is blocked, fan out to either side until a probe
 // comes back clear. Enough to stop bots grinding into wall corners.
@@ -18,7 +15,7 @@ static Vector3 AvoidSteer(World *w, Vector3 pos, Vector3 dir, float side)
     if (Vector3Length(dir) < 0.001f) return dir;
     dir = Vector3Normalize(dir);
 
-    Vector3 probe = Vector3Add(pos, Vector3Scale(dir, PROBE_AHEAD));
+    Vector3 probe = Vector3Add(pos, Vector3Scale(dir, w->tune.aiProbeAhead));
     if (!ArenaSolidAt(&w->arena, probe.x, probe.z)) return dir;
 
     const float angles[] = { 40.0f, 75.0f, 110.0f, 145.0f, 180.0f };
@@ -31,7 +28,7 @@ static Vector3 AvoidSteer(World *w, Vector3 pos, Vector3 dir, float side)
             float sign = (s == 0) ? side : -side;
             float a = base + sign * angles[i] * DEG2RAD;
             Vector3 cand = { sinf(a), 0.0f, cosf(a) };
-            Vector3 p = Vector3Add(pos, Vector3Scale(cand, PROBE_AHEAD));
+            Vector3 p = Vector3Add(pos, Vector3Scale(cand, w->tune.aiProbeAhead));
             if (!ArenaSolidAt(&w->arena, p.x, p.z)) return cand;
         }
     }
@@ -116,6 +113,71 @@ void AIUpdate(World *w, float dt)
 
         float healthRatio = (float)b->health / (float)b->maxHealth;
 
+        // A Guardian aims its support areas at hurt teammates before returning to
+        // combat. Resonance faces the ally it needs to catch; the old radial-heal
+        // behavior remains supported for any tuned/custom kit that still uses it.
+        int supportTarget = -1;
+        if (mode == BOT_FIGHT && def->healing > 0)
+        {
+            supportTarget = BrawlerMostWoundedAlly(w, i, def->range);
+
+            bool teamNeedsSuper = def->superKind == SUPER_HEALING_BURST &&
+                                  healthRatio < w->tune.aiSupportSuperHealth;
+            int nearbyHurt = BrawlerMostWoundedAlly(w, i, def->sRange);
+            if (nearbyHurt >= 0)
+            {
+                Brawler *ally = &w->brawlers[nearbyHurt];
+                teamNeedsSuper = teamNeedsSuper ||
+                                 (float)ally->health/(float)ally->maxHealth <
+                                 w->tune.aiSupportSuperHealth;
+            }
+
+            if ((def->superKind == SUPER_HEALING_BURST ||
+                 def->superKind == SUPER_SOUND_WAVE) && teamNeedsSuper &&
+                b->superCharge >= 1.0f && b->aiReactTimer <= 0.0f)
+            {
+                if (def->superKind == SUPER_SOUND_WAVE && nearbyHurt >= 0)
+                {
+                    Vector3 superAim = Vector3Subtract(w->brawlers[nearbyHurt].position,
+                                                       b->position);
+                    b->aimAngle = atan2f(superAim.x, superAim.z);
+                }
+                if (BrawlerTrySuper(w, i, 0.0f))
+                    b->aiReactTimer = 0.6f;
+            }
+
+            if (supportTarget >= 0)
+            {
+                Brawler *ally = &w->brawlers[supportTarget];
+                float allyRatio = (float)ally->health/(float)ally->maxHealth;
+                if (allyRatio < w->tune.aiSupportHealth)
+                {
+                    Vector3 toAlly = Vector3Subtract(ally->position, b->position);
+                    toAlly.y = 0.0f;
+                    float allyDist = Vector3Length(toAlly);
+                    float travel = (def->speed > 0.1f) ? allyDist/def->speed : 0.0f;
+                    Vector3 predicted = Vector3Add(ally->position,
+                                                  Vector3Scale(ally->velocity, travel*0.55f));
+                    Vector3 aim = Vector3Subtract(predicted, b->position);
+                    b->aimAngle = atan2f(aim.x, aim.z);
+
+                    if (allyDist > def->range*0.88f)
+                    {
+                        b->aiState = AI_CHASE;
+                        b->moveIntent = AvoidSteer(w, b->position, toAlly, b->strafeDir);
+                    }
+                    else
+                    {
+                        b->aiState = AI_ATTACK;
+                        b->moveIntent = (Vector3){ 0 };
+                        if (b->aiReactTimer <= 0.0f && BrawlerTryAttack(w, i, allyDist))
+                            b->aiReactTimer = 0.16f + GetRandomValue(0, 18)/100.0f;
+                    }
+                    continue;
+                }
+            }
+        }
+
         // In Gem Grab a loose gem on the floor is worth breaking off for.
         int gemIdx = -1;
         float gemDist = 0.0f;
@@ -172,7 +234,7 @@ void AIUpdate(World *w, float dt)
         float aimDist = Vector3Length((Vector3){ aimVec.x, 0.0f, aimVec.z });
 
         //--- Retreat when hurt -----------------------------------------------------
-        if (healthRatio < RETREAT_HEALTH)
+        if (healthRatio < w->tune.aiRetreatHealth)
         {
             b->aiState = AI_RETREAT;
 
@@ -235,7 +297,9 @@ void AIUpdate(World *w, float dt)
             }
 
             // Supers go off when they will actually connect.
-            bool superInRange = def->sDash ? (dist < 9.0f) : (dist < def->sRange * 0.9f);
+            bool superInRange = def->superKind != SUPER_HEALING_BURST &&
+                                (def->superKind == SUPER_DASH
+                                 ? (dist < 9.0f) : (dist < def->sRange * 0.9f));
             if (b->superCharge >= 1.0f && superInRange && b->aiReactTimer <= 0.0f)
             {
                 if (BrawlerTrySuper(w, i, aimDist))

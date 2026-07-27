@@ -189,7 +189,7 @@ static void UpdateScore(World *w, float dt)
         {
             m->phase = MATCH_PLAYING;
             m->countdownTeam = -1;
-            FxShake(w, 0.8f);
+            FxMatchShake(w, 0.8f);
         }
         return;
     }
@@ -211,13 +211,15 @@ static void UpdateScore(World *w, float dt)
         // Clear the board as the whistle goes. Gameplay stops updating from here, so a
         // shot left in flight would hang in mid-air and read as a frozen bug.
         for (int i = 0; i < MAX_PROJECTILES; i++) w->projectiles[i].active = false;
+        for (int i = 0; i < MAX_ABILITY_FIELDS; i++) w->abilityFields[i].active = false;
         for (int i = 0; i < w->brawlerCount; i++)
         {
             w->brawlers[i].velocity = (Vector3){ 0, 0, 0 };
             w->brawlers[i].moveIntent = (Vector3){ 0, 0, 0 };
+            w->brawlers[i].resonanceTimer = 0.0f;
         }
 
-        FxShake(w, 3.0f);
+        FxMatchShake(w, 3.0f);
     }
 }
 

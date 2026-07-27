@@ -20,7 +20,7 @@ void BrawlerSpawn(World *w, int idx, Team team, BrawlerClass cls, Vector3 pos, b
     b->isPlayer = isPlayer;
     b->maxHealth = def->maxHealth;
     b->health = def->maxHealth;
-    b->ammo = (float)MAX_AMMO;
+    b->ammo = (float)def->maxAmmo;
     b->superCharge = 0.0f;
     b->alive = true;
     b->spawnScale = 0.0f;
@@ -77,8 +77,6 @@ void BrawlerApplyDamage(World *w, int idx, int damage, int attacker, Vector3 hit
     snprintf(buf, sizeof(buf), "%d", damage);
     FxFloatText(w, hitPos, buf, (attacker == w->playerIdx) ? (Color){ 255, 235, 140, 255 } : (Color){ 255, 150, 150, 255 });
 
-    if (b->isPlayer) FxShake(w, 0.8f);
-
     if (b->health <= 0)
     {
         b->health = 0;
@@ -100,6 +98,69 @@ void BrawlerApplyDamage(World *w, int idx, int damage, int attacker, Vector3 hit
         }
         if (b->isPlayer) w->deaths++;
     }
+}
+
+int BrawlerApplyHealing(World *w, int idx, int amount, int healer, Vector3 hitPos)
+{
+    (void)healer;
+    if (idx < 0 || idx >= w->brawlerCount || amount <= 0) return 0;
+
+    Brawler *b = &w->brawlers[idx];
+    if (!b->alive || b->health >= b->maxHealth) return 0;
+
+    int before = b->health;
+    b->health += amount;
+    if (b->health > b->maxHealth) b->health = b->maxHealth;
+    int restored = b->health - before;
+
+    char buf[16];
+    snprintf(buf, sizeof(buf), "+%d", restored);
+    FxFloatText(w, hitPos, buf, (Color){ 112, 255, 174, 255 });
+    FxImpact(w, hitPos, (Color){ 70, 244, 166, 255 }, 7);
+    FxSpawnLight(w, (Vector3){ hitPos.x, hitPos.y + 0.7f, hitPos.z },
+                 (Color){ 70, 244, 166, 255 }, 1.7f, 0.18f);
+    return restored;
+}
+
+void BrawlerApplyResonance(World *w, int idx, Team sourceTeam, int source,
+                           int damage, int healing, float duration, float tickRate)
+{
+    if (idx < 0 || idx >= w->brawlerCount || duration <= 0.0f || tickRate <= 0.0f) return;
+
+    Brawler *b = &w->brawlers[idx];
+    if (!b->alive) return;
+
+    b->resonanceTimer = duration;
+    b->resonanceTickTimer = tickRate;
+    b->resonanceTickRate = tickRate;
+    b->resonanceDamage = damage;
+    b->resonanceHealing = healing;
+    b->resonanceSource = source;
+    b->resonanceTeam = sourceTeam;
+}
+
+static void UpdateResonance(World *w, int idx, float dt)
+{
+    Brawler *b = &w->brawlers[idx];
+    if (b->resonanceTimer <= 0.0f) return;
+
+    // Only time that falls inside the mark's lifespan advances the pulse clock. This
+    // preserves the final scheduled pulse when a frame crosses the exact expiry time.
+    float activeDt = fminf(dt, b->resonanceTimer);
+    b->resonanceTimer -= dt;
+    b->resonanceTickTimer -= activeDt;
+
+    while (b->resonanceTickTimer <= 0.0001f && b->alive)
+    {
+        Vector3 hit = { b->position.x, 0.75f, b->position.z };
+        if (b->team == b->resonanceTeam)
+            BrawlerApplyHealing(w, idx, b->resonanceHealing, b->resonanceSource, hit);
+        else
+            BrawlerApplyDamage(w, idx, b->resonanceDamage, b->resonanceSource, hit);
+        b->resonanceTickTimer += b->resonanceTickRate;
+    }
+
+    if (b->resonanceTimer <= 0.0f) b->resonanceTimer = 0.0f;
 }
 
 // Shortest-path interpolation between two angles, so turning never takes the long way
@@ -179,6 +240,35 @@ int BrawlerNearestVisibleEnemy(World *w, int idx)
     return best;
 }
 
+int BrawlerMostWoundedAlly(World *w, int idx, float maxDistance)
+{
+    if (idx < 0 || idx >= w->brawlerCount) return -1;
+
+    Brawler *b = &w->brawlers[idx];
+    int best = -1;
+    float bestRatio = 1.0f;
+    float bestDist = maxDistance;
+
+    for (int i = 0; i < w->brawlerCount; i++)
+    {
+        Brawler *t = &w->brawlers[i];
+        if (i == idx || !t->alive || t->team != b->team || t->health >= t->maxHealth) continue;
+        if (!ArenaLineOfSight(&w->arena, b->position, t->position)) continue;
+
+        float dist = Vector3Distance(b->position, t->position);
+        if (dist > maxDistance) continue;
+
+        float ratio = (float)t->health/(float)t->maxHealth;
+        if (ratio < bestRatio - 0.001f || (fabsf(ratio - bestRatio) <= 0.001f && dist < bestDist))
+        {
+            best = i;
+            bestRatio = ratio;
+            bestDist = dist;
+        }
+    }
+    return best;
+}
+
 //------------------------------------------------------------------------------------
 static void UpdateDash(World *w, int idx, float dt)
 {
@@ -192,7 +282,7 @@ static void UpdateDash(World *w, int idx, float dt)
     // A charge smashes through crates rather than stopping dead on them.
     if (ArenaTypeAt(&w->arena, next.x, next.z) == TILE_CRATE)
     {
-        if (ArenaDamageAt(&w->arena, next.x, next.z, CRATE_HEALTH))
+        if (ArenaDamageAt(&w->arena, next.x, next.z, w->tune.crateHealth))
             FxCrateBreak(w, (Vector3){ next.x, 0.6f, next.z });
     }
 
@@ -246,11 +336,15 @@ void BrawlersUpdate(World *w, float dt)
         if (b->aimHold > 0.0f) b->aimHold = fmaxf(0.0f, b->aimHold - dt);
         if (b->spawnScale < 1.0f) b->spawnScale = fminf(1.0f, b->spawnScale + dt * 4.5f);
 
+        UpdateResonance(w, i, dt);
+        if (!b->alive) continue;
+
         // Ammo regenerates continuously, one pip at a time.
-        if (b->ammo < (float)MAX_AMMO)
+        if (b->ammo > (float)def->maxAmmo) b->ammo = (float)def->maxAmmo;
+        if (b->ammo < (float)def->maxAmmo)
         {
             b->ammo += dt / def->reloadPerAmmo;
-            if (b->ammo > (float)MAX_AMMO) b->ammo = (float)MAX_AMMO;
+            if (b->ammo > (float)def->maxAmmo) b->ammo = (float)def->maxAmmo;
         }
 
         if (b->dashTimer > 0.0f)

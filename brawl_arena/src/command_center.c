@@ -1,8 +1,8 @@
 /*******************************************************************************************
 *   COMMAND CENTER
 *
-*   A live tuning panel. Everything gameplay reads at runtime lives in World.tune or the
-*   WEAPONS[] table, so every control here takes effect on the next frame with no restart.
+*   A live tuning panel. Controls edit the effective World.tune/WEAPONS[] values, autosave
+*   to an ignored draft, and expose explicit promotion into tracked project defaults.
 *
 *   The widgets are a tiny immediate-mode set written against raylib's shape and text
 *   calls, which keeps the project dependency-free.
@@ -34,6 +34,8 @@ static const char *TAB_NAMES[TAB_COUNT] = { "MATCH", "BOTS", "PLAYER", "KIT", "S
 static bool g_open = true;
 static PanelTab g_tab = TAB_MATCH;
 static const void *g_activeSlider = NULL;
+static float g_scroll[TAB_COUNT] = { 0 };
+static float g_contentHeight[TAB_COUNT] = { 0 };
 
 // Palette
 static const Color PANEL_BG     = { 14, 18, 28, 238 };
@@ -48,6 +50,7 @@ static const Color WARN         = { 255, 176, 80, 255 };
 typedef struct UI {
     World *world;
     int x, y, width;
+    Rectangle clip;
 } UI;
 
 //------------------------------------------------------------------------------------
@@ -82,7 +85,7 @@ static void uiText(UI *ui, const char *text, Color c)
 static bool uiButton(UI *ui, const char *label)
 {
     Rectangle r = { ui->x, ui->y, ui->width, ROW_H - 5 };
-    bool hover = MouseIn(r);
+    bool hover = MouseIn(r) && MouseIn(ui->clip);
     bool click = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 
     DrawRectangleRounded(r, 0.28f, 6, hover ? ACCENT_DIM : (Color){ 34, 42, 56, 255 });
@@ -98,7 +101,7 @@ static bool uiButton(UI *ui, const char *label)
 static bool uiToggle(UI *ui, const char *label, bool *value)
 {
     Rectangle r = { ui->x, ui->y, ui->width, ROW_H - 5 };
-    bool hover = MouseIn(r);
+    bool hover = MouseIn(r) && MouseIn(ui->clip);
     bool click = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     if (click) { *value = !*value; ConfigMarkDirty(); }
 
@@ -129,7 +132,7 @@ static bool SliderTrack(UI *ui, const void *id, const char *label, float *norm, 
     Rectangle row = { ui->x, ui->y, ui->width, ROW_H - 5 };
     Rectangle track = { ui->x + LABEL_W, ui->y + 7, ui->width - LABEL_W - VALUE_W, 9 };
 
-    bool hover = MouseIn(row);
+    bool hover = MouseIn(row) && MouseIn(ui->clip);
     bool changed = false;
 
     if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) g_activeSlider = id;
@@ -189,7 +192,8 @@ static bool uiCycler(UI *ui, const char *label, int *value, int count, const cha
     Rectangle right = { ui->x + ui->width - 24, ui->y + 1, 24, ROW_H - 7 };
     bool changed = false;
 
-    bool lh = MouseIn(left), rh = MouseIn(right);
+    bool lh = MouseIn(left) && MouseIn(ui->clip);
+    bool rh = MouseIn(right) && MouseIn(ui->clip);
 
     DrawRectangleRounded(left, 0.3f, 5, lh ? ACCENT_DIM : TRACK_BG);
     DrawRectangleRounded(right, 0.3f, 5, rh ? ACCENT_DIM : TRACK_BG);
@@ -245,6 +249,13 @@ static void SetBotCount(World *w, int n)
         for (int i = 0; i < MAX_PROJECTILES; i++)
             if (w->projectiles[i].active && w->projectiles[i].owner > n)
                 w->projectiles[i].active = false;
+        for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+            if (w->abilityFields[i].active && w->abilityFields[i].owner > n)
+                w->abilityFields[i].active = false;
+        for (int i = 0; i <= n; i++)
+            if (w->brawlers[i].resonanceTimer > 0.0f &&
+                w->brawlers[i].resonanceSource > n)
+                w->brawlers[i].resonanceTimer = 0.0f;
     }
 
     w->brawlerCount = n + 1;
@@ -374,6 +385,12 @@ static void TabBots(UI *ui)
 
     uiSliderF(ui, "Respawn delay", &t->enemyRespawn, 0.5f, 15.0f, "%.1fs");
 
+    uiSection(ui, "COMBAT DECISIONS");
+    uiSliderF(ui, "Retreat below", &t->aiRetreatHealth, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Heal ally below", &t->aiSupportHealth, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Super ally below", &t->aiSupportSuperHealth, 0.0f, 1.0f, "%.2f");
+    uiSliderF(ui, "Obstacle probe", &t->aiProbeAhead, 0.2f, 5.0f, "%.2f");
+
     uiSection(ui, "ACTIONS");
     if (uiButton(ui, "Respawn all bots")) RespawnAllBots(w);
 
@@ -401,8 +418,11 @@ static void TabPlayer(UI *ui)
     {
         Vector3 pos = p->alive ? p->position : ArenaSpawnFor(&w->arena, TEAM_PLAYER, p->spawnSlot);
         float keep = p->superCharge;
+        int keepGems = p->gems, keepSlot = p->spawnSlot;
         BrawlerSpawn(w, w->playerIdx, TEAM_PLAYER, (BrawlerClass)kit, pos, true);
         w->brawlers[w->playerIdx].superCharge = keep;
+        w->brawlers[w->playerIdx].gems = keepGems;
+        w->brawlers[w->playerIdx].spawnSlot = keepSlot;
         w->tune.selectedKit = kit;      // so the choice survives a restart like the rest
         ConfigMarkDirty();
     }
@@ -434,19 +454,50 @@ static void TabKit(UI *ui)
 
     uiSection(ui, "MAIN ATTACK");
     if (uiSliderI(ui, "Max health", &k->maxHealth, 500, 12000)) SyncMaxHealth(w, cls);
-    uiSliderI(ui, "Damage / pellet", &k->damage, 20, 4000);
-    uiSliderI(ui, "Pellets", &k->pellets, 1, 20);
-    uiSliderF(ui, "Spread", &k->spreadDeg, 0.0f, 90.0f, "%.0f deg");
-    uiSliderF(ui, "Projectile speed", &k->speed, 6.0f, 90.0f, "%.0f");
-    uiSliderF(ui, "Range", &k->range, 2.0f, 40.0f, "%.1f");
-    uiSliderF(ui, "Shot size", &k->projRadius, 0.05f, 4.0f, "%.2f");
+    if (k->mainKind == ATTACK_RAIN)
+    {
+        uiSliderI(ui, "Damage / pulse", &k->damage, 20, 4000);
+        uiSliderI(ui, "Healing / pulse", &k->healing, 20, 4000);
+        uiSliderF(ui, "Cast range", &k->range, 2.0f, 40.0f, "%.1f");
+        uiSliderF(ui, "Rain radius", &k->projRadius, 0.5f, 8.0f, "%.2f");
+        uiSliderF(ui, "Duration", &k->duration, 0.2f, 8.0f, "%.2fs");
+        uiSliderF(ui, "Pulse interval", &k->tickRate, 0.05f, k->duration, "%.2fs");
+        uiSliderF(ui, "Growth time", &k->growTime, 0.05f, k->duration, "%.2fs");
+    }
+    else
+    {
+        uiSliderI(ui, "Damage / pellet", &k->damage, 20, 4000);
+        if (k->healing > 0) uiSliderI(ui, "Healing / ally", &k->healing, 20, 4000);
+        uiSliderI(ui, "Pellets", &k->pellets, 1, 20);
+        uiSliderF(ui, "Spread", &k->spreadDeg, 0.0f, 90.0f, "%.0f deg");
+        uiSliderF(ui, "Projectile speed", &k->speed, 6.0f, 90.0f, "%.0f");
+        uiSliderF(ui, "Range", &k->range, 2.0f, 40.0f, "%.1f");
+        uiSliderF(ui, "Shot size", &k->projRadius, 0.05f, 4.0f, "%.2f");
+    }
     uiSliderF(ui, "Cooldown", &k->cooldown, 0.05f, 2.0f, "%.2fs");
     uiSliderF(ui, "Reload / ammo", &k->reloadPerAmmo, 0.15f, 5.0f, "%.2fs");
-    uiSliderF(ui, "Super per hit", &k->superPerHit, 0.0f, 1.0f, "%.0f%%");
+    uiSliderI(ui, "Ammo capacity", &k->maxAmmo, 1, 8);
+    uiSliderF(ui, k->mainKind == ATTACK_RAIN ? "Super gain / pulse" : "Super gain / hit",
+              &k->superPerHit, 0.0f, 1.0f, "%.2f");
 
     uiSection(ui, "SUPER");
     uiText(ui, k->superName, TEXT_MAIN);
-    if (!k->sDash)
+    if (k->superKind == SUPER_SOUND_WAVE)
+    {
+        uiSliderI(ui, "Damage / tick", &k->sDamage, 20, 6000);
+        uiSliderI(ui, "Healing / tick", &k->sHealing, 20, 6000);
+        uiSliderF(ui, "Cone width", &k->sSpreadDeg, 20.0f, 150.0f, "%.0f deg");
+        uiSliderF(ui, "Range", &k->sRange, 2.0f, 45.0f, "%.1f");
+        uiSliderF(ui, "Effect duration", &k->sDuration, 0.2f, 12.0f, "%.2fs");
+        uiSliderF(ui, "Tick interval", &k->sTickRate, 0.05f, k->sDuration, "%.2fs");
+        uiSliderF(ui, "Wave lifetime", &k->sVisualDuration, 0.1f, 4.0f, "%.2fs");
+    }
+    else if (k->superKind == SUPER_HEALING_BURST)
+    {
+        uiSliderI(ui, "Healing", &k->sHealing, 50, 6000);
+        uiSliderF(ui, "Radius", &k->sRange, 2.0f, 20.0f, "%.1f");
+    }
+    else if (k->superKind != SUPER_DASH)
     {
         uiSliderI(ui, "Damage", &k->sDamage, 50, 6000);
         uiSliderI(ui, "Pellets", &k->sPellets, 1, 24);
@@ -460,12 +511,15 @@ static void TabKit(UI *ui)
     }
 
     uiSection(ui, "");
-    if (uiButton(ui, "Reset this kit"))
+    int kitOverrides = ConfigKitOverrideCount(w, cls);
+    uiText(ui, TextFormat("%d local project-value changes", kitOverrides), TEXT_DIM);
+    if (uiButton(ui, "Reset kit to PROJECT default"))
     {
-        WeaponsResetKit(cls);
+        ConfigResetKitToProject(w, cls);
         SyncMaxHealth(w, cls);
-        ConfigMarkDirty();
     }
+    if (uiButton(ui, "SAVE KIT AS PROJECT DEFAULT"))
+        ConfigPromoteKit(w, cls);
 }
 
 static void TabStyle(UI *ui)
@@ -505,13 +559,23 @@ static void TabStyle(UI *ui)
     uiSliderF(ui, "Chromatic fringe", &t->styleCA, 0.0f, 1.0f, "%.2f");
 
     uiSection(ui, "");
-    if (uiButton(ui, "Reset style to defaults"))
+    if (uiButton(ui, "Reset style to PROJECT default"))
     {
-        t->toon = true; t->toonBands = 3.0f; t->toonOutline = 0.85f;
-        t->stylePixelate = t->stylePainterly = t->styleHalftone = 0.0f;
-        t->stylePosterize = t->styleGrain = t->styleCA = 0.0f;
-        t->styleSaturation = 1.25f; t->styleBrightness = 1.10f;
-        t->styleVignette = 0.85f; t->bloom = 0.85f;
+        const Tuning *p = &w->config.projectTuning;
+        t->postFx = p->postFx;
+        t->toon = p->toon;
+        t->toonBands = p->toonBands;
+        t->toonOutline = p->toonOutline;
+        t->stylePixelate = p->stylePixelate;
+        t->stylePainterly = p->stylePainterly;
+        t->styleHalftone = p->styleHalftone;
+        t->stylePosterize = p->stylePosterize;
+        t->styleGrain = p->styleGrain;
+        t->styleCA = p->styleCA;
+        t->styleSaturation = p->styleSaturation;
+        t->styleBrightness = p->styleBrightness;
+        t->styleVignette = p->styleVignette;
+        t->bloom = p->bloom;
         ConfigMarkDirty();
     }
 }
@@ -524,6 +588,8 @@ static void TabWorld(UI *ui)
     uiSection(ui, "PACE");
     uiSliderF(ui, "Time scale", &t->timeScale, 0.05f, 2.0f, "%.2fx");
     uiSliderF(ui, "Super gain mult", &t->superMult, 0.0f, 6.0f, "%.2fx");
+    if (uiSliderI(ui, "Crate health", &t->crateHealth, 100, 10000)) NeedsRestart(w);
+    uiSliderF(ui, "Result hold", &t->matchResultHold, 0.5f, 15.0f, "%.1fs");
 
     uiSection(ui, "STEALTH");
     uiSliderF(ui, "Bush reveal range", &t->bushReveal, 0.0f, 14.0f, "%.1f");
@@ -538,7 +604,7 @@ static void TabWorld(UI *ui)
     uiSliderF(ui, "Bend strength", &t->grassBendStrength, 0.0f, 4.0f, "%.2f");
 
     uiSection(ui, "LOOK");
-    uiToggle(ui, "Scrapper rigged model", &t->modelCharacter);
+    uiToggle(ui, "Rigged character models", &t->modelCharacter);
     uiSliderF(ui, "Bloom strength", &t->bloom, 0.0f, 3.0f, "%.2f");
 
     uiSection(ui, "DEBUG");
@@ -551,18 +617,27 @@ static void TabWorld(UI *ui)
     uiText(ui, TextFormat("%d FPS   %d shots   %d particles", GetFPS(), projectiles, particles), TEXT_DIM);
 
     uiSection(ui, "ACTIONS");
-    if (uiButton(ui, "Rebuild arena")) { ArenaLoad(&w->arena); RenderBuildGrass(w); }
+    if (uiButton(ui, "Rebuild arena"))
+    {
+        ArenaLoad(&w->arena, w->tune.crateHealth);
+        RenderBuildGrass(w);
+    }
 
     if (uiButton(ui, "Reset score")) { w->kills = 0; w->deaths = 0; }
 
-    if (uiButton(ui, "Reset ALL tuning"))
+    uiSection(ui, "PROJECT CONFIG");
+    uiText(ui, ConfigStatus(w), TEXT_DIM);
+    uiText(ui, TextFormat("%d values differ from PROJECT", ConfigProjectOverrideCount(w)),
+           ConfigProjectOverrideCount(w) > 0 ? WARN : TEXT_DIM);
+
+    if (uiButton(ui, "Discard draft / restore PROJECT"))
     {
-        TuningSetDefaults(t);
-        WeaponsResetAll();
+        ConfigResetAllToProject(w);
         for (int i = 0; i < CLASS_COUNT; i++) SyncMaxHealth(w, (BrawlerClass)i);
-        SetBotCount(w, t->botCount);
-        ConfigMarkDirty();
+        w->matchRestartPending = true;
     }
+    if (uiButton(ui, "SAVE ALL AS PROJECT DEFAULTS"))
+        ConfigPromoteAll(w);
 }
 
 //------------------------------------------------------------------------------------
@@ -603,7 +678,12 @@ void CommandCenterDraw(World *w)
     // Title
     DrawText("COMMAND CENTER", (int)panel.x + 16, (int)panel.y + 12, 18, TEXT_MAIN);
     DrawText("TAB to close", (int)(panel.x + panel.width - 92), (int)panel.y + 17, 12, TEXT_DIM);
-    DrawText("auto-saved to tuning.cfg", (int)panel.x + 16, (int)panel.y + 32, 11, (Color){ 96, 108, 128, 255 });
+    int projectChanges = ConfigProjectOverrideCount(w);
+    const char *source = w->config.recoveryDefaults ? "CONFIG RECOVERY MODE"
+                       : (projectChanges > 0 ? TextFormat("PROJECT + LOCAL DRAFT  (%d)", projectChanges)
+                                             : "PROJECT DEFAULTS");
+    DrawText(source, (int)panel.x + 16, (int)panel.y + 32, 11,
+             w->config.recoveryDefaults ? WARN : (Color){ 96, 148, 188, 255 });
 
     // Tabs
     int tabY = (int)panel.y + 50;
@@ -624,7 +704,31 @@ void CommandCenterDraw(World *w)
         if (active) DrawRectangle((int)r.x, (int)(r.y + r.height - 2), (int)r.width, 2, ACCENT);
     }
 
-    UI ui = { .world = w, .x = (int)panel.x + 16, .y = tabY + 34, .width = (int)panel.width - 32 };
+    int contentTop = tabY + 34;
+    int contentBottom = (int)(panel.y + panel.height) - 10;
+    Rectangle contentClip = {
+        panel.x + 8, (float)contentTop, panel.width - 16,
+        (float)(contentBottom - contentTop)
+    };
+
+    float maxScroll = fmaxf(0.0f, g_contentHeight[g_tab] - contentClip.height);
+    if (MouseIn(contentClip))
+    {
+        g_scroll[g_tab] -= GetMouseWheelMove()*42.0f;
+        g_scroll[g_tab] = Clamp(g_scroll[g_tab], 0.0f, maxScroll);
+    }
+
+    UI ui = {
+        .world = w,
+        .x = (int)panel.x + 16,
+        .y = contentTop - (int)g_scroll[g_tab],
+        .width = (int)panel.width - 32,
+        .clip = contentClip
+    };
+    int logicalStart = ui.y;
+
+    BeginScissorMode((int)contentClip.x, (int)contentClip.y,
+                     (int)contentClip.width, (int)contentClip.height);
 
     switch (g_tab)
     {
@@ -635,5 +739,22 @@ void CommandCenterDraw(World *w)
         case TAB_STYLE:  TabStyle(&ui); break;
         case TAB_WORLD:  TabWorld(&ui); break;
         default: break;
+    }
+    EndScissorMode();
+
+    g_contentHeight[g_tab] = (float)(ui.y - logicalStart);
+    maxScroll = fmaxf(0.0f, g_contentHeight[g_tab] - contentClip.height);
+    g_scroll[g_tab] = Clamp(g_scroll[g_tab], 0.0f, maxScroll);
+
+    if (maxScroll > 0.0f)
+    {
+        float trackH = contentClip.height;
+        float thumbH = fmaxf(28.0f, trackH*(trackH/g_contentHeight[g_tab]));
+        float travel = trackH - thumbH;
+        float thumbY = contentClip.y + (maxScroll > 0.0f ? g_scroll[g_tab]/maxScroll*travel : 0.0f);
+        DrawRectangle((int)(contentClip.x + contentClip.width - 3), (int)contentClip.y,
+                      2, (int)trackH, TRACK_BG);
+        DrawRectangle((int)(contentClip.x + contentClip.width - 4), (int)thumbY,
+                      4, (int)thumbH, ACCENT_DIM);
     }
 }

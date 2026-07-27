@@ -4,7 +4,7 @@
 
 #include "types.h"
 
-void ArenaLoad(Arena *a);
+void ArenaLoad(Arena *a, int crateHealth);
 
 // Spawn point for a team slot, wrapping if the map has fewer points than brawlers.
 Vector3 ArenaSpawnFor(const Arena *a, int team, int slot);

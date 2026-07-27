@@ -7,6 +7,7 @@
 // `aimDist` only matters for arcing weapons, which land at a chosen distance.
 void WeaponsFire(World *w, int idx, bool super, float aimDist);
 
+// Advances ordinary projectiles and the fixed pool of persistent ability fields.
 void ProjectilesUpdate(World *w, float dt);
 void ProjectilesDraw(World *w);
 

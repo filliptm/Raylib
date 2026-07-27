@@ -5,7 +5,7 @@ thing: **never load a raw Meshy/Tripo export directly — run it through
 `tools/fix_meshy_glb.py` first.**
 
 ```
-python3 tools/fix_meshy_glb.py <meshy-export-dir> resources/sentinel.glb
+python3 tools/fix_meshy_glb.py <meshy-export-dir> resources/<character>.glb
 ```
 
 The symptom of skipping this step is not an error. The model loads "successfully"
@@ -79,20 +79,28 @@ None of this is corrupt — it is legal glTF. It is simply outside raylib's cont
 - Strips transforms from all non-joint nodes (Armature wrapper, mesh node).
 - Adds constant filler channels for any unkeyed joint path, so the static rewrite can
   never leak into animation.
-- Merges the per-animation GLBs into one file with named clips
-  (`tpose`, `idle`, `running`, `walking`).
+- Merges either per-animation GLBs or a merged-animation GLB into one runtime file,
+  preserving normalized, lower-case clip names.
 - Downscales the texture (512 px is generous at this camera distance).
 - Verifies numerically: TRS reconstruction error and world-vs-inverse-IBM error are
   printed and should be ~1e-5 or better.
 
-Result for the Sentinel: **117 MB in four files → 0.88 MB in one**, loading as
-4,197 verts / 24 bones / 4 clips, posed height ~170 skeleton units, auto-normalised
-to 2.0 world units by `AssetsLoad`.
+Current tracked runtime assets:
+
+| Kit | Runtime file | Mesh | Rig | Clips | Size |
+|---|---|---:|---:|---:|---:|
+| Scrapper | `resources/sentinel.glb` | 5,210 vertices | 24 bones | 13 | about 4.3 MiB |
+| Tank | `resources/ironclad_guardian.glb` | 4,888 vertices | 24 bones | 13 | about 1.6 MiB |
+| Guardian | `resources/gaia_guardian.glb` | 5,070 vertices | 24 bones | 13 | about 1.7 MiB |
+
+`AssetsLoad()` measures the GPU-equivalent idle pose and normalizes every character to
+`CHARACTER_TARGET_H` (currently 3.1 world units).
 
 ## Standard animation set
 
-Every character export uses the same clips, chosen from Meshy's library under the same
-names, so any new character drops into the game with zero code changes.
+Every character export should use the same clips, chosen from Meshy's library under the
+same names. Runtime clip lookup then works without kit-specific animation code; the new
+runtime model still needs to be registered to its class in `CHARACTER_MODEL_PATHS`.
 
 Core - required:
 
@@ -133,19 +141,46 @@ The tool accepts both Meshy export styles: one GLB per animation (clip named fro
 filename) and the newer single merged-animations GLB (each clip keeps its own name,
 lowercased). The file carrying the most clips becomes the base.
 
+## Can animations be reused between characters?
+
+Yes, but the reusable unit is the **skeleton animation**, not the visible mesh. A clip can
+be applied safely to another character only when both assets have a compatible rig:
+
+- The same joint names.
+- The same parent hierarchy.
+- A compatible rest/bind pose and joint orientation.
+- Compatible unit and root-transform conventions.
+- Vertex skin weights bound to that skeleton.
+
+raylib does not retarget animations between different rigs. Matching a 24-bone count is
+not enough; a differently named or oriented skeleton can twist, collapse, or move joints
+in the wrong directions even when the file loads successfully. A model with a different
+rig therefore needs animations baked for that rig, or it must be retargeted in Blender,
+Meshy, or another DCC tool before export.
+
+The Sentinel, Ironclad Guardian, and Gaia Guardian use the exact same 24 joint names and
+parent hierarchy. Their locomotion clips are therefore reusable in principle. The current
+runtime packages each model with its own included clips because that is the safest
+bind-pose pairing and keeps each GLB self-contained. A future shared animation library
+could store one copy of compatible clips and apply them across this Meshy rig, but it
+should first validate the full skeleton contract above. Regardless of where the clips
+come from, raw Meshy GLBs still need the fixer because animation compatibility does not
+solve raylib's bind-space limitations.
+
 ## Checklist for adding a new character
 
 1. In Meshy, download the **GLB** (not FBX/USDZ — raylib loads neither) with skin,
-   plus each animation as its own GLB. Keep polycount modest (~4–8k tris).
-2. Drop all the GLBs in one directory. The T-pose file must contain
+   plus either the merged-animation GLB or each animation as its own GLB. Keep polycount
+   modest (~4–8k tris).
+2. Extract/drop the GLBs in one directory. The T-pose file must contain
    `Character_output` in its name (Meshy's default).
 3. `python3 tools/fix_meshy_glb.py <dir> resources/<name>.glb`
 4. Check the tool's output: reconstruction errors ~1e-5, expected clip list, texture
    line present.
-5. Point `CHARACTER_MODEL_PATH` in `src/assets.c` at the file and run. The log line
-   to look for: `CHARACTER: <verts> verts, <bones> bones, <clips> clips, posed height
-   <H>, scale <s>` — posed height should be a sane skeleton-space number (tens to
-   hundreds), not thousands.
+5. Register the file for its kit in `CHARACTER_MODEL_PATHS` in `src/assets.c` and run.
+   The log line to look for is `CHARACTER <KIT>: <verts> verts, <bones> bones, <clips>
+   clips, posed height <H>, scale <s>` — posed height should be a sane skeleton-space
+   number (tens to hundreds), not thousands.
 6. Look at the menu podium. The model must stand on the disc, facing the camera,
    idle-animating. If it's a spike-ball or invisible, re-read this document.
 
@@ -194,11 +229,12 @@ Worth keeping, because every step here either found a bug or disproved a theory:
   because writer and reader disagreed about where fields lived. Every `.o` now depends
   on every header. If behaviour turns impossible right after a header edit, suspect
   stale objects first.
-- **Test runs kept destroying the player's saved settings.** Verification runs deleted
-  `tuning.cfg` for deterministic defaults, and parallel test instances autosaved over
-  it - which surfaced as "my settings randomly reset". Automated runs must set
-  `BRAWL_TUNING=/tmp/some.cfg` so they never touch the real file.
-- **zsh aborts a whole command when any glob fails to match.** `rm -f tuning.cfg
-  ig_*.png` deleted *nothing* when no `ig_*.png` existed, so a stale `tuning.cfg`
-  survived and the next run spawned the wrong kit - which looked exactly like a code
-  bug in the spawn logic. Delete files by exact name, or glob with care.
+- **Test runs kept destroying the player's saved settings.** Older verification runs
+  deleted or overwrote `tuning.cfg`, which surfaced as “my settings randomly reset.”
+  Automated runs now isolate all four paths with `BRAWL_PROJECT_CONFIG`,
+  `BRAWL_TUNING`, `BRAWL_PROFILE`, and `BRAWL_LEGACY_TUNING`; never point a test at the
+  real local files or tracked `config/gameplay.cfg`.
+- **zsh aborts a whole command when any glob fails to match.** An older cleanup command
+  mixed a tuning filename with `ig_*.png`; when the image glob had no match, nothing was
+  deleted and stale state survived. Delete known temporary files by exact name, and
+  treat unmatched globs carefully.

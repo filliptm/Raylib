@@ -10,7 +10,8 @@ void FxExplosion(World *w, Vector3 pos, float radius, Color color);
 void FxDeathBurst(World *w, Vector3 pos, Color color);
 void FxCrateBreak(World *w, Vector3 pos);
 void FxFloatText(World *w, Vector3 pos, const char *text, Color color);
-void FxShake(World *w, float amount);
+// Reserved for non-combat match-state emphasis. Attacks and impact helpers never call it.
+void FxMatchShake(World *w, float amount);
 void FxSpawnLight(World *w, Vector3 pos, Color color, float radius, float life);
 void FxShockwave(World *w, Vector3 pos, float maxRadius, float life, Color color);
 

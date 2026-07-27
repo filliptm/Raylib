@@ -29,6 +29,7 @@ Project-specific documentation remains useful for deeper implementation notes:
 - [Documentation index](docs/README.md)
 - [Launcher guide](docs/LAUNCHER_README.md)
 - [brawl_arena/README.md](brawl_arena/README.md)
+- [brawl_arena/config/README.md](brawl_arena/config/README.md)
 - [brawl_arena/docs/CHARACTER_PIPELINE.md](brawl_arena/docs/CHARACTER_PIPELINE.md)
 - [hearthstone/README.md](hearthstone/README.md)
 - [hearthstone/docs/](hearthstone/docs/)
@@ -76,12 +77,14 @@ launches.
 
 ## Repository conventions
 
-- `build/`, object files, game binaries, logs, and `brawl_arena/tuning.cfg` are generated
-  locally and ignored where appropriate. The existing root `example_launcher` binary is
+- `build/`, object files, game binaries, logs, `brawl_arena/tuning.cfg`,
+  `brawl_arena/tuning.local.cfg`, and `brawl_arena/profile.cfg` are generated locally
+  and ignored where appropriate. The existing root `example_launcher` binary is
   already tracked despite its ignore rule; use a `/tmp` output for verification unless
   intentionally refreshing that artifact.
-- The source character archives under `brawl_arena/*.zip` are local import material. The
-  repacked runtime model is `brawl_arena/resources/sentinel.glb`.
+- The source character archives under `brawl_arena/*.zip` are local import material.
+  Repacked runtime models live in `brawl_arena/resources/` (`sentinel.glb`,
+  `ironclad_guardian.glb`, and `gaia_guardian.glb`).
 - `raylib-examples/` is a vendored/reference collection. Avoid broad rewrites there unless
   the task explicitly concerns the examples.
 - Repository-wide instructions for coding agents are in [AGENTS.md](AGENTS.md).

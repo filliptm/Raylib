@@ -15,6 +15,7 @@ This directory contains the repository-level documentation for the Raylib worksp
 Implementation-specific documentation remains beside the project it describes:
 
 - [Brawl Arena README](../brawl_arena/README.md)
+- [Brawl Arena project configuration](../brawl_arena/config/README.md)
 - [Brawl Arena character pipeline](../brawl_arena/docs/CHARACTER_PIPELINE.md)
 - [Hearthstone README](../hearthstone/README.md)
 - [Hearthstone design](../hearthstone/docs/HEARTHSTONE_DESIGN.md)

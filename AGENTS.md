@@ -10,7 +10,9 @@ Before changing code or documentation:
 2. Read the local README and directly relevant files for the project being changed.
 3. If working on Brawl Arena character assets, also read
    `brawl_arena/docs/CHARACTER_PIPELINE.md`.
-4. If working on Hearthstone architecture or editor behavior, read the relevant file in
+4. If working on Brawl Arena gameplay values or persistence, also read
+   `brawl_arena/config/README.md` and validate `brawl_arena/config/gameplay.cfg`.
+5. If working on Hearthstone architecture or editor behavior, read the relevant file in
    `hearthstone/docs/` and verify it against the current implementation.
 
 `docs/PROJECT_OVERVIEW.md` is the maintained repository-level description. The code is
@@ -45,8 +47,8 @@ intentional, document it explicitly.
 - Describe implemented behavior, not intended behavior.
 - Verify counts, defaults, filenames, controls, and commands from the current tree.
 - Distinguish live runtime systems from compiled-but-disconnected scaffolding.
-- Distinguish built-in defaults from ignored per-machine state such as
-  `brawl_arena/tuning.cfg`.
+- Distinguish tracked `brawl_arena/config/gameplay.cfg`, compiled recovery values,
+  ignored draft/profile state, and the legacy `brawl_arena/tuning.cfg` import source.
 - Use relative repository paths in documentation.
 - Date `docs/PROJECT_OVERVIEW.md` when performing a full code-verified review.
 - Do not use “complete,” “fully integrated,” “exact,” or “cross-platform” unless the
@@ -87,8 +89,11 @@ intentional, document it explicitly.
   on every header.
 - Prefer passing `World *` through gameplay systems and avoid adding new hidden globals.
 - Preserve fixed-pool behavior unless a change explicitly redesigns allocation.
-- Use `BRAWL_TUNING` with a temporary path for automated/runtime config checks. Do not
-  overwrite or delete the user's normal `brawl_arena/tuning.cfg`.
+- `brawl_arena/config/gameplay.cfg` is the tracked source of truth for project tuning.
+  Change it intentionally or through the command center's explicit PROJECT save actions.
+- Use `BRAWL_PROJECT_CONFIG`, `BRAWL_TUNING`, `BRAWL_PROFILE`, and
+  `BRAWL_LEGACY_TUNING` with temporary paths for automated/runtime config checks. Do not
+  overwrite or delete the user's local tuning/profile files.
 - Keep Gem Grab and free-form/practice roster semantics separate. Existing command-center
   bot helpers are not team-aware.
 - Permanent walls and destructible crates are different rules. Do not describe crate
@@ -104,7 +109,8 @@ safe target.
 
 In particular:
 
-- Do not commit `brawl_arena/tuning.cfg`.
+- Do not commit `brawl_arena/tuning.cfg`, `brawl_arena/tuning.local.cfg`, or
+  `brawl_arena/profile.cfg`.
 - Do not commit the large `brawl_arena/*.zip` source archives.
 - Do not remove user tuning or logs as part of cleanup.
 - Do not edit generated binaries directly.
@@ -148,6 +154,8 @@ Run `make -C hearthstone test_animation` and
 
 ```bash
 make -C brawl_arena
+make -C brawl_arena validate-config
+make -C brawl_arena test
 clang -std=c99 -Wall -Wextra -fsyntax-only \
   $(pkg-config --cflags raylib) brawl_arena/src/*.c
 ```

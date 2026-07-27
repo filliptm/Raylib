@@ -9,6 +9,22 @@
 
 #define TAP_THRESHOLD 0.14f     // shorter than this counts as a tap-to-autoaim shot
 
+static int AutoAimTarget(World *w, int idx)
+{
+    Brawler *b = &w->brawlers[idx];
+    const WeaponDef *def = &WEAPONS[b->cls];
+
+    if (def->healing > 0)
+    {
+        int ally = BrawlerMostWoundedAlly(w, idx, def->range);
+        if (ally >= 0 &&
+            (float)w->brawlers[ally].health/(float)w->brawlers[ally].maxHealth <
+                w->tune.aiSupportHealth)
+            return ally;
+    }
+    return BrawlerNearestVisibleEnemy(w, idx);
+}
+
 Vector3 PlayerMouseGroundPoint(World *w)
 {
     Ray ray = GetScreenToWorldRay(GetMousePosition(), w->camera);
@@ -130,15 +146,17 @@ void PlayerUpdate(World *w, float dt)
 
         if (w->chargeTime < TAP_THRESHOLD)
         {
-            // Tap fires at the nearest visible enemy, mirroring mobile's auto-aim.
-            int target = BrawlerNearestVisibleEnemy(w, idx);
+            // Guardians favor a badly hurt ally; every other quick shot selects the
+            // nearest visible enemy, mirroring mobile-style auto-aim.
+            int target = AutoAimTarget(w, idx);
             if (target >= 0)
             {
                 Vector3 t = w->brawlers[target].position;
                 Vector3 d = Vector3Subtract(t, b->position);
                 d.y = 0.0f;
 
-                float travel = Vector3Length(d) / WEAPONS[b->cls].speed;
+                float shotSpeed = WEAPONS[b->cls].speed;
+                float travel = (shotSpeed > 0.1f) ? Vector3Length(d)/shotSpeed : 0.0f;
                 Vector3 lead = Vector3Add(t, Vector3Scale(w->brawlers[target].velocity, travel * 0.7f));
                 Vector3 ld = Vector3Subtract(lead, b->position);
 
@@ -160,7 +178,7 @@ void PlayerUpdate(World *w, float dt)
     // Space is a straight auto-aim shot, handy while repositioning.
     if (IsKeyPressed(KEY_SPACE))
     {
-        int target = BrawlerNearestVisibleEnemy(w, idx);
+        int target = AutoAimTarget(w, idx);
         if (target >= 0)
         {
             Vector3 d = Vector3Subtract(w->brawlers[target].position, b->position);

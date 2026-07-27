@@ -15,49 +15,72 @@ const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
     // SHOTGUNNER - close range, wide spread, rewards closing the gap
     {
         .name = "SCRAPPER", .flavor = "Close-range spread", .maxHealth = 3800,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
         .pellets = 5, .spreadDeg = 24.0f, .speed = 34.0f, .range = 13.0f,
         .damage = 320, .projRadius = 0.22f, .cooldown = 0.36f,
         .reloadPerAmmo = 1.35f, .superPerHit = 0.085f,
-        .arcing = false, .rangeScaled = false,
-        .superName = "BUCKSHOT", .sPellets = 9, .sSpreadDeg = 34.0f, .sSpeed = 36.0f,
-        .sRange = 15.0f, .sDamage = 460, .sProjRadius = 0.26f, .sPiercing = false, .sDash = false
+        .rangeScaled = false,
+        .superName = "BUCKSHOT", .superKind = SUPER_PROJECTILE,
+        .sPellets = 9, .sSpreadDeg = 34.0f, .sSpeed = 36.0f,
+        .sRange = 15.0f, .sDamage = 460, .sProjRadius = 0.26f, .sPiercing = false
     },
     // SNIPER - long range, single shot, damage ramps with travel distance
     {
         .name = "LONGSHOT", .flavor = "Damage grows with distance", .maxHealth = 2800,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
         .pellets = 1, .spreadDeg = 0.0f, .speed = 56.0f, .range = 26.0f,
         .damage = 1600, .projRadius = 0.20f, .cooldown = 0.52f,
         .reloadPerAmmo = 1.70f, .superPerHit = 0.30f,
-        .arcing = false, .rangeScaled = true,
-        .superName = "RAILGUN", .sPellets = 1, .sSpreadDeg = 0.0f, .sSpeed = 70.0f,
-        .sRange = 34.0f, .sDamage = 2400, .sProjRadius = 0.34f, .sPiercing = true, .sDash = false
+        .rangeScaled = true,
+        .superName = "RAILGUN", .superKind = SUPER_PROJECTILE,
+        .sPellets = 1, .sSpreadDeg = 0.0f, .sSpeed = 70.0f,
+        .sRange = 34.0f, .sDamage = 2400, .sProjRadius = 0.34f, .sPiercing = true
     },
     // LOBBER - arcs over walls, splashes on landing, cannot hit what it flies past
     {
         .name = "MORTAR", .flavor = "Lobs over walls, splash damage", .maxHealth = 3200,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_LOB,
         .pellets = 1, .spreadDeg = 0.0f, .speed = 16.0f, .range = 13.0f,
         .damage = 1000, .projRadius = 2.6f, .cooldown = 0.55f,
         .reloadPerAmmo = 1.60f, .superPerHit = 0.30f,
-        .arcing = true, .rangeScaled = false,
-        .superName = "BARRAGE", .sPellets = 3, .sSpreadDeg = 26.0f, .sSpeed = 16.0f,
-        .sRange = 15.0f, .sDamage = 1100, .sProjRadius = 2.9f, .sPiercing = false, .sDash = false
+        .rangeScaled = false,
+        .superName = "BARRAGE", .superKind = SUPER_PROJECTILE,
+        .sPellets = 3, .sSpreadDeg = 26.0f, .sSpeed = 16.0f,
+        .sRange = 15.0f, .sDamage = 1100, .sProjRadius = 2.9f, .sPiercing = false
     },
     // BRUISER - short range, tanky, closes distance with a dash super
     {
         .name = "TANK", .flavor = "Tanky brawler with a charge", .maxHealth = 5600,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
         .pellets = 4, .spreadDeg = 18.0f, .speed = 30.0f, .range = 7.5f,
         .damage = 440, .projRadius = 0.24f, .cooldown = 0.42f,
         .reloadPerAmmo = 1.25f, .superPerHit = 0.095f,
-        .arcing = false, .rangeScaled = false,
-        .superName = "CHARGE", .sPellets = 0, .sSpreadDeg = 0.0f, .sSpeed = 0.0f,
-        .sRange = 0.0f, .sDamage = 1200, .sProjRadius = 0.0f, .sPiercing = false, .sDash = true
+        .rangeScaled = false,
+        .superName = "CHARGE", .superKind = SUPER_DASH,
+        .sPellets = 0, .sSpreadDeg = 0.0f, .sSpeed = 0.0f,
+        .sRange = 0.0f, .sDamage = 1200, .sProjRadius = 0.0f, .sPiercing = false
+    },
+    // HEALER - growing rain pulses on both teams; super marks a wide cone with HoT/DoT
+    {
+        .name = "GUARDIAN", .flavor = "Restorative rain and resonant waves", .maxHealth = 3400,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_RAIN,
+        .pellets = 0, .spreadDeg = 0.0f, .speed = 0.0f, .range = 17.0f,
+        .damage = 100, .healing = 100, .projRadius = 3.4f, .cooldown = 0.42f,
+        .reloadPerAmmo = 1.55f, .superPerHit = 0.04f,
+        .rangeScaled = false, .duration = 1.35f, .tickRate = 0.15f, .growTime = 0.594f,
+        .superName = "RESONANCE", .superKind = SUPER_SOUND_WAVE,
+        .sPellets = 0, .sSpreadDeg = 90.0f, .sSpeed = 0.0f,
+        .sRange = 14.0f, .sDamage = 180, .sHealing = 220, .sProjRadius = 0.0f,
+        .sPiercing = false, .sDuration = 2.10f, .sTickRate = 0.35f,
+        .sVisualDuration = 0.70f
     },
 };
 
-// The live copy gameplay reads. Seeded from WEAPON_DEFAULTS at startup.
+// The live copy gameplay reads. Compiled values seed recovery mode; normal startup then
+// replaces them with the validated canonical project configuration.
 WeaponDef WEAPONS[CLASS_COUNT];
 
-const char *CLASS_NAMES[CLASS_COUNT] = { "SCRAPPER", "LONGSHOT", "MORTAR", "TANK" };
+const char *CLASS_NAMES[CLASS_COUNT] = { "SCRAPPER", "LONGSHOT", "MORTAR", "TANK", "GUARDIAN" };
 const char *BOT_MODE_NAMES[BOT_MODE_COUNT] = { "STATIC", "ROAM", "FIGHT" };
 
 const Color TEAM_COLORS[2] = {
@@ -82,14 +105,16 @@ void WeaponsResetKit(BrawlerClass cls)
 
 void TuningSetDefaults(Tuning *t)
 {
-    t->moveSpeed     = MOVE_SPEED;
-    t->moveAccel     = MOVE_ACCEL;
+    t->moveSpeed     = DEFAULT_MOVE_SPEED;
+    t->moveAccel     = DEFAULT_MOVE_ACCEL;
     t->dashSpeed     = 26.0f;
-    t->bushReveal    = BUSH_REVEAL_RANGE;
-    t->fireReveal    = FIRE_REVEAL_TIME;
-    t->playerRespawn = PLAYER_RESPAWN;
-    t->enemyRespawn  = ENEMY_RESPAWN;
+    t->bushReveal    = DEFAULT_BUSH_REVEAL_RANGE;
+    t->fireReveal    = DEFAULT_FIRE_REVEAL_TIME;
+    t->playerRespawn = DEFAULT_PLAYER_RESPAWN;
+    t->enemyRespawn  = DEFAULT_ENEMY_RESPAWN;
+    t->matchResultHold = DEFAULT_MATCH_RESULT_HOLD;
     t->timeScale     = 1.0f;
+    t->crateHealth   = DEFAULT_CRATE_HEALTH;
     t->superMult     = 1.0f;
     t->godMode       = false;
     t->infiniteAmmo  = false;
@@ -129,6 +154,10 @@ void TuningSetDefaults(Tuning *t)
     t->botCount      = 3;
     t->botKit        = CLASS_SHOTGUNNER;
     t->botMixedKits  = true;
+    t->aiRetreatHealth = 0.30f;
+    t->aiSupportHealth = 0.85f;
+    t->aiSupportSuperHealth = 0.60f;
+    t->aiProbeAhead = 1.60f;
 }
 
 //------------------------------------------------------------------------------------
@@ -136,6 +165,13 @@ static Projectile *AllocProjectile(World *w)
 {
     for (int i = 0; i < MAX_PROJECTILES; i++)
         if (!w->projectiles[i].active) return &w->projectiles[i];
+    return NULL;
+}
+
+static AbilityField *AllocAbilityField(World *w)
+{
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+        if (!w->abilityFields[i].active) return &w->abilityFields[i];
     return NULL;
 }
 
@@ -150,6 +186,19 @@ Vector3 WeaponsArcLanding(const Brawler *b, float aimDist)
     };
 }
 
+static bool PointInSoundCone(Vector3 origin, float angle, float range, float spread,
+                             Vector3 point)
+{
+    float dx = point.x - origin.x;
+    float dz = point.z - origin.z;
+    float distSq = dx*dx + dz*dz;
+    if (distSq > range*range || distSq < 0.0001f) return false;
+
+    float invDist = 1.0f/sqrtf(distSq);
+    float dot = dx*invDist*sinf(angle) + dz*invDist*cosf(angle);
+    return dot >= cosf(spread*0.5f);
+}
+
 //------------------------------------------------------------------------------------
 void WeaponsFire(World *w, int idx, bool super, float aimDist)
 {
@@ -157,16 +206,122 @@ void WeaponsFire(World *w, int idx, bool super, float aimDist)
     const WeaponDef *def = &WEAPONS[b->cls];
     if (!b->alive) return;
 
-    Color muzzle = super ? (Color){ 255, 225, 120, 255 } : TEAM_COLORS[b->team];
+    Color healColor = { 70, 244, 166, 255 };
+    Color muzzle = (super || def->healing <= 0)
+                 ? (super ? (Color){ 255, 225, 120, 255 } : TEAM_COLORS[b->team])
+                 : healColor;
+
+    if (!super && def->mainKind == ATTACK_RAIN)
+    {
+        AbilityField *field = AllocAbilityField(w);
+        if (field)
+        {
+            *field = (AbilityField){ 0 };
+            field->position = WeaponsArcLanding(b, aimDist);
+            field->position.y = 0.035f;
+            field->radius = def->projRadius;
+            field->growTime = def->growTime;
+            field->life = def->duration;
+            field->maxLife = def->duration;
+            field->tickTimer = 0.0f; // the first small pulse lands immediately
+            field->tickRate = def->tickRate;
+            field->damage = def->damage;
+            field->healing = def->healing;
+            field->team = b->team;
+            field->owner = idx;
+            field->type = ABILITY_FIELD_RAIN;
+            field->active = true;
+        }
+
+        b->revealTimer = w->tune.fireReveal;
+        FxMuzzleFlash(w, (Vector3){ b->position.x, 0.8f, b->position.z },
+                      b->aimAngle, healColor);
+        FxSpawnLight(w, (Vector3){ b->position.x, 1.0f, b->position.z },
+                     healColor, 2.4f, 0.22f);
+        return;
+    }
+
+    // Resonance catches every visible target in a wide cone at cast time. The field is
+    // only the travelling sound-wave visualization; each target owns its timed mark.
+    if (super && def->superKind == SUPER_SOUND_WAVE)
+    {
+        AbilityField *field = AllocAbilityField(w);
+        if (field)
+        {
+            *field = (AbilityField){ 0 };
+            field->position = b->position;
+            field->position.y = 0.045f;
+            field->angle = b->aimAngle;
+            field->range = def->sRange;
+            field->spread = def->sSpreadDeg*DEG2RAD;
+            field->life = def->sVisualDuration;
+            field->maxLife = def->sVisualDuration;
+            field->team = b->team;
+            field->owner = idx;
+            field->type = ABILITY_FIELD_SOUND_WAVE;
+            field->active = true;
+        }
+
+        for (int i = 0; i < w->brawlerCount; i++)
+        {
+            Brawler *t = &w->brawlers[i];
+            if (i == idx || !t->alive) continue;
+            if (!PointInSoundCone(b->position, b->aimAngle, def->sRange,
+                                  def->sSpreadDeg*DEG2RAD, t->position)) continue;
+            if (!ArenaLineOfSight(&w->arena, b->position, t->position)) continue;
+
+            BrawlerApplyResonance(w, i, b->team, idx, def->sDamage, def->sHealing,
+                                  def->sDuration, def->sTickRate);
+            Color markColor = (t->team == b->team)
+                            ? healColor : (Color){ 255, 116, 154, 255 };
+            FxImpact(w, (Vector3){ t->position.x, 0.8f, t->position.z }, markColor, 9);
+        }
+
+        b->revealTimer = w->tune.fireReveal;
+        FxMuzzleFlash(w, (Vector3){ b->position.x, 0.9f, b->position.z },
+                      b->aimAngle, (Color){ 134, 244, 255, 255 });
+        FxSpawnLight(w, (Vector3){ b->position.x, 1.1f, b->position.z },
+                     (Color){ 122, 239, 255, 255 }, def->sRange*0.55f, 0.55f);
+        return;
+    }
+
+    // Sanctuary is centered on its caster. It heals living teammates (including the
+    // caster), never revives, and never damages enemies.
+    if (super && def->superKind == SUPER_HEALING_BURST)
+    {
+        for (int i = 0; i < w->brawlerCount; i++)
+        {
+            Brawler *t = &w->brawlers[i];
+            if (!t->alive || t->team != b->team) continue;
+            if (Vector3Distance(b->position, t->position) > def->sRange) continue;
+            BrawlerApplyHealing(w, i, def->sHealing, idx, t->position);
+        }
+
+        Vector3 ground = { b->position.x, 0.04f, b->position.z };
+        FxShockwave(w, ground, def->sRange, 0.55f, healColor);
+        FxShockwave(w, ground, def->sRange*0.62f, 0.35f, (Color){ 190, 255, 222, 255 });
+        FxSpawnLight(w, (Vector3){ b->position.x, 1.0f, b->position.z },
+                     healColor, def->sRange, 0.45f);
+        for (int i = 0; i < 28; i++)
+        {
+            float angle = GetRandomValue(0, 628)/100.0f;
+            float radius = GetRandomValue(20, 100)/100.0f*def->sRange;
+            Vector3 pos = { b->position.x + sinf(angle)*radius, 0.15f,
+                            b->position.z + cosf(angle)*radius };
+            FxSpawnParticle(w, pos, (Vector3){ 0, 1.6f, 0 }, healColor,
+                            0.55f, 0.14f, PARTICLE_SPARK);
+        }
+        b->revealTimer = w->tune.fireReveal;
+        return;
+    }
 
     // The dash super has no projectile at all: it hands control to brawler.c.
-    if (super && def->sDash)
+    if (super && def->superKind == SUPER_DASH)
     {
         b->dashTimer = 0.45f;
         b->dashDir = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
         b->dashHitMask = 0;
         b->revealTimer = w->tune.fireReveal;
-        FxShake(w, 1.4f);
         FxMuzzleFlash(w, b->position, b->aimAngle, muzzle);
         return;
     }
@@ -203,16 +358,18 @@ void WeaponsFire(World *w, int idx, bool super, float aimDist)
         p->team = b->team;
         p->owner = idx;
         p->damage = damage;
+        p->healing = super ? 0 : def->healing;
         p->radius = radius;
         p->range = range;
         p->isSuper = super;
         p->piercing = piercing;
         p->breaksWalls = super;
         p->rangeScaled = def->rangeScaled;
-        p->color = super ? (Color){ 255, 214, 92, 255 } : TEAM_COLORS[b->team];
+        p->color = super ? (Color){ 255, 214, 92, 255 }
+                         : (p->healing > 0 ? healColor : TEAM_COLORS[b->team]);
         p->active = true;
 
-        if (def->arcing)
+        if (def->mainKind == ATTACK_LOB)
         {
             Vector3 land = WeaponsArcLanding(b, aimDist);
             // Spread arcing shots by rotating the landing point around the shooter.
@@ -240,8 +397,66 @@ void WeaponsFire(World *w, int idx, bool super, float aimDist)
     b->revealTimer = w->tune.fireReveal;
     FxMuzzleFlash(w, (Vector3){ origin.x + sinf(b->aimAngle) * 0.6f, origin.y, origin.z + cosf(b->aimAngle) * 0.6f },
                   b->aimAngle, muzzle);
-    if (super) FxShake(w, 1.2f);
-    else FxShake(w, 0.25f);
+}
+
+static void UpdateRainField(World *w, AbilityField *field, float dt)
+{
+    float age = field->maxLife - field->life;
+    float growTime = field->growTime;
+    if (growTime <= 0.0f) growTime = field->maxLife;
+    float radius = field->radius*Clamp(age/growTime, 0.15f, 1.0f);
+
+    field->tickTimer -= dt;
+    while (field->tickTimer <= 0.0f && field->life > 0.0f)
+    {
+        bool affected = false;
+        for (int i = 0; i < w->brawlerCount; i++)
+        {
+            Brawler *t = &w->brawlers[i];
+            if (!t->alive) continue;
+
+            float dx = t->position.x - field->position.x;
+            float dz = t->position.z - field->position.z;
+            if (dx*dx + dz*dz > radius*radius) continue;
+
+            if (t->team == field->team)
+            {
+                int restored = BrawlerApplyHealing(w, i, field->healing,
+                                                    field->owner, t->position);
+                if (restored > 0)
+                {
+                    affected = true;
+                    BrawlerAwardSuper(w, field->owner,
+                        WEAPONS[w->brawlers[field->owner].cls].superPerHit*w->tune.superMult);
+                }
+            }
+            else
+            {
+                BrawlerApplyDamage(w, i, field->damage, field->owner, t->position);
+                affected = true;
+                BrawlerAwardSuper(w, field->owner,
+                    WEAPONS[w->brawlers[field->owner].cls].superPerHit*w->tune.superMult);
+            }
+        }
+
+        Color pulse = affected ? (Color){ 104, 255, 190, 255 }
+                               : (Color){ 89, 207, 217, 220 };
+        FxShockwave(w, field->position, radius, 0.19f, pulse);
+        field->tickTimer += field->tickRate;
+    }
+}
+
+static void AbilityFieldsUpdate(World *w, float dt)
+{
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+    {
+        AbilityField *field = &w->abilityFields[i];
+        if (!field->active) continue;
+
+        field->life -= dt;
+        if (field->type == ABILITY_FIELD_RAIN) UpdateRainField(w, field, dt);
+        if (field->life <= 0.0f) field->active = false;
+    }
 }
 
 //------------------------------------------------------------------------------------
@@ -270,7 +485,7 @@ static void Detonate(World *w, Projectile *p, Vector3 at)
 
     if (p->breaksWalls)
     {
-        int broken = ArenaDamageRadius(&w->arena, at, p->radius, CRATE_HEALTH);
+        int broken = ArenaDamageRadius(&w->arena, at, p->radius, w->tune.crateHealth);
         if (broken > 0) FxCrateBreak(w, at);
     }
 }
@@ -295,13 +510,28 @@ static bool ProjectileHitCheck(World *w, Projectile *p)
     for (int i = 0; i < w->brawlerCount; i++)
     {
         Brawler *t = &w->brawlers[i];
-        if (!t->alive || t->team == p->team) continue;
+        if (!t->alive) continue;
         if (p->hitMask & (1 << i)) continue;
+        if (i == p->owner) continue;
 
         float dx = t->position.x - p->position.x;
         float dz = t->position.z - p->position.z;
         float reach = BRAWLER_RADIUS + p->radius;
         if (dx * dx + dz * dz > reach * reach) continue;
+
+        if (t->team == p->team)
+        {
+            if (p->healing <= 0) continue;
+            int restored = BrawlerApplyHealing(w, i, p->healing, p->owner, p->position);
+            if (restored <= 0) continue; // full-health allies do not waste the bolt
+
+            if (p->owner >= 0)
+                BrawlerAwardSuper(w, p->owner,
+                    WEAPONS[w->brawlers[p->owner].cls].superPerHit*w->tune.superMult);
+            p->hitMask |= (1 << i);
+            if (!p->piercing) return true;
+            continue;
+        }
 
         int dmg = p->damage;
         if (p->rangeScaled)
@@ -324,6 +554,8 @@ static bool ProjectileHitCheck(World *w, Projectile *p)
 
 void ProjectilesUpdate(World *w, float dt)
 {
+    AbilityFieldsUpdate(w, dt);
+
     for (int i = 0; i < MAX_PROJECTILES; i++)
     {
         Projectile *p = &w->projectiles[i];

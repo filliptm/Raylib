@@ -31,10 +31,10 @@
 #define MAX_PARTICLES 1024
 #define MAX_FLOATTEXTS 64
 #define CHARACTER_TARGET_H 3.1f   // world height every character model is normalised to
-#define MATCH_RESULT_HOLD 4.5f  // seconds the result is shown before returning to the menu
 #define MAX_GEMS 40
 #define MAX_SPAWNS 8
 #define MAX_SHOCKWAVES 24
+#define MAX_ABILITY_FIELDS 24
 #define MAX_FX_LIGHTS 64
 #define MAX_SHADER_LIGHTS 8     // how many make it to the GPU each frame
 
@@ -42,14 +42,15 @@
 // Gameplay tuning
 //------------------------------------------------------------------------------------
 #define BRAWLER_RADIUS 0.65f
-#define MOVE_SPEED 11.0f
-#define MOVE_ACCEL 30.0f
-#define MAX_AMMO 3
-#define CRATE_HEALTH 1000
-#define BUSH_REVEAL_RANGE 3.2f      // enemies this close see you inside a bush
-#define FIRE_REVEAL_TIME 1.0f       // attacking reveals you for this long
-#define PLAYER_RESPAWN 3.0f
-#define ENEMY_RESPAWN 4.0f
+#define DEFAULT_MOVE_SPEED 11.0f
+#define DEFAULT_MOVE_ACCEL 30.0f
+#define DEFAULT_MAX_AMMO 3
+#define DEFAULT_CRATE_HEALTH 1000
+#define DEFAULT_MATCH_RESULT_HOLD 4.5f
+#define DEFAULT_BUSH_REVEAL_RANGE 3.2f
+#define DEFAULT_FIRE_REVEAL_TIME 1.0f
+#define DEFAULT_PLAYER_RESPAWN 3.0f
+#define DEFAULT_ENEMY_RESPAWN 4.0f
 
 //------------------------------------------------------------------------------------
 // Tiles
@@ -89,6 +90,7 @@ typedef enum {
     CLASS_SNIPER,           // long-range single shot, damage scales with distance
     CLASS_LOBBER,           // arcing projectile that clears walls, splash on landing
     CLASS_BRUISER,          // short-range burst, high HP, dash super
+    CLASS_HEALER,           // rain field pulses on both teams; sound-wave super adds HoT/DoT
     CLASS_COUNT
 } BrawlerClass;
 
@@ -117,35 +119,59 @@ typedef enum {
     BOT_MODE_COUNT
 } BotMode;
 
+typedef enum {
+    ATTACK_PROJECTILE = 0,
+    ATTACK_LOB,
+    ATTACK_RAIN,
+    ATTACK_KIND_COUNT
+} MainAttackKind;
+
+typedef enum {
+    SUPER_PROJECTILE = 0,
+    SUPER_DASH,
+    SUPER_HEALING_BURST,
+    SUPER_SOUND_WAVE,
+    SUPER_KIND_COUNT
+} SuperKind;
+
 // A weapon is the whole identity of a class: its main attack and its super.
 typedef struct WeaponDef {
     const char *name;
     const char *flavor;
     int maxHealth;
+    int maxAmmo;
 
     // Main attack
+    MainAttackKind mainKind;
     int pellets;
     float spreadDeg;
     float speed;
     float range;
     int damage;             // per pellet
+    int healing;            // per pellet when it hits an injured ally
     float projRadius;
     float cooldown;
     float reloadPerAmmo;    // seconds to regain one ammo pip
     float superPerHit;      // super meter gained per pellet landed (0..1)
-    bool arcing;            // lobbed over walls, splashes where it lands
     bool rangeScaled;       // damage ramps up with distance travelled
+    float duration;         // persistent main-attack lifetime, when applicable
+    float tickRate;         // persistent main-attack pulse interval
+    float growTime;         // seconds for a persistent area to reach full size
 
     // Super
     const char *superName;
+    SuperKind superKind;
     int sPellets;
     float sSpreadDeg;
     float sSpeed;
     float sRange;
     int sDamage;
+    int sHealing;           // healing delivered by a healing-burst super
     float sProjRadius;
     bool sPiercing;
-    bool sDash;             // super is a dash rather than a projectile
+    float sDuration;        // timed effect duration
+    float sTickRate;        // timed effect pulse interval
+    float sVisualDuration;  // cast visualization lifetime
 } WeaponDef;
 
 typedef struct Brawler {
@@ -172,6 +198,16 @@ typedef struct Brawler {
     float dashTimer;
     Vector3 dashDir;
     int dashHitMask;
+
+    // Timed effect applied by the Guardian's sound wave. Its source team decides
+    // whether each pulse heals this brawler or damages them.
+    float resonanceTimer;
+    float resonanceTickTimer;
+    float resonanceTickRate;
+    int resonanceDamage;
+    int resonanceHealing;
+    int resonanceSource;
+    Team resonanceTeam;
 
     bool inBush;
     bool visible;           // recomputed every frame, from the player's viewpoint
@@ -204,6 +240,7 @@ typedef struct Projectile {
     float range;
 
     int damage;
+    int healing;
     float radius;
     Team team;
     int owner;
@@ -219,7 +256,7 @@ typedef struct Projectile {
     bool breaksWalls;
     bool isSuper;
     bool rangeScaled;
-    int hitMask;            // brawlers already damaged, so piercing shots hit once each
+    int hitMask;            // brawlers already affected, so piercing shots hit once each
 
     Color color;
     bool active;
@@ -228,6 +265,30 @@ typedef struct Projectile {
 //------------------------------------------------------------------------------------
 // Effects
 //------------------------------------------------------------------------------------
+typedef enum {
+    ABILITY_FIELD_RAIN = 0,
+    ABILITY_FIELD_SOUND_WAVE
+} AbilityFieldType;
+
+// Persistent ability geometry. Rain fields also own their gameplay pulses; sound-wave
+// fields are the short-lived cast visualization after their targets have been marked.
+typedef struct AbilityField {
+    Vector3 position;
+    float angle;
+    float radius;
+    float range;
+    float spread;
+    float growTime;
+    float life, maxLife;
+    float tickTimer, tickRate;
+    int damage;
+    int healing;
+    Team team;
+    int owner;
+    AbilityFieldType type;
+    bool active;
+} AbilityField;
+
 typedef enum { PARTICLE_SPARK = 0, PARTICLE_MUZZLE, PARTICLE_SMOKE, PARTICLE_DEBRIS } ParticleType;
 
 typedef struct Particle {
@@ -297,8 +358,9 @@ typedef struct FloatText {
 } FloatText;
 
 //------------------------------------------------------------------------------------
-// Live tuning, all editable from the command center at runtime.
-// The #defines above are the starting values; these are what gameplay actually reads.
+// Effective tuning read by gameplay and edited from the command center. Normal startup
+// populates these values from the canonical project configuration; compiled values are
+// only the recovery seed used before that load.
 //------------------------------------------------------------------------------------
 typedef struct Tuning {
     // Movement
@@ -313,7 +375,9 @@ typedef struct Tuning {
     // Match flow
     float playerRespawn;
     float enemyRespawn;
+    float matchResultHold;
     float timeScale;
+    int crateHealth;
 
     // Cheats / sandbox helpers
     float superMult;        // multiplier on super charge gained per hit
@@ -368,9 +432,24 @@ typedef struct Tuning {
     int botCount;
     BrawlerClass botKit;
     bool botMixedKits;
+    float aiRetreatHealth;
+    float aiSupportHealth;
+    float aiSupportSuperHealth;
+    float aiProbeAhead;
 } Tuning;
 
 void TuningSetDefaults(Tuning *t);
+
+// Canonical project defaults are kept beside the effective runtime values so the
+// command center can show provenance, discard a draft, or promote selected changes.
+typedef struct ConfigState {
+    Tuning projectTuning;
+    WeaponDef projectWeapons[CLASS_COUNT];
+    bool projectLoaded;
+    bool recoveryDefaults;
+    bool legacyImported;
+    char status[160];
+} ConfigState;
 
 //------------------------------------------------------------------------------------
 // World
@@ -380,6 +459,7 @@ typedef struct World {
     Brawler brawlers[MAX_BRAWLERS];
     int brawlerCount;
     Projectile projectiles[MAX_PROJECTILES];
+    AbilityField abilityFields[MAX_ABILITY_FIELDS];
     Particle particles[MAX_PARTICLES];
     FloatText texts[MAX_FLOATTEXTS];
     FxLight lights[MAX_FX_LIGHTS];
@@ -405,6 +485,7 @@ typedef struct World {
     int deaths;
 
     Tuning tune;
+    ConfigState config;
     bool matchRestartPending;   // a rule changed that only a rebuild can apply
 
     // Screen flow. `fade` runs 0..1..0 across a transition and `pending` is the screen
@@ -421,8 +502,8 @@ typedef struct World {
     bool sandbox;
 } World;
 
-// Live weapon table, edited by the command center. WEAPON_DEFAULTS is the pristine
-// baseline used to reset a kit.
+// Live weapon table, edited by the command center. WEAPON_DEFAULTS is compiled recovery
+// data; normal resets use the canonical project snapshot in World.config.
 extern WeaponDef WEAPONS[CLASS_COUNT];
 extern const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT];
 

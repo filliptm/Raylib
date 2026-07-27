@@ -5,19 +5,16 @@
 #include "effects.h"
 #include "gems.h"
 #include "assets.h"
+#include "environment.h"
 #include "rlgl.h"
 #include <stddef.h>
 #include "raymath.h"
 #include <math.h>
 
 //------------------------------------------------------------------------------------
-// Palette. Textures carry the detail, these tint them.
+// Palette for the procedural fallback brawlers. Environment colors live with the
+// station renderer.
 //------------------------------------------------------------------------------------
-static const Color FLOOR_TINT  = { 150, 163, 190, 255 };
-static const Color WALL_TINT   = { 120, 134, 166, 255 };   // cold steel: permanent cover
-static const Color WALL_CAP    = { 126, 140, 172, 255 };   // top plate, kept off the floor's value
-static const Color WALL_BASE   = {  74,  84, 108, 255 };   // skirt where it meets the floor
-static const Color CRATE_TINT  = { 205, 168, 122, 255 };
 static const Color SKIN_TINT   = { 232, 190, 158, 255 };
 
 // Camera framing: pulled back and tilted, the way the mobile game reads.
@@ -93,12 +90,11 @@ void RenderBuildGrass(World *w)
     }
 }
 
-#define AIM_Y 0.08f     // sits just clear of the floor and its grid lines
-
 // A thick ground segment, shared by the shockwave rings and the aim-preview outlines.
 static void DrawGroundEdge(Vector3 a, Vector3 b, float thickness, Color color)
 {
-    DrawCylinderEx((Vector3){ a.x, AIM_Y, a.z }, (Vector3){ b.x, AIM_Y, b.z },
+    DrawCylinderEx((Vector3){ a.x, ARENA_PREVIEW_Y, a.z },
+                   (Vector3){ b.x, ARENA_PREVIEW_Y, b.z },
                    thickness, thickness, 6, color);
 }
 
@@ -233,7 +229,7 @@ static void DrawGroundGlow(Assets *a, Vector3 pos, float radius, Color tint)
 {
     rlDisableDepthMask();
     Matrix m = TRS((Vector3){ radius*2.0f, 1.0f, radius*2.0f }, 0.0f,
-                   (Vector3){ pos.x, 0.03f, pos.z });
+                   (Vector3){ pos.x, ARENA_DECAL_Y, pos.z });
     DrawLit(a, a->plane, m, a->texGlow, tint, (Vector2){ 1.0f, 1.0f }, 1.0f);
     rlEnableDepthMask();
 }
@@ -246,63 +242,7 @@ static void DrawShadow(Assets *a, Vector3 pos, float radius)
 //------------------------------------------------------------------------------------
 static void DrawArenaGeometry(World *w, Assets *a)
 {
-    float worldW = ARENA_W*TILE_SIZE;
-    float worldH = ARENA_H*TILE_SIZE;
-
-    // Floor, one quad with the tile texture repeated once per game tile.
-    Matrix floorM = TRS((Vector3){ worldW, 1.0f, worldH }, 0.0f, (Vector3){ 0.0f, 0.0f, 0.0f });
-    DrawLit(a, a->plane, floorM, a->texFloor, FLOOR_TINT,
-            (Vector2){ (float)ARENA_W, (float)ARENA_H }, 0.0f);
-
-    for (int tz = 0; tz < ARENA_H; tz++)
-    {
-        for (int tx = 0; tx < ARENA_W; tx++)
-        {
-            const Tile *t = &w->arena.tiles[tz][tx];
-            if (t->type == TILE_FLOOR) continue;
-
-            Vector3 c = ArenaTileCenter(tx, tz);
-
-            if (t->type == TILE_WALL)
-            {
-                Matrix body = TRS((Vector3){ TILE_SIZE, WALL_HEIGHT, TILE_SIZE }, 0.0f,
-                                  (Vector3){ c.x, WALL_HEIGHT*0.5f, c.z });
-                DrawLit(a, a->cube, body, a->texWall, WALL_TINT, (Vector2){ 1.0f, 1.0f }, 0.0f);
-
-                // From this camera the cap is most of what you see, so it carries the
-                // same bolted plating rather than a blank brushed-metal lid.
-                Matrix cap = TRS((Vector3){ TILE_SIZE*1.03f, 0.20f, TILE_SIZE*1.03f }, 0.0f,
-                                 (Vector3){ c.x, WALL_HEIGHT + 0.06f, c.z });
-                DrawLit(a, a->cube, cap, a->texWall, WALL_CAP, (Vector2){ 1.0f, 1.0f }, 0.0f);
-
-                // A wider skirt at the floor. Crates sit flush on the ground, so this
-                // silhouette alone tells you which cover you can shoot through.
-                Matrix plinth = TRS((Vector3){ TILE_SIZE*1.06f, 0.30f, TILE_SIZE*1.06f }, 0.0f,
-                                    (Vector3){ c.x, 0.15f, c.z });
-                DrawLit(a, a->cube, plinth, a->texMetal, WALL_BASE, (Vector2){ 1.0f, 1.0f }, 0.0f);
-            }
-            else if (t->type == TILE_CRATE)
-            {
-                float hp = (float)t->health/(float)CRATE_HEALTH;
-                Color tint = CRATE_TINT;
-                if (t->hitFlash > 0.0f) tint = ColorLerpC(tint, WHITE, t->hitFlash);
-                tint = ColorLerpC((Color){ 128, 96, 66, 255 }, tint, 0.4f + hp*0.6f);
-
-                float size = TILE_SIZE*0.9f;
-                Matrix body = TRS((Vector3){ size, CRATE_HEIGHT, size }, 0.0f,
-                                  (Vector3){ c.x, CRATE_HEIGHT*0.5f, c.z });
-                DrawLit(a, a->cube, body, a->texCrate, tint, (Vector2){ 1.0f, 1.0f }, 0.0f);
-
-                DrawShadow(a, c, size*0.62f);
-            }
-            else if (t->type == TILE_BUSH)
-            {
-                // Darken the soil so the grass field has something to sit in. The blades
-                // themselves are instanced separately in DrawGrass().
-                DrawGroundGlow(a, c, TILE_SIZE*0.66f, (Color){ 12, 32, 16, 130 });
-            }
-        }
-    }
+    EnvironmentDraw(w, a);
 }
 
 //------------------------------------------------------------------------------------
@@ -408,6 +348,7 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
         case CLASS_SNIPER:  gunLen = 1.15f; gunGirth = 0.085f; gunReach = 0.82f; break;
         case CLASS_LOBBER:  gunLen = 0.46f; gunGirth = 0.19f;  gunReach = 0.50f; break;
         case CLASS_BRUISER: gunLen = 0.58f; gunGirth = 0.22f;  gunReach = 0.54f; break;
+        case CLASS_HEALER:  gunLen = 0.68f; gunGirth = 0.14f;  gunReach = 0.60f; break;
         default: break;
     }
 
@@ -422,6 +363,13 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
         Matrix drum = TRS((Vector3){ 0.20f*s, 0.16f*s, 0.20f*s }, yaw,
                           (Vector3){ pos.x + ax*0.44f*s, 0.86f*s + bob, pos.z + az*0.44f*s });
         DrawLit(a, a->sphere, drum, a->texMetal, (Color){ 96, 102, 122, body.a }, (Vector2){ 1.0f, 1.0f }, 0.0f);
+    }
+    else if (b->cls == CLASS_HEALER)
+    {
+        Vector3 focus = { pos.x + ax*0.86f*s, 0.72f*s + bob, pos.z + az*0.86f*s };
+        Matrix orb = TRS((Vector3){ 0.16f*s, 0.16f*s, 0.16f*s }, yaw, focus);
+        DrawLit(a, a->sphere, orb, a->texGlow, (Color){ 70, 244, 166, body.a },
+                (Vector2){ 1.0f, 1.0f }, 0.85f);
     }
 
     Matrix grip = TRS((Vector3){ 0.10f*s, 0.18f*s, 0.10f*s }, yaw,
@@ -556,11 +504,11 @@ static void DrawShockwaves(World *w)
         float thickness = 0.07f + 0.20f*fade;
 
         const int SEG = 30;
-        Vector3 prev = { sw->position.x, AIM_Y, sw->position.z + radius };
+        Vector3 prev = { sw->position.x, ARENA_PREVIEW_Y, sw->position.z + radius };
         for (int k = 1; k <= SEG; k++)
         {
             float ang = (k/(float)SEG)*PI*2.0f;
-            Vector3 pt = { sw->position.x + sinf(ang)*radius, AIM_Y,
+            Vector3 pt = { sw->position.x + sinf(ang)*radius, ARENA_PREVIEW_Y,
                            sw->position.z + cosf(ang)*radius };
             DrawGroundEdge(prev, pt, thickness, c);
             prev = pt;
@@ -712,10 +660,11 @@ static void DrawAimCone(World *w, Vector3 origin, float centerAngle, float halfS
     {
         float angle = centerAngle - halfSpread + (i/(float)SEG)*halfSpread*2.0f;
         float d = RayGroundDistance(w, origin, angle, range);
-        pts[i] = (Vector3){ origin.x + sinf(angle)*d, AIM_Y, origin.z + cosf(angle)*d };
+        pts[i] = (Vector3){ origin.x + sinf(angle)*d, ARENA_PREVIEW_Y,
+                            origin.z + cosf(angle)*d };
     }
 
-    Vector3 apex = { origin.x, AIM_Y, origin.z };
+    Vector3 apex = { origin.x, ARENA_PREVIEW_Y, origin.z };
 
     // Culling is off because the winding flips depending on which way you are facing.
     rlDisableBackfaceCulling();
@@ -735,10 +684,12 @@ static void DrawAimBeam(World *w, Vector3 origin, float angle, float range,
     float fx = sinf(angle), fz = cosf(angle);
     float px = cosf(angle), pz = -sinf(angle);      // perpendicular in the ground plane
 
-    Vector3 nearL = { origin.x + px*halfWidth, AIM_Y, origin.z + pz*halfWidth };
-    Vector3 nearR = { origin.x - px*halfWidth, AIM_Y, origin.z - pz*halfWidth };
-    Vector3 farL  = { nearL.x + fx*d, AIM_Y, nearL.z + fz*d };
-    Vector3 farR  = { nearR.x + fx*d, AIM_Y, nearR.z + fz*d };
+    Vector3 nearL = { origin.x + px*halfWidth, ARENA_PREVIEW_Y,
+                      origin.z + pz*halfWidth };
+    Vector3 nearR = { origin.x - px*halfWidth, ARENA_PREVIEW_Y,
+                      origin.z - pz*halfWidth };
+    Vector3 farL  = { nearL.x + fx*d, ARENA_PREVIEW_Y, nearL.z + fz*d };
+    Vector3 farR  = { nearR.x + fx*d, ARENA_PREVIEW_Y, nearR.z + fz*d };
 
     rlDisableBackfaceCulling();
     DrawTriangle3D(nearL, nearR, farR, fill);
@@ -754,19 +705,113 @@ static void DrawAimBeam(World *w, Vector3 origin, float angle, float range,
 static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge)
 {
     const int SEG = 32;
-    Vector3 middle = { center.x, AIM_Y, center.z };
-    Vector3 prev = { center.x, AIM_Y, center.z + radius };
+    Vector3 middle = { center.x, ARENA_PREVIEW_Y, center.z };
+    Vector3 prev = { center.x, ARENA_PREVIEW_Y, center.z + radius };
 
     rlDisableBackfaceCulling();
     for (int i = 1; i <= SEG; i++)
     {
         float a = (i/(float)SEG)*PI*2.0f;
-        Vector3 p = { center.x + sinf(a)*radius, AIM_Y, center.z + cosf(a)*radius };
+        Vector3 p = { center.x + sinf(a)*radius, ARENA_PREVIEW_Y,
+                      center.z + cosf(a)*radius };
         DrawTriangle3D(middle, prev, p, fill);
         DrawGroundEdge(prev, p, 0.06f, edge);
         prev = p;
     }
     rlEnableBackfaceCulling();
+}
+
+static void DrawAbilityFields(World *w, Assets *a)
+{
+    BeginBlendMode(BLEND_ADDITIVE);
+    rlDisableDepthMask();
+
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+    {
+        AbilityField *field = &w->abilityFields[i];
+        if (!field->active || field->maxLife <= 0.0f) continue;
+
+        float age = field->maxLife - field->life;
+        float progress = Clamp(age/field->maxLife, 0.0f, 1.0f);
+        float fade = Clamp(field->life/fminf(field->maxLife, 0.32f), 0.0f, 1.0f);
+
+        if (field->type == ABILITY_FIELD_RAIN)
+        {
+            float growTime = (field->growTime > 0.0f) ? field->growTime : field->maxLife;
+            float radius = field->radius*Clamp(age/growTime, 0.15f, 1.0f);
+            Color fill = { 65, 218, 190, (unsigned char)(44*fade) };
+            Color edge = { 116, 255, 218, (unsigned char)(185*fade) };
+            DrawAimDisc(field->position, radius, fill, edge);
+            DrawGroundGlow(a, field->position, radius,
+                           (Color){ 62, 226, 190, (unsigned char)(54*fade) });
+
+            // Stable x/z samples with looping y phases read as a compact rain shower
+            // without allocating a particle for every drop.
+            for (int k = 0; k < 22; k++)
+            {
+                float theta = Scatter(i + 41, k, 3)*PI*2.0f;
+                float radial = sqrtf(Scatter(i + 41, k, 5))*radius;
+                float fall = fmodf(w->time*2.8f + Scatter(i + 41, k, 7), 1.0f);
+                float top = 3.25f - fall*2.75f;
+                Vector3 p0 = {
+                    field->position.x + sinf(theta)*radial,
+                    top,
+                    field->position.z + cosf(theta)*radial
+                };
+                Vector3 p1 = { p0.x - 0.04f, fmaxf(0.12f, top - 0.52f), p0.z + 0.03f };
+                DrawCylinderEx(p1, p0, 0.018f, 0.027f, 5,
+                               (Color){ 134, 244, 255, (unsigned char)(150*fade) });
+            }
+        }
+        else if (field->type == ABILITY_FIELD_SOUND_WAVE)
+        {
+            Color fill = { 90, 222, 255, (unsigned char)(28*(1.0f - progress)) };
+            Color edge = { 142, 244, 255, (unsigned char)(220*(1.0f - progress)) };
+            float travel = field->range*(1.0f - powf(1.0f - progress, 2.0f));
+            DrawAimCone(w, field->position, field->angle, field->spread*0.5f,
+                        travel, fill, edge);
+
+            // Three closely spaced fronts make the cast read like a sound wave rather
+            // than a single projectile or explosion.
+            for (int band = 0; band < 3; band++)
+            {
+                float bandRadius = travel - band*0.72f;
+                if (bandRadius <= 0.1f) continue;
+
+                const int SEG = 24;
+                Vector3 prev = { 0 };
+                for (int k = 0; k <= SEG; k++)
+                {
+                    float angle = field->angle - field->spread*0.5f +
+                                  (k/(float)SEG)*field->spread;
+                    Vector3 pt = {
+                        field->position.x + sinf(angle)*bandRadius,
+                        ARENA_PREVIEW_Y + 0.02f + band*0.018f,
+                        field->position.z + cosf(angle)*bandRadius
+                    };
+                    if (k > 0) DrawGroundEdge(prev, pt, 0.10f - band*0.018f, edge);
+                    prev = pt;
+                }
+            }
+        }
+    }
+
+    // The travelling cone vanishes quickly, while this ground aura communicates the
+    // longer heal-over-time or damage-over-time mark that it left behind.
+    for (int i = 0; i < w->brawlerCount; i++)
+    {
+        Brawler *b = &w->brawlers[i];
+        if (!b->alive || !b->visible || b->resonanceTimer <= 0.0f) continue;
+
+        bool healing = b->team == b->resonanceTeam;
+        Color aura = healing ? (Color){ 74, 255, 176, 105 }
+                             : (Color){ 255, 82, 156, 105 };
+        float pulse = 0.92f + 0.10f*sinf(w->time*12.0f);
+        DrawGroundGlow(a, b->position, 1.15f*pulse, aura);
+    }
+
+    rlEnableDepthMask();
+    EndBlendMode();
 }
 
 static void DrawAimPreview(World *w, Assets *a)
@@ -783,15 +828,51 @@ static void DrawAimPreview(World *w, Assets *a)
     int pellets     = super ? def->sPellets : def->pellets;
     float radius    = super ? def->sProjRadius : def->projRadius;
 
-    // Supers read gold, ordinary shots read cool blue.
+    // Supers read gold, ordinary shots read cool blue, and support actions read green.
     Color fill = super ? (Color){ 255, 206, 92, 62 } : (Color){ 96, 178, 255, 58 };
     Color edge = super ? (Color){ 255, 238, 170, 210 } : (Color){ 176, 224, 255, 205 };
+    if (def->healing > 0)
+    {
+        fill = (Color){ 70, 244, 166, 58 };
+        edge = (Color){ 170, 255, 214, 215 };
+    }
+    if (super && def->superKind == SUPER_SOUND_WAVE)
+    {
+        fill = (Color){ 75, 215, 255, 56 };
+        edge = (Color){ 152, 246, 255, 220 };
+    }
 
     BeginBlendMode(BLEND_ADDITIVE);
     rlDisableDepthMask();
 
+    if (!super && def->mainKind == ATTACK_RAIN)
+    {
+        Vector3 landing = WeaponsArcLanding(b, w->aimDist);
+        DrawAimDisc(landing, def->projRadius, fill, edge);
+        rlEnableDepthMask();
+        EndBlendMode();
+        return;
+    }
+
+    if (super && def->superKind == SUPER_SOUND_WAVE)
+    {
+        DrawAimCone(w, b->position, b->aimAngle, (def->sSpreadDeg*DEG2RAD)*0.5f,
+                    def->sRange, fill, edge);
+        rlEnableDepthMask();
+        EndBlendMode();
+        return;
+    }
+
+    if (super && def->superKind == SUPER_HEALING_BURST)
+    {
+        DrawAimDisc(b->position, def->sRange, fill, edge);
+        rlEnableDepthMask();
+        EndBlendMode();
+        return;
+    }
+
     // The dash charge previews as the lane it will carve.
-    if (super && def->sDash)
+    if (super && def->superKind == SUPER_DASH)
     {
         DrawAimBeam(w, b->position, b->aimAngle, w->tune.dashSpeed*0.45f,
                     BRAWLER_RADIUS*1.1f, fill, edge);
@@ -801,7 +882,7 @@ static void DrawAimPreview(World *w, Assets *a)
     }
 
     // Lobbed shots: the splash disc where each shell lands, plus its flight path.
-    if (def->arcing)
+    if (def->mainKind == ATTACK_LOB)
     {
         float aimDist = Clamp(w->aimDist, 1.5f, range);
         float half = (spreadDeg*DEG2RAD)*0.5f;
@@ -846,11 +927,7 @@ static void DrawAimPreview(World *w, Assets *a)
     EndBlendMode();
 }
 
-// In-match draw for the imported rigged character (currently the Scrapper's model).
-// Clip follows movement: idle standing still, walking at a stroll, running flat out
-// or dashing. There is no crossfade in raylib, so a clip change restarts its cycle -
-// starting at frame zero pops less than landing mid-stride.
-// In-match draw for the imported rigged character (currently the Scrapper's model).
+// In-match draw for any kit with an imported rigged character.
 //
 // The clip is chosen from the movement direction RELATIVE TO FACING, which is what
 // stops the moonwalk: a brawler aims one way and moves another, so backpedaling picks
@@ -863,8 +940,10 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
 {
     static float animTime[MAX_BRAWLERS];
     static int animClip[MAX_BRAWLERS];
+    static BrawlerClass animClass[MAX_BRAWLERS];
 
     int idx = (int)(b - w->brawlers);
+    RiggedCharacter *character = &a->characters[b->cls];
 
     int clip;
     float rate = 1.0f;
@@ -872,12 +951,12 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
 
     if (!b->alive)
     {
-        clip = a->clipDeath;        // gated by the caller; plays once and holds
+        clip = character->clipDeath;        // gated by the caller; plays once and holds
         loop = false;
     }
     else if (b->dashTimer > 0.0f)
     {
-        clip = a->clipRunF;
+        clip = character->clipRunF;
         rate = 1.35f;
     }
     else
@@ -891,12 +970,12 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
             while (rel < -PI) rel += 2.0f*PI;
             float deg = rel*RAD2DEG;
 
-            if (fabsf(deg) <= 35.0f)       clip = (speed <= 6.5f) ? a->clipWalk : a->clipRunF;
-            else if (deg >  35.0f && deg <=  105.0f) clip = a->clipRunFL;
-            else if (deg < -35.0f && deg >= -105.0f) clip = a->clipRunFR;
-            else if (deg >  105.0f && deg <  155.0f) clip = a->clipRunBL;
-            else if (deg < -105.0f && deg > -155.0f) clip = a->clipRunBR;
-            else { clip = a->clipRunB; rate = 1.30f; }   // walk-paced clip, run-paced feet
+            if (fabsf(deg) <= 35.0f)       clip = (speed <= 6.5f) ? character->clipWalk : character->clipRunF;
+            else if (deg >  35.0f && deg <=  105.0f) clip = character->clipRunFL;
+            else if (deg < -35.0f && deg >= -105.0f) clip = character->clipRunFR;
+            else if (deg >  105.0f && deg <  155.0f) clip = character->clipRunBL;
+            else if (deg < -105.0f && deg > -155.0f) clip = character->clipRunBR;
+            else { clip = character->clipRunB; rate = 1.30f; }   // walk-paced clip, run-paced feet
 
             // Feet track the ground better when playback follows actual speed.
             rate *= Clamp(speed/w->tune.moveSpeed, 0.6f, 1.3f);
@@ -904,11 +983,16 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
         else
         {
             // Recently fired: hold the combat stance instead of relaxing to idle.
-            clip = (b->revealTimer > 0.0f) ? a->clipCombat : a->clipIdle;
+            clip = (b->revealTimer > 0.0f) ? character->clipCombat : character->clipIdle;
         }
     }
 
-    if (clip != animClip[idx]) { animClip[idx] = clip; animTime[idx] = 0.0f; }
+    if (clip != animClip[idx] || animClass[idx] != b->cls)
+    {
+        animClip[idx] = clip;
+        animClass[idx] = b->cls;
+        animTime[idx] = 0.0f;
+    }
     animTime[idx] += GetFrameTime()*w->tune.timeScale*rate;
 
     DrawShadow(a, b->position, 0.52f*b->spawnScale);
@@ -938,7 +1022,7 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
         }
     }
 
-    AssetsDrawCharacter(a, b->position, b->renderYaw, b->spawnScale,
+    AssetsDrawCharacter(a, b->cls, b->position, b->renderYaw, b->spawnScale,
                         clip, animTime[idx]*60.0f, loop, tint, dither, emissive,
                         g_lightPos, g_lightCol, g_lightCount, w->camera.position);
 
@@ -954,13 +1038,14 @@ static void DrawBrawlerCharacterModel(World *w, Assets *a, Brawler *b)
 
 static void DrawBrawler(World *w, Assets *a, Brawler *b)
 {
-    bool modelKit = (b->cls == CLASS_SHOTGUNNER && a->characterOk && w->tune.modelCharacter);
+    RiggedCharacter *character = &a->characters[b->cls];
+    bool modelKit = character->ok && w->tune.modelCharacter;
 
     // A downed model plays its death clip and holds the final pose until close to the
     // respawn; primitives keep vanishing into their particle burst as before.
     if (!b->alive)
     {
-        if (modelKit && a->clipDeath >= 0 && b->respawnTimer > 0.5f)
+        if (modelKit && character->clipDeath >= 0 && b->respawnTimer > 0.5f)
             DrawBrawlerCharacterModel(w, a, b);
         return;
     }
@@ -1026,10 +1111,10 @@ static void DrawDebugOverlay(World *w)
 
         Color ring = TEAM_COLORS[b->team];
         ring.a = 70;
-        DrawCylinderWires((Vector3){ b->position.x, 0.08f, b->position.z },
+        DrawCylinderWires((Vector3){ b->position.x, ARENA_PREVIEW_Y, b->position.z },
                           def->range, def->range, 0.01f, 40, ring);
 
-        DrawCylinderWires((Vector3){ b->position.x, 0.09f, b->position.z },
+        DrawCylinderWires((Vector3){ b->position.x, ARENA_PREVIEW_Y + 0.01f, b->position.z },
                           BRAWLER_RADIUS, BRAWLER_RADIUS, 0.01f, 16, (Color){ 255, 255, 255, 60 });
 
         if (b->isPlayer) continue;
@@ -1081,6 +1166,7 @@ void RenderWorld(World *w)
 
         DrawGems(w, a);
         DrawSolidEffects(w, a);
+        DrawAbilityFields(w, a);
         DrawAimPreview(w, a);
         DrawShockwaves(w);
         DrawProjectiles(w, a);

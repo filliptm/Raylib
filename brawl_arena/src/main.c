@@ -5,7 +5,7 @@
 *   an ammo/reload economy, a super charged by landing hits, and bushes that hide you.
 *
 *   Bots stand still by default so you can dial the feel in. Press TAB for the command
-*   center; anything you change there is saved to tuning.cfg and reloaded next launch.
+*   center; edits autosave to a local draft and can be promoted to tracked project truth.
 ********************************************************************************************/
 
 #include "raylib.h"
@@ -70,6 +70,7 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
     bool keepQuit = w->quitRequested;
     bool keepBanked = w->matchResultBanked;
     bool keepSandbox = w->sandbox;
+    ConfigState keepConfig = w->config;
 
     memset(w, 0, sizeof(World));
 
@@ -81,8 +82,9 @@ static void ResetMatch(World *w, BrawlerClass playerClass)
     w->quitRequested = keepQuit;
     w->matchResultBanked = keepBanked;
     w->sandbox = keepSandbox;
+    w->config = keepConfig;
 
-    ArenaLoad(&w->arena);
+    ArenaLoad(&w->arena, w->tune.crateHealth);
     w->playerIdx = 0;
 
     if (w->tune.gemGrab && !w->sandbox)
@@ -183,9 +185,7 @@ int main(void)
     // ESC must mean "back", not "quit", now that there are screens to back out of.
     SetExitKey(KEY_NULL);
 
-    WeaponsResetAll();
-    TuningSetDefaults(&world.tune);
-    ConfigLoad(&world);
+    ConfigInitialize(&world);
 
     AssetsLoad(&assets, SCREEN_WIDTH, SCREEN_HEIGHT);
     RenderSetAssets(&assets);
@@ -255,7 +255,7 @@ int main(void)
                 bool skipped = world.match.overTimer > 0.9f &&
                                (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE));
 
-                if (world.match.overTimer > MATCH_RESULT_HOLD || skipped)
+                if (world.match.overTimer > world.tune.matchResultHold || skipped)
                     ShellRequestScreen(&world, SCREEN_MENU);
             }
         }
@@ -318,7 +318,6 @@ int main(void)
     }
 
     ConfigFlush(&world);
-    ConfigSave(&world);
     AssetsUnload(&assets);
     CloseWindow();
     return 0;

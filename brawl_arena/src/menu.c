@@ -60,7 +60,8 @@ static const Color KIT_ACCENT[CLASS_COUNT] = {
     {  74, 142, 236, 255 },     // SCRAPPER
     { 104, 200, 255, 255 },     // LONGSHOT
     { 172, 118, 250, 255 },     // MORTAR
-    { 250, 146,  84, 255 }      // TANK
+    { 250, 146,  84, 255 },     // TANK
+    {  70, 244, 166, 255 }      // GUARDIAN
 };
 
 // The podium brawler is rebuilt whenever the selection changes.
@@ -241,15 +242,14 @@ static void DrawPodiumScene(World *w)
 
         Color accent = KIT_ACCENT[g_preview.cls];
 
-        // The imported model is the SCRAPPER's character. Every other kit keeps its
-        // primitive brawler in its accent colour, so the roster stays distinguishable.
-        if (a->characterOk && w->tune.modelCharacter && g_preview.cls == CLASS_SHOTGUNNER)
+        RiggedCharacter *character = &a->characters[g_preview.cls];
+        if (character->ok && w->tune.modelCharacter)
         {
             // Frames advance at 60Hz, the rate the source clips were sampled at. Tint
             // stays white so the model's own texture reads - the kit accent lives on
             // the podium ring instead.
-            AssetsDrawCharacter(a, g_preview.position, g_preview.renderYaw, 1.0f,
-                                a->clipIdle, g_time*60.0f, true, WHITE, 0.0f, 0.0f,
+            AssetsDrawCharacter(a, g_preview.cls, g_preview.position, g_preview.renderYaw, 1.0f,
+                                character->clipIdle, g_time*60.0f, true, WHITE, 0.0f, 0.0f,
                                 lightPos, lightCol, 2, cam.position);
         }
         else RenderBrawlerModel(a, &g_preview, g_time, 0.0f, &accent);
@@ -320,7 +320,14 @@ static void DrawMainMenu(World *w)
 
     // Drawn one at a time, for the TextFormat buffer reason noted in DrawRosterEntry.
     DrawText(TextFormat("HEALTH      %d", kit->maxHealth), rx + 16, 272, 14, TEXT_MAIN);
-    DrawText(TextFormat("DAMAGE      %d", kit->damage*kit->pellets), rx + 16, 298, 14, TEXT_MAIN);
+    if (kit->mainKind == ATTACK_RAIN)
+        DrawText(TextFormat("PULSE D/H   %d / %d", kit->damage, kit->healing),
+                 rx + 16, 298, 14, TEXT_MAIN);
+    else if (kit->healing > 0)
+        DrawText(TextFormat("DMG / HEAL  %d / %d", kit->damage*kit->pellets,
+                            kit->healing*kit->pellets), rx + 16, 298, 14, TEXT_MAIN);
+    else
+        DrawText(TextFormat("DAMAGE      %d", kit->damage*kit->pellets), rx + 16, 298, 14, TEXT_MAIN);
     DrawText(TextFormat("RANGE       %.0f", kit->range), rx + 16, 324, 14, TEXT_MAIN);
     DrawText(TextFormat("RELOAD      %.2fs", kit->reloadPerAmmo), rx + 16, 350, 14, TEXT_MAIN);
 
@@ -363,7 +370,7 @@ static void DrawControlsModal(World *w)
 
     static const char *KEYS[] = {
         "WASD / arrows", "Hold LMB", "Release LMB", "Tap LMB or SPACE",
-        "RMB", "1 - 4", "TAB", "R", "ESC"
+        "RMB", "1 - 5", "TAB", "R", "ESC"
     };
     static const char *WHAT[] = {
         "Move", "Aim - draws the shot on the ground", "Fire along the preview",
@@ -394,7 +401,12 @@ static void DrawControlsModal(World *w)
 // out, so they stay true after the numbers are tuned in the command center.
 static const char *AttackSummary(const WeaponDef *k)
 {
-    if (k->arcing) return TextFormat("Arcing lob, %.1f splash, clears walls", k->projRadius);
+    if (k->mainKind == ATTACK_RAIN)
+        return TextFormat("Growing rain, %d damage/healing per pulse", k->damage);
+    if (k->healing > 0) return TextFormat("%d damage to foes, %d healing to allies",
+                                          k->damage, k->healing);
+    if (k->mainKind == ATTACK_LOB)
+        return TextFormat("Arcing lob, %.1f splash, clears walls", k->projRadius);
     if (k->rangeScaled) return "Single shot, damage grows with distance";
     if (k->pellets > 1) return TextFormat("%d pellets, %.0f degree spread", k->pellets, k->spreadDeg);
     return "Single shot";
@@ -402,9 +414,16 @@ static const char *AttackSummary(const WeaponDef *k)
 
 static const char *SuperSummary(const WeaponDef *k)
 {
-    if (k->sDash) return TextFormat("Charge: %d on contact, smashes crates", k->sDamage);
+    if (k->superKind == SUPER_SOUND_WAVE)
+        return TextFormat("Wide cone: %d damage, %d healing per tick",
+                          k->sDamage, k->sHealing);
+    if (k->superKind == SUPER_HEALING_BURST)
+        return TextFormat("Heals nearby allies %d within %.0f", k->sHealing, k->sRange);
+    if (k->superKind == SUPER_DASH)
+        return TextFormat("Charge: %d on contact, smashes crates", k->sDamage);
     if (k->sPiercing) return TextFormat("Piercing shot: %d, hits everyone in line", k->sDamage);
-    if (k->arcing) return TextFormat("%d shells, %d each, breaks walls", k->sPellets, k->sDamage);
+    if (k->mainKind == ATTACK_LOB)
+        return TextFormat("%d shells, %d each, breaks walls", k->sPellets, k->sDamage);
     return TextFormat("%d pellets, %d each, breaks walls", k->sPellets, k->sDamage);
 }
 
@@ -439,12 +458,19 @@ static void DrawRosterEntry(World *w, Rectangle r, int kitIndex, bool selected, 
     int sx = (int)r.x + 24, rx = (int)r.x + 210, sy = (int)r.y + 66;
 
     DrawText(TextFormat("HEALTH   %d", k->maxHealth), sx, sy, 13, TEXT_MAIN);
-    DrawText(TextFormat("DAMAGE   %d", k->damage*k->pellets), sx, sy + 19, 13, TEXT_MAIN);
+    if (k->mainKind == ATTACK_RAIN)
+        DrawText(TextFormat("PULSE D/H %d/%d", k->damage, k->healing),
+                 sx, sy + 19, 13, TEXT_MAIN);
+    else if (k->healing > 0)
+        DrawText(TextFormat("D/H      %d/%d", k->damage*k->pellets,
+                            k->healing*k->pellets), sx, sy + 19, 13, TEXT_MAIN);
+    else
+        DrawText(TextFormat("DAMAGE   %d", k->damage*k->pellets), sx, sy + 19, 13, TEXT_MAIN);
     DrawText(TextFormat("RANGE    %.0f", k->range), sx, sy + 38, 13, TEXT_MAIN);
 
     DrawText(TextFormat("RELOAD   %.2fs", k->reloadPerAmmo), rx, sy, 13, TEXT_MAIN);
     DrawText(TextFormat("COOLDOWN %.2fs", k->cooldown), rx, sy + 19, 13, TEXT_MAIN);
-    DrawText(TextFormat("AMMO     %d", MAX_AMMO), rx, sy + 38, 13, TEXT_MAIN);
+    DrawText(TextFormat("AMMO     %d", k->maxAmmo), rx, sy + 38, 13, TEXT_MAIN);
 
     // Descriptions share one column, set wide enough for the longest super name.
     const int descX = 112;

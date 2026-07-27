@@ -3,9 +3,62 @@
 
 #include "types.h"
 
-// Everything the renderer needs that is built once at startup: procedural textures,
-// unit meshes, and the two shaders. No external files - textures are generated and
-// shader source is embedded, so the binary is self-contained.
+typedef struct RiggedCharacter {
+    Model model;
+    ModelAnimation *anims;
+    int animCount;
+    bool ok;
+
+    // Clips are resolved by name, not file order. Directionals are filled with
+    // compatible fallbacks when a source model does not contain every track.
+    int clipIdle, clipCombat, clipWalk;
+    int clipRunF, clipRunB, clipRunFL, clipRunFR, clipRunBL, clipRunBR;
+    int clipDeath;
+    float scale;            // normalises source units to CHARACTER_TARGET_H
+    float footOffset;       // lifts the model so its feet land on y = 0
+} RiggedCharacter;
+
+// Static pieces from Kenney's Space Station Kit. The complete GLB collection is kept
+// under resources/ for future arenas, while this fixed runtime set is the subset used
+// by the current Helios-9 map.
+typedef enum StationModelId {
+    STATION_FLOOR_PANEL = 0,
+    STATION_FLOOR_DETAIL,
+    STATION_STRUCTURE_PANEL,
+    STATION_STRUCTURE,
+    STATION_STRUCTURE_BARRIER,
+    STATION_WALL,
+    STATION_WALL_CORNER,
+    STATION_WALL_PILLAR,
+    STATION_WALL_WINDOW,
+    STATION_WALL_BANNER,
+    STATION_DOOR_DOUBLE_CLOSED,
+    STATION_CONTAINER,
+    STATION_CONTAINER_WIDE,
+    STATION_CONTAINER_TALL,
+    STATION_COMPUTER_SYSTEM,
+    STATION_COMPUTER_WIDE,
+    STATION_DISPLAY_WALL,
+    STATION_PIPE,
+    STATION_PIPE_BEND,
+    STATION_RAIL,
+    STATION_TABLE_DISPLAY_PLANET,
+    STATION_SKIP,
+    STATION_MODEL_COUNT
+} StationModelId;
+
+typedef enum StationPalette {
+    STATION_PALETTE_ORANGE = 0,
+    STATION_PALETTE_PURPLE
+} StationPalette;
+
+typedef struct StationModel {
+    Model model;
+    bool ok;
+} StationModel;
+
+// Everything the renderer needs that is built once at startup: generated textures,
+// unit meshes, shaders, optional per-kit characters, and static station models.
 typedef struct Assets {
     // Shaders
     Shader lighting;
@@ -44,24 +97,21 @@ typedef struct Assets {
     // Screen-door transparency on the scene shader, used for concealed brawlers.
     int locDither;
 
-    // Skinned character. Optional: if the file is missing the game falls back to the
-    // primitive brawlers, so a bad asset can never stop it starting.
+    // Skinned characters. Each slot is optional: a missing or bad file falls back to
+    // that kit's primitive brawler without stopping the game.
     Shader skinned;
     bool skinnedOk;
     int kViewPos, kSunDir, kSunColor, kAmbient, kFogColor, kFogDensity;
     int kUvScale, kEmissive, kDither, kLightPos, kLightColor, kLightCount;
 
-    Model character;
-    ModelAnimation *charAnims;
-    int charAnimCount;
-    bool characterOk;
-    // Clips resolved by name, not file order. Directionals are -1 when the model
-    // lacks them and the draw code falls back to the forward run.
-    int clipIdle, clipCombat, clipWalk;
-    int clipRunF, clipRunB, clipRunFL, clipRunFR, clipRunBL, clipRunBR;
-    int clipDeath;
-    float charScale;        // normalises the source model to CHARACTER_TARGET_H
-    float charFootOffset;   // lifts it so the feet land on y = 0
+    RiggedCharacter characters[CLASS_COUNT];
+
+    // Static environment models share two atlas textures and the scene lighting shader.
+    // Each model is optional so the procedural arena remains a valid fallback.
+    StationModel station[STATION_MODEL_COUNT];
+    Texture2D texStationOrange;
+    Texture2D texStationPurple;
+    bool stationTexturesOk;
 
     // Unit meshes, scaled into place with a matrix at draw time
     Mesh cube;      // 1x1x1 centred on origin
@@ -92,6 +142,12 @@ void AssetsUnload(Assets *a);
 void DrawLit(Assets *a, Mesh mesh, Matrix transform, Texture2D tex, Color tint,
              Vector2 uvScale, float emissive);
 
+// Draws every mesh in one static station model using the shared orange or purple atlas.
+// Returns false when the requested asset is unavailable so callers can draw a primitive
+// fallback without making collision geometry invisible.
+bool AssetsDrawStationModel(Assets *a, StationModelId id, Matrix transform,
+                            StationPalette palette, Color tint, float emissive);
+
 // Upload this frame's point lights.
 void AssetsSetLights(Assets *a, const Vector3 *positions, const Vector3 *colors, int count);
 void AssetsSetCamera(Assets *a, Vector3 viewPos);
@@ -110,7 +166,7 @@ void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrengt
 // caller can advance it at whatever rate suits. `dither` is the screen-door amount for
 // bush concealment and `emissive` lifts the surface out of lighting (used for hit flash).
 // `loop` wraps the frame; one-shot clips (death) clamp on their last frame instead.
-void AssetsDrawCharacter(Assets *a, Vector3 position, float yaw, float scaleMul,
+void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop, Color tint, float dither,
                          float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
                          int lightCount, Vector3 viewPos);
