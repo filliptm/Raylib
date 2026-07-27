@@ -89,6 +89,42 @@ Result for the Sentinel: **117 MB in four files → 0.88 MB in one**, loading as
 4,197 verts / 24 bones / 4 clips, posed height ~170 skeleton units, auto-normalised
 to 2.0 world units by `AssetsLoad`.
 
+## Standard animation set
+
+Every character export uses the same clips, chosen from Meshy's library under the same
+names, so any new character drops into the game with zero code changes.
+
+Core - required:
+
+| Clip | Used for |
+|---|---|
+| Idle | standing |
+| Run forward | moving toward facing |
+| Run backward | backpedaling while aiming |
+| Strafe left / Strafe right | circle-strafing (export both; do not rely on mirroring) |
+| Shoot | standing fire / recoil |
+| Death (knockdown) | played on KO before the respawn |
+| Emote / victory | result screen and select podium |
+
+Optional, grab when available: walk forward (else run is play-rate scaled for slow
+movement), dash/charge lunge (dash supers), hit flinch.
+
+Deliberately excluded: a generic jump. There is no jump mechanic, and a leap belongs
+to whichever kit's super eventually needs it.
+
+Rules that matter more than the list:
+
+- **Every clip must be in-place - no root motion.** The game moves the character; a
+  clip that translates its root makes the feet slide.
+- **Same library animations, same names, every character.** Clip names come from the
+  Meshy filenames (`Animation_<Name>_withSkin`) and the game resolves clips by name.
+- Locomotion and idle loop; shoot, death and emote are one-shots.
+
+Engine-side status: today the game plays idle/walk/run by speed only, which is why a
+character with just a forward cycle moonwalks when strafing. Directional selection
+(clip picked from the angle between velocity and facing), one-shot playback, and the
+shoot/death/emote triggers are the follow-up work once assets with the full set exist.
+
 ## Checklist for adding a new character
 
 1. In Meshy, download the **GLB** (not FBX/USDZ — raylib loads neither) with skin,
