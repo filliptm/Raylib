@@ -29,6 +29,27 @@ static float SuperGainFor(GameContext w, int owner)
     return ContentMainAbility(w.content, character)->superPerHit*w.tuning->superMult;
 }
 
+static int ApplyProjectileDamage(GameContext w, Projectile *projectile,
+                                 int target, int damage, Vector3 hitPosition)
+{
+    int removed = BrawlerApplyDamage(w, target, damage,
+                                     projectile->owner, hitPosition);
+    if (removed <= 0 || projectile->selfHealRatio <= 0.0f ||
+        projectile->owner < 0 ||
+        projectile->owner >= w.session->brawlerCount)
+        return removed;
+
+    int healing = (int)floorf(removed*projectile->selfHealRatio + 0.5f);
+    if (healing > 0)
+    {
+        Brawler *owner = &w.session->brawlers[projectile->owner];
+        Vector3 healPosition = { owner->position.x, 1.0f, owner->position.z };
+        BrawlerApplyHealing(w, projectile->owner, healing,
+                            projectile->owner, healPosition);
+    }
+    return removed;
+}
+
 Vector3 WeaponsArcLanding(GameContext w, const Brawler *b, float aimDist)
 {
     const AbilityDefinition *ability = ContentMainAbility(w.content, b->cls);
@@ -180,7 +201,9 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
     {
         b->dashTimer = ability->data.dash.duration;
         b->dashDir = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
+        b->dashAbility = ContentCharacter(w.content, b->cls)->superAbility;
         b->dashHitMask = 0;
+        b->velocity = (Vector3){ 0 };
         b->revealTimer = w.tuning->fireReveal;
         GameEmitMuzzle(w.session, b->position, b->aimAngle, muzzle);
         return;
@@ -219,6 +242,7 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         p->owner = idx;
         p->damage = damage;
         p->healing = ability->healing;
+        p->selfHealRatio = ability->selfHealRatio;
         p->radius = radius;
         p->range = range;
         p->isSuper = super;
@@ -336,7 +360,7 @@ static void Detonate(GameContext w, Projectile *p, Vector3 at)
         float falloff = 1.0f - (d / p->radius) * 0.45f;
         int dmg = (int)(p->damage * falloff);
 
-        BrawlerApplyDamage(w, i, dmg, p->owner, t->position);
+        ApplyProjectileDamage(w, p, i, dmg, t->position);
         if (p->owner >= 0)
             BrawlerAwardSuper(w, p->owner, SuperGainFor(w, p->owner));
     }
@@ -397,7 +421,7 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             dmg = (int)(p->damage * (0.5f + 0.5f * ratio));
         }
 
-        BrawlerApplyDamage(w, i, dmg, p->owner, p->position);
+        ApplyProjectileDamage(w, p, i, dmg, p->position);
         if (p->owner >= 0)
             BrawlerAwardSuper(w, p->owner, SuperGainFor(w, p->owner));
 

@@ -92,6 +92,11 @@ int main(int argc, char **argv)
     CHECK(first.content.weapons[CLASS_HEALER].duration == 1.35f &&
           first.content.weapons[CLASS_HEALER].sTickRate == 0.35f,
           "Guardian timing did not load from canonical config");
+    CHECK(first.content.weapons[CLASS_BRUISER].selfHealRatio == 0.20f &&
+          first.content.weapons[CLASS_BRUISER].mobilityCooldown == 2.50f &&
+          first.content.weapons[CLASS_BRUISER].mobilityDuration == 0.18f &&
+          first.content.weapons[CLASS_BRUISER].mobilitySpeed == 22.0f,
+          "Tank sustain/mobility did not load from canonical config");
     CHECK(ConfigProjectOverrideCount(&first) == 0, "clean load reported draft overrides");
 
     first.content.weapons[CLASS_HEALER].damage = 123;

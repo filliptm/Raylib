@@ -52,6 +52,8 @@ PlayerInput PlayerCaptureInput(const App *w)
     input.attackReleased = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     input.superHeld = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
     input.autoAttackPressed = IsKeyPressed(KEY_SPACE);
+    input.mobilityPressed = IsKeyPressed(KEY_LEFT_SHIFT) ||
+                            IsKeyPressed(KEY_RIGHT_SHIFT);
     input.actionsBlocked = CommandCenterCapturesMouse();
     return input;
 }

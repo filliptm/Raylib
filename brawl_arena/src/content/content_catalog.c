@@ -57,12 +57,15 @@ const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
         .sPiercing = false
     },
     {
-        .name = "TANK", .flavor = "Tanky brawler with a charge", .maxHealth = 5600,
+        .name = "TANK", .flavor = "Reclaiming rounds and shoulder jets",
+        .mobilityName = "SHOULDER JETS", .maxHealth = 5600,
         .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
         .pellets = 4, .spreadDeg = 18.0f, .speed = 30.0f, .range = 7.5f,
         .damage = 440, .projRadius = 0.24f, .cooldown = 0.42f,
         .reloadPerAmmo = 1.25f, .superPerHit = 0.095f,
-        .rangeScaled = false,
+        .selfHealRatio = 0.20f, .rangeScaled = false,
+        .mobilityCooldown = 2.50f, .mobilityDuration = 0.18f,
+        .mobilitySpeed = 22.0f,
         .superName = "CHARGE", .superKind = SUPER_DASH,
         .sPellets = 0, .sSpreadDeg = 0.0f, .sSpeed = 0.0f,
         .sRange = 0.0f, .sDamage = 1200, .sProjRadius = 0.0f,
@@ -200,6 +203,7 @@ static void BuildMain(const WeaponDef *source, const char *characterId,
     ability->cooldown = source->cooldown;
     ability->reloadPerAmmo = source->reloadPerAmmo;
     ability->superPerHit = source->superPerHit;
+    ability->selfHealRatio = source->selfHealRatio;
     if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
         ability->behavior == ABILITY_BEHAVIOR_LOB)
     {
@@ -237,7 +241,14 @@ static void BuildSuper(const WeaponDef *source, const char *characterId,
         };
     }
     else if (ability->behavior == ABILITY_BEHAVIOR_DASH)
-        ability->data.dash.duration = 0.45f;
+    {
+        ability->data.dash = (DashAbility){
+            .duration = 0.45f,
+            .speed = 0.0f, // the shared gameplay dash-speed tuning drives Charge
+            .knockback = 3.0f,
+            .breaksCrates = true
+        };
+    }
     else
     {
         ability->data.area = (AreaAbility){
@@ -247,14 +258,33 @@ static void BuildSuper(const WeaponDef *source, const char *characterId,
     }
 }
 
+static void BuildMobility(const WeaponDef *source, const char *characterId,
+                          AbilityDefinition *ability)
+{
+    *ability = (AbilityDefinition){ 0 };
+    snprintf(ability->id, sizeof(ability->id), "%s.mobility", characterId);
+    snprintf(ability->name, sizeof(ability->name), "%s",
+             source->mobilityName ? source->mobilityName : "MOBILITY");
+    ability->behavior = ABILITY_BEHAVIOR_DASH;
+    ability->range = source->mobilitySpeed*source->mobilityDuration;
+    ability->cooldown = source->mobilityCooldown;
+    ability->data.dash = (DashAbility){
+        .duration = source->mobilityDuration,
+        .speed = source->mobilitySpeed,
+        .knockback = 0.0f,
+        .breaksCrates = false
+    };
+}
+
 void ContentCatalogRebuildTyped(ContentCatalog *catalog)
 {
-    catalog->abilityCount = CLASS_COUNT*2;
+    memset(catalog->abilities, 0, sizeof(catalog->abilities));
+    catalog->abilityCount = 0;
     for (int classId = 0; classId < CLASS_COUNT; classId++)
     {
         const WeaponDef *source = &catalog->weapons[classId];
-        int mainId = classId*2;
-        int superId = mainId + 1;
+        int mainId = catalog->abilityCount++;
+        int superId = catalog->abilityCount++;
         CharacterDefinition *character = &catalog->characters[classId];
         *character = (CharacterDefinition){ 0 };
         snprintf(character->id, sizeof(character->id), "%s", CHARACTER_IDS[classId]);
@@ -267,8 +297,19 @@ void ContentCatalogRebuildTyped(ContentCatalog *catalog)
         character->maxAmmo = source->maxAmmo;
         character->mainAbility = mainId;
         character->superAbility = superId;
+        character->mobilityAbility = -1;
         BuildMain(source, character->id, &catalog->abilities[mainId]);
         BuildSuper(source, character->id, &catalog->abilities[superId]);
+
+        if (source->mobilityCooldown > 0.0f &&
+            source->mobilityDuration > 0.0f &&
+            source->mobilitySpeed > 0.0f &&
+            catalog->abilityCount < MAX_ABILITIES)
+        {
+            character->mobilityAbility = catalog->abilityCount++;
+            BuildMobility(source, character->id,
+                          &catalog->abilities[character->mobilityAbility]);
+        }
     }
 }
 
@@ -304,4 +345,18 @@ const AbilityDefinition *ContentSuperAbility(const ContentCatalog *catalog,
 {
     const CharacterDefinition *definition = ContentCharacter(catalog, character);
     return definition ? &catalog->abilities[definition->superAbility] : 0;
+}
+
+const AbilityDefinition *ContentMobilityAbility(const ContentCatalog *catalog,
+                                                BrawlerClass character)
+{
+    const CharacterDefinition *definition = ContentCharacter(catalog, character);
+    if (!definition || definition->mobilityAbility < 0) return 0;
+    return ContentAbility(catalog, definition->mobilityAbility);
+}
+
+const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abilityId)
+{
+    if (!catalog || abilityId < 0 || abilityId >= catalog->abilityCount) return 0;
+    return &catalog->abilities[abilityId];
 }

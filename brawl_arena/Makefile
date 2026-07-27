@@ -42,6 +42,7 @@ HEALER_TEST_TARGET = $(BUILD_DIR)/test_healer
 NO_SHAKE_TEST_TARGET = $(BUILD_DIR)/test_no_attack_shake
 ARENA_TEST_TARGET = $(BUILD_DIR)/test_arena
 GAMEPLAY_TEST_TARGET = $(BUILD_DIR)/test_gameplay
+TANK_TEST_TARGET = $(BUILD_DIR)/test_tank
 GAME_CORE_OBJECTS = \
 	$(OBJ_DIR)/game/ai.o \
 	$(OBJ_DIR)/game/arena.o \
@@ -87,6 +88,10 @@ $(GAMEPLAY_TEST_TARGET): tests/test_gameplay.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/a
 		$(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
+$(TANK_TEST_TARGET): tests/test_tank.c $(GAME_CORE_OBJECTS)
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_tank.c \
+		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) -MMD -MP $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -c $< -o $@
@@ -100,24 +105,26 @@ debug: CFLAGS = -Wall -Wextra -std=c99 $(DEBUG_FLAGS)
 debug: clean $(TARGET)
 
 sanitize: CFLAGS = -Wall -Wextra -std=c99 $(SANITIZE_FLAGS)
-sanitize: clean check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET)
+sanitize: clean check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(TANK_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
 	$(SANITIZER_ENV) ./$(HEALER_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(NO_SHAKE_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(ARENA_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(GAMEPLAY_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(TANK_TEST_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 rebuild: clean all
 
-test: check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET)
+test: check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(TANK_TEST_TARGET)
 	./$(TEST_TARGET)
 	./$(HEALER_TEST_TARGET)
 	./$(NO_SHAKE_TEST_TARGET)
 	./$(ARENA_TEST_TARGET)
 	./$(GAMEPLAY_TEST_TARGET)
+	./$(TANK_TEST_TARGET)
 
 validate-config: $(TEST_TARGET)
 	./$(TEST_TARGET) --validate config/gameplay.cfg

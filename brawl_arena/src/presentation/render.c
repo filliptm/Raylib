@@ -707,7 +707,14 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
                        (Color){ 255, 210, 90, (unsigned char)(70 + pulse*90) });
     }
     if (b->alive && b->dashTimer > 0.0f)
-        DrawGroundGlow(a, b->position, 1.3f, (Color){ 255, 190, 100, 150 });
+    {
+        const AbilityDefinition *dash =
+            ContentAbility(&w->content, b->dashAbility);
+        Color dashColor = (dash && dash->damage <= 0)
+                        ? (Color){ 92, 220, 255, 150 }
+                        : (Color){ 255, 190, 100, 150 };
+        DrawGroundGlow(a, b->position, 1.3f, dashColor);
+    }
 }
 
 static void DrawBrawler(App *w, Assets *a, Brawler *b)

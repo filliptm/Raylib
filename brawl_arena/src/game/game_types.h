@@ -62,8 +62,10 @@ typedef struct Brawler {
     float hitFlash;
     float revealTimer;
     float spawnScale;
+    float mobilityCooldown;
     float dashTimer;
     Vector3 dashDir;
+    int dashAbility;
     int dashHitMask;
     StatusEffect statuses[MAX_STATUS_EFFECTS];
     bool inBush;
@@ -92,6 +94,7 @@ typedef struct Projectile {
     float range;
     int damage;
     int healing;
+    float selfHealRatio;
     float radius;
     Team team;
     int owner;

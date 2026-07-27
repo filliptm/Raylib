@@ -372,17 +372,18 @@ static void DrawControlsModal(App *w)
 
     DrawRectangle(0, 0, sw, sh, (Color){ 0, 0, 0, 195 });
 
-    Rectangle panel = { sw/2.0f - 270, sh/2.0f - 205, 540, 400 };
+    Rectangle panel = { sw/2.0f - 270, sh/2.0f - 220, 540, 430 };
     DrawRectangleRounded(panel, 0.07f, 8, CARD_BG);
     DrawRectangleRoundedLines(panel, 0.07f, 8, CARD_EDGE);
     DrawLabel("CONTROLS", sw/2, (int)panel.y + 20, 25, TEXT_MAIN);
 
     static const char *KEYS[] = {
-        "WASD / arrows", "Hold LMB", "Release LMB", "Tap LMB or SPACE",
+        "WASD / arrows", "Left Shift", "Hold LMB", "Release LMB", "Tap LMB or SPACE",
         "RMB", "1 - 5", "TAB", "R", "ESC"
     };
     static const char *WHAT[] = {
-        "Move", "Aim - draws the shot on the ground", "Fire along the preview",
+        "Move", "Shoulder Jets when playing Tank",
+        "Aim - draws the shot on the ground", "Fire along the preview",
         "Quick shot, auto-aimed at the nearest enemy", "Super, once charged",
         "Swap kit on the spot", "Command center", "Restart the match",
         "Back a screen, or quit from here"
@@ -412,6 +413,10 @@ static const char *AttackSummary(const AbilityDefinition *ability)
 {
     if (ability->behavior == ABILITY_BEHAVIOR_RAIN)
         return TextFormat("Growing rain, %d damage/healing per pulse", ability->damage);
+    if (ability->selfHealRatio > 0.0f)
+        return TextFormat("%d pellets, heals %.0f%% of damage dealt",
+                          ability->data.projectile.pellets,
+                          ability->selfHealRatio*100.0f);
     if (ability->healing > 0)
         return TextFormat("%d damage to foes, %d healing to allies",
                           ability->damage, ability->healing);

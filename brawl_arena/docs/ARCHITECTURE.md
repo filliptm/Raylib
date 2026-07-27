@@ -1,6 +1,6 @@
 # Brawl Arena architecture
 
-Last code-verified: 2026-07-26
+Last code-verified: 2026-07-27
 
 This is the implemented ownership and dependency contract for Brawl Arena. The project is
 a modular C application with fixed-capacity simulation storage. It is not a reusable
@@ -119,14 +119,18 @@ eliminations leave camera shake unchanged.
 
 - Five compatibility `WeaponDef` authoring records.
 - Five typed `CharacterDefinition` records.
-- Ten typed `AbilityDefinition` records.
+- Eleven active typed `AbilityDefinition` records in a fifteen-slot fixed array: two per
+  character plus Tank's optional mobility ability.
 - Up to eight validated `MapDefinition` records and selected map state.
 
 `WeaponDef` preserves the stable configuration schema. After configuration load or a
 live authoring edit, `ContentCatalogRebuildTyped()` produces the runtime definitions used
 by game, AI, menus, HUD summaries, and aim previews.
 
-An ability has a behavior tag and a typed projectile, area, or dash payload. Generic
+An ability has a behavior tag and a typed projectile, area, or dash payload. Characters
+may expose main, super, and optional mobility handles. Projectile definitions can
+snapshot a self-heal ratio, while dash payloads carry speed, duration, knockback, and
+crate-breaking policy. Generic
 periodic `StatusEffect` slots support both ally healing-over-time and enemy
 damage-over-time. New abilities should add reusable behavior handlers rather than
 character-specific fields to `Brawler`.

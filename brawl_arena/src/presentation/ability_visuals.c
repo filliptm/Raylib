@@ -336,8 +336,10 @@ static void DrawAimPreview(App *world, Assets *assets)
 
     if (super && ability->behavior == ABILITY_BEHAVIOR_DASH)
     {
+        float speed = ability->data.dash.speed > 0.0f
+                    ? ability->data.dash.speed : world->tune.dashSpeed;
         DrawAimBeam(world, brawler->position, brawler->aimAngle,
-                    world->tune.dashSpeed*0.45f,
+                    speed*ability->data.dash.duration,
                     BRAWLER_RADIUS*1.1f, fill, edge);
         FinishAimPass();
         return;

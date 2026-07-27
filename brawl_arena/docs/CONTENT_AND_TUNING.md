@@ -1,6 +1,6 @@
 # Brawl Arena content and tuning
 
-Last code-verified: 2026-07-26
+Last code-verified: 2026-07-27
 
 This document explains which values are authoritative, how live tuning becomes a tracked
 change, and how authoring records become typed runtime content.
@@ -78,7 +78,8 @@ they do not describe the rain/Resonance behavior.
   command-center Kit tab.
 - `characters[CLASS_COUNT]`: typed character identity, display, role, model, health,
   ammo, and ability handles.
-- `abilities[MAX_ABILITIES]`: typed main/ultimate definitions.
+- `abilities[MAX_ABILITIES]`: typed main/ultimate definitions plus optional mobility
+  definitions.
 - `maps[MAX_MAPS]`: validated map definitions and selected-map index.
 
 Each runtime ability has:
@@ -86,11 +87,36 @@ Each runtime ability has:
 - Stable ID and display name.
 - `AbilityBehavior` tag.
 - Range, radius, damage, healing, cooldown/reload, and ultimate-gain fields.
+- An optional projectile self-heal ratio based on actual health removed.
 - Exactly one relevant typed payload: projectile, area, or dash.
 
 Implemented reusable behaviors are projectile, lob, rain, dash, healing burst, and sound
 wave. Game, AI, menu summaries, HUD, and aim previews resolve abilities through
-`ContentMainAbility()` and `ContentSuperAbility()`.
+`ContentMainAbility()`, `ContentSuperAbility()`, and
+`ContentMobilityAbility()`. The current catalog has eleven active definitions in a
+fifteen-slot fixed array.
+
+## Tank
+
+Tank is the mobile sustain character:
+
+- Stable ID: `tank`.
+- Role: tank.
+- Model asset ID: `tank` (the Ironclad Guardian runtime model).
+- Main behavior: four-projectile Reclamation Rounds.
+- Optional mobility behavior: Shoulder Jets.
+- Ultimate behavior: Charge.
+
+Each Reclamation Rounds projectile snapshots `main.self_heal_ratio` when fired. On an
+enemy hit it restores that fraction of health actually removed, rounded to the nearest
+whole health point. This prevents overhealing, overkill farming, live-retuning of
+in-flight shots, crate healing, and Charge healing.
+
+Shoulder Jets uses `mobility.cooldown`, `mobility.duration`, and `mobility.speed`. The
+tracked defaults are 2.5 seconds, 0.18 seconds, and 22 world units per second. It stops on
+solid cover and carries zero damage, knockback, and crate-breaking capability. Charge
+uses the same reusable dash executor with its own damage, knockback, duration, global
+Charge speed, and crate-breaking policy.
 
 The compatibility authoring record is a deliberate migration seam. A future fully
 external character manifest can populate the typed catalog directly; until then, adding

@@ -15,5 +15,8 @@ const AbilityDefinition *ContentMainAbility(const ContentCatalog *catalog,
                                             BrawlerClass character);
 const AbilityDefinition *ContentSuperAbility(const ContentCatalog *catalog,
                                              BrawlerClass character);
+const AbilityDefinition *ContentMobilityAbility(const ContentCatalog *catalog,
+                                                BrawlerClass character);
+const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abilityId);
 
 #endif

@@ -7,8 +7,9 @@ void BrawlerSpawn(GameContext game, int idx, Team team, BrawlerClass cls,
                   Vector3 position, bool isPlayer);
 void BrawlerRespawn(GameContext game, int idx);
 
-void BrawlerApplyDamage(GameContext game, int idx, int damage, int attacker,
-                        Vector3 hitPosition);
+// Applies damage without going below zero and returns the health actually removed.
+int BrawlerApplyDamage(GameContext game, int idx, int damage, int attacker,
+                       Vector3 hitPosition);
 // Restores up to `amount` health without reviving. Returns the health actually restored.
 int BrawlerApplyHealing(GameContext game, int idx, int amount, int healer,
                         Vector3 hitPosition);
@@ -22,6 +23,8 @@ void BrawlerApplyPulseStatus(GameContext game, int idx, Team sourceTeam, int sou
 // True when the attack actually went off (ammo and cooldown allowing).
 bool BrawlerTryAttack(GameContext game, int idx, float aimDist);
 bool BrawlerTrySuper(GameContext game, int idx, float aimDist);
+// Starts the character's optional movement ability along `direction`.
+bool BrawlerTryMobility(GameContext game, int idx, Vector3 direction);
 
 // Can `viewer` see `target`? Accounts for line of sight, bushes and recent firing.
 bool BrawlerCanSee(GameContext game, int viewer, int target);

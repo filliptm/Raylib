@@ -76,6 +76,16 @@ static bool FindNearbyBush(GameContext w, Vector3 from, Vector3 *out)
     return found;
 }
 
+static bool TryTacticalMobility(GameContext w, int idx, Vector3 direction)
+{
+    Brawler *b = &w.session->brawlers[idx];
+    if (!ContentMobilityAbility(w.content, b->cls)) return false;
+    if (!BrawlerTryMobility(w, idx, direction)) return false;
+
+    b->aiReactTimer = fmaxf(b->aiReactTimer, 0.18f);
+    return true;
+}
+
 //------------------------------------------------------------------------------------
 void AIUpdate(GameContext w, float dt)
 {
@@ -257,6 +267,7 @@ void AIUpdate(GameContext w, float dt)
             }
 
             b->moveIntent = AvoidSteer(w, b->position, away, b->strafeDir);
+            if (TryTacticalMobility(w, i, b->moveIntent)) continue;
 
             // Still fights back, just less eagerly.
             if (b->aiReactTimer <= 0.0f && dist < mainAbility->range*0.9f)
@@ -283,6 +294,10 @@ void AIUpdate(GameContext w, float dt)
                 b->moveIntent = AvoidSteer(w, b->position, toGem, b->strafeDir);
             }
             else b->moveIntent = AvoidSteer(w, b->position, toTarget, b->strafeDir);
+
+            // Mobility kits spend their short cooldown closing meaningful gaps, while
+            // retaining the charged super for its separate combat payoff.
+            TryTacticalMobility(w, i, b->moveIntent);
         }
         else
         {

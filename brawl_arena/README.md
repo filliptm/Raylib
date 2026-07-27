@@ -48,6 +48,7 @@ window on `ESC` by default, so that is explicitly disabled and handled here inst
 | Input | Action |
 |-------|--------|
 | `WASD` / arrows | Move |
+| `Left Shift` | Tank: fire Shoulder Jets along movement input, or toward aim while stationary |
 | Hold `LMB` | Aim — shows a live trajectory preview |
 | Release `LMB` | Fire along the preview |
 | Tap `LMB` or `SPACE` | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
@@ -84,6 +85,17 @@ and never costs you accuracy.
 **Ammo economy.** Capacity is configured per kit (all tracked defaults currently use
 three pips), with each pip reloading continuously and independently. You cannot hold the
 trigger; you manage a small budget of shots and reposition while it refills.
+
+**Tank sustain and mobility.** Tank's Reclamation Rounds restore 20% of the enemy health
+actually removed by each main-attack pellet. Overkill cannot create extra healing,
+healing stops at maximum health, and hits against crates, Charge damage, and shots fired
+by other kits do not feed it.
+
+Shoulder Jets is a separate Left Shift mobility ability on a 2.5-second cooldown. It
+travels for 0.18 seconds at 22 world units per second (about four world units), using
+movement input first and current aim when stationary. It deals no damage, grants no
+invulnerability, stops on walls or crates, and cannot destroy cover. The charged Charge
+super remains the longer damaging dash that knocks enemies back and smashes crates.
 
 **Supers charged by useful hits.** Every damaging pellet that lands fills the meter, as
 does each Guardian rain pulse that damages an enemy or actually restores an ally; a
@@ -139,7 +151,8 @@ never have to think about which is which mid-fight:
 - `ROAM` — they wander the arena but never open fire, for testing tracking and aim.
 - `FIGHT` — the full state machine: patrol when blind, chase to weapon range, then hold
   that range while strafing and firing with lead prediction. They retreat toward the
-  nearest bush below 30% health, and fire supers only when the shot will connect.
+  nearest bush below 30% health, use optional mobility to close meaningful gaps or
+  retreat, and fire supers only when the shot will connect.
 
 ## The command center
 
@@ -156,7 +169,7 @@ independently when its controls are taller than the window.
 | **MATCH** | Gem Grab toggle, team size, target count, countdown/vent timing, match state, and objective actions |
 | **BOTS** | Behaviour mode, bot count (0–7), mixed or fixed kits, respawn delay, AI health thresholds/probe distance, and respawn / kill / heal buttons |
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
-| **KIT** | Live edit of the active kit, including ammo capacity. Guardian exposes rain duration/pulse/growth and Resonance duration/tick/wave controls, plus reset/save-as-project actions |
+| **KIT** | Live edit of the active kit, including ammo capacity and main-shot self-healing. Tank exposes Shoulder Jets cooldown/duration/speed; Guardian exposes rain duration/pulse/growth and Resonance duration/tick/wave controls, plus reset/save-as-project actions |
 | **STYLE** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
 | **WORLD** | Time scale, super gain, crate/result timing, stealth, grass, rendering, debug, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
 
@@ -336,7 +349,7 @@ version:
 | **SCRAPPER** | 3800 | 5-pellet spread, short range | `BUCKSHOT` — 9 pellets, breaks walls |
 | **LONGSHOT** | 2800 | Single shot, scales from 50% to 100% damage with travel distance | `RAILGUN` — piercing, hits everyone in a line |
 | **MORTAR** | 3200 | Arcing lob that clears walls, splash on landing | `BARRAGE` — three shells in a fan |
-| **TANK** | 5600 | 4-pellet burst, very short range | `CHARGE` — dash that damages, knocks back and smashes crates |
+| **TANK** | 5600 | 4-pellet burst; heals 20% of actual damage; Shift jets every 2.5s | `CHARGE` — dash that damages, knocks back and smashes crates |
 | **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 100-point damage/healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
 
 Health and damage use Brawl Stars' numeric scale, so the damage numbers read familiarly.
@@ -426,6 +439,6 @@ sandbox it started as, with the static training bots.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
 - Character animation clips switch without crossfading.
 - Longshot and Mortar still use the primitive fallback characters.
-- Headless tests cover configuration, Guardian behavior, all-kit camera isolation,
-  external maps, deterministic replay, events, and presentation isolation. Graphical and
-  interaction paths still require runtime checks.
+- Headless tests cover configuration, Guardian behavior, Tank sustain/mobility/Charge,
+  all-kit camera isolation, external maps, deterministic replay, events, and presentation
+  isolation. Graphical and interaction paths still require runtime checks.

@@ -54,7 +54,7 @@ typedef enum {
     CLASS_COUNT
 } BrawlerClass;
 
-#define MAX_ABILITIES (CLASS_COUNT*2)
+#define MAX_ABILITIES (CLASS_COUNT*3)
 
 typedef enum {
     AI_IDLE = 0,

@@ -222,10 +222,15 @@ static int BuildFields(Tuning *t, WeaponDef *kits, Field *f)
         KIT_FIELD("main.cooldown", FIELD_FLOAT, cooldown, 0.02, 20.0);
         KIT_FIELD("main.reload_per_ammo", FIELD_FLOAT, reloadPerAmmo, 0.05, 30.0);
         KIT_FIELD("main.super_gain_per_hit", FIELD_FLOAT, superPerHit, 0.0, 1.0);
+        KIT_FIELD("main.self_heal_ratio", FIELD_FLOAT, selfHealRatio, 0.0, 1.0);
         KIT_FIELD("main.range_scaled", FIELD_BOOL, rangeScaled, 0, 1);
         KIT_FIELD("main.duration", FIELD_FLOAT, duration, 0.0, 30.0);
         KIT_FIELD("main.tick_interval", FIELD_FLOAT, tickRate, 0.0, 10.0);
         KIT_FIELD("main.grow_time", FIELD_FLOAT, growTime, 0.0, 30.0);
+
+        KIT_FIELD("mobility.cooldown", FIELD_FLOAT, mobilityCooldown, 0.0, 20.0);
+        KIT_FIELD("mobility.duration", FIELD_FLOAT, mobilityDuration, 0.0, 5.0);
+        KIT_FIELD("mobility.speed", FIELD_FLOAT, mobilitySpeed, 0.0, 100.0);
 
         KIT_FIELD("super.kind", FIELD_SUPER_KIND, superKind, 0, SUPER_KIND_COUNT - 1);
         KIT_FIELD("super.pellets", FIELD_INT, sPellets, 0, 64);
@@ -382,6 +387,19 @@ static bool ValidateValues(const Tuning *t, const WeaponDef *kits,
              k->growTime > k->duration || k->projRadius <= 0.0f))
         {
             snprintf(message, messageSize, "kit.%s rain timing/radius is invalid", KIT_KEYS[i]);
+            return false;
+        }
+        bool hasMobility = k->mobilityCooldown > 0.0f ||
+                           k->mobilityDuration > 0.0f ||
+                           k->mobilitySpeed > 0.0f;
+        if (hasMobility &&
+            (k->mobilityCooldown <= 0.0f ||
+             k->mobilityDuration <= 0.0f ||
+             k->mobilitySpeed <= 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s mobility needs cooldown, duration, and speed",
+                     KIT_KEYS[i]);
             return false;
         }
         if (k->superKind == SUPER_PROJECTILE &&

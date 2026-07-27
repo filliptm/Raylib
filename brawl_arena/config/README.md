@@ -45,6 +45,10 @@ overlay are local-only values. Neither category is written into project defaults
 
 The format is deterministic `key value` text with stable kit identifiers. Ability kinds
 are named values such as `projectile`, `lob`, `rain`, `dash`, and `sound_wave`.
+Each kit also declares `main.self_heal_ratio` and the complete optional mobility triplet:
+`mobility.cooldown`, `mobility.duration`, and `mobility.speed`. All three mobility values
+must be zero to disable the ability, or all three must be positive. Tank's tracked
+mobility values create Shoulder Jets; other kits currently keep the triplet at zero.
 
 The loader rejects:
 

@@ -230,6 +230,18 @@ static void TabKit(CommandUi *ui)
     CommandUiSliderI(ui, "Ammo capacity", &k->maxAmmo, 1, 8);
     CommandUiSliderF(ui, k->mainKind == ATTACK_RAIN ? "Super gain / pulse" : "Super gain / hit",
               &k->superPerHit, 0.0f, 1.0f, "%.2f");
+    if (k->mainKind == ATTACK_PROJECTILE || k->mainKind == ATTACK_LOB)
+        CommandUiSliderF(ui, "Self-heal / damage", &k->selfHealRatio, 0.0f, 1.0f, "%.2f");
+
+    if (k->mobilityName && k->mobilityDuration > 0.0f)
+    {
+        CommandUiSection(ui, "MOBILITY");
+        CommandUiText(ui, k->mobilityName, COMMAND_TEXT_MAIN);
+        CommandUiSliderF(ui, "Cooldown", &k->mobilityCooldown, 0.25f, 10.0f, "%.2fs");
+        CommandUiSliderF(ui, "Duration", &k->mobilityDuration, 0.05f, 1.0f, "%.2fs");
+        CommandUiSliderF(ui, "Speed", &k->mobilitySpeed, 4.0f, 60.0f, "%.1f");
+        CommandUiText(ui, "Shift boosts along movement, then aim.", COMMAND_TEXT_DIM);
+    }
 
     CommandUiSection(ui, "SUPER");
     CommandUiText(ui, k->superName, COMMAND_TEXT_MAIN);

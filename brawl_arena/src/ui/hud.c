@@ -128,6 +128,8 @@ void HudDrawPanel(App *w)
     int sh = GetScreenHeight();
     Brawler *p = &w->session.brawlers[w->session.playerIdx];
     const AbilityDefinition *superAbility = ContentSuperAbility(&w->content, p->cls);
+    const AbilityDefinition *mobilityAbility =
+        ContentMobilityAbility(&w->content, p->cls);
 
     //--- Top bar ----------------------------------------------------------------
     DrawRectangleGradientV(0, 0, sw, 78, (Color){ 0, 0, 0, 200 }, (Color){ 0, 0, 0, 0 });
@@ -205,6 +207,32 @@ void HudDrawPanel(App *w)
     //--- Super meter, bottom-right ----------------------------------------------
     int sx = sw - 190, sy = sh - 122;
     bool ready = p->superCharge >= 1.0f;
+
+    if (mobilityAbility)
+    {
+        int my = sy - 68;
+        bool mobilityReady = p->mobilityCooldown <= 0.0f;
+        float fill = mobilityReady ? 1.0f :
+            Clamp(1.0f - p->mobilityCooldown/mobilityAbility->cooldown,
+                  0.0f, 1.0f);
+        Color jet = { 92, 220, 255, 255 };
+
+        DrawRectangleRounded((Rectangle){ sx - 12, my - 8, 172, 54 },
+                             0.12f, 8, PANEL_BG);
+        DrawText(mobilityAbility->name, sx, my, 16,
+                 mobilityReady ? jet : (Color){ 150, 160, 175, 255 });
+        if (mobilityReady)
+            DrawText("SHIFT  READY", sx, my + 21, 12, jet);
+        else
+            DrawText(TextFormat("SHIFT  %.1fs", p->mobilityCooldown),
+                     sx, my + 21, 12, (Color){ 150, 160, 175, 255 });
+
+        DrawRectangleRounded((Rectangle){ sx + 102, my + 24, 46, 7 },
+                             0.5f, 4, SLOT_EMPTY);
+        if (fill > 0.0f)
+            DrawRectangleRounded((Rectangle){ sx + 102, my + 24, 46*fill, 7 },
+                                 0.5f, 4, jet);
+    }
 
     DrawRectangleRounded((Rectangle){ sx - 12, sy - 12, 172, 92 }, 0.12f, 8, PANEL_BG);
 
@@ -290,10 +318,11 @@ void HudDrawPanel(App *w)
         int cy = 78;
 
         DrawText("WASD  move", sw - 250, cy, 15, c);
-        DrawText("HOLD LMB  aim, release to fire", sw - 250, cy + 20, 15, c);
-        DrawText("TAP LMB / SPACE  auto-aim shot", sw - 250, cy + 40, 15, c);
-        DrawText("RMB  super (when charged)", sw - 250, cy + 60, 15, c);
-        DrawText("1-4  swap kit     R  reset", sw - 250, cy + 80, 15, c);
-        DrawText("TAB  command center", sw - 250, cy + 100, 15, (Color){ 92, 178, 255, (unsigned char)alpha });
+        DrawText("SHIFT  mobility (Tank)", sw - 250, cy + 20, 15, c);
+        DrawText("HOLD LMB  aim, release to fire", sw - 250, cy + 40, 15, c);
+        DrawText("TAP LMB / SPACE  auto-aim shot", sw - 250, cy + 60, 15, c);
+        DrawText("RMB  super (when charged)", sw - 250, cy + 80, 15, c);
+        DrawText("1-5  swap kit     R  reset", sw - 250, cy + 100, 15, c);
+        DrawText("TAB  command center", sw - 250, cy + 120, 15, (Color){ 92, 178, 255, (unsigned char)alpha });
     }
 }

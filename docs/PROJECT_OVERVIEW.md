@@ -1,6 +1,6 @@
 # Project Overview
 
-Last code-verified: 2026-07-26
+Last code-verified: 2026-07-27
 
 This is the maintained repository-level guide to the projects in this workspace. It is
 intended for contributors, coding agents, and anyone deciding where a change belongs.
@@ -547,7 +547,7 @@ The current roster contains five kits:
 | Scrapper | damage | short five-pellet spread | nine-pellet crate-breaking Buckshot |
 | Longshot | marksman | range-scaled single projectile | piercing Railgun |
 | Mortar | artillery | arcing splash shell | three-shell Barrage |
-| Tank | tank | short four-pellet burst | damaging crate-breaking Charge |
+| Tank | tank | short four-pellet burst that self-heals from actual damage, plus Shift Shoulder Jets | damaging crate-breaking Charge |
 | Guardian | support | growing rain field that repeatedly damages enemies and heals allies | wide Resonance cone that applies enemy damage-over-time or ally healing-over-time |
 
 Guardian uses `resources/gaia_guardian.glb`. The current tracked Guardian defaults produce
@@ -577,6 +577,8 @@ The headless suite covers:
   rejection, profile separation, and legacy migration.
 - Guardian rain and Resonance pulse behavior.
 - The rule that no attack, impact, damage, or elimination shakes any user's camera.
+- Tank self-healing, projectile snapshotting, Shoulder Jets timing/cover behavior, and
+  preservation of Charge damage/crate destruction.
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
@@ -642,7 +644,8 @@ models, animations, station models, and the scene render target.
 configuration, profile data, and navigation survive because they have separate owners;
 there is no preserve-and-reconstruct whole-application reset.
 
-Fixed capacities currently include eight brawlers, 512 projectiles, 24 active ability
+Fixed capacities currently include eight brawlers, 512 projectiles, 15 typed content
+abilities (eleven currently active), 24 active ability
 fields, four statuses per brawler, 40 gems, 1,024 game events, 1,024 presentation
 particles, 64 float texts, 64 effect lights, and 24 shockwaves. Maps may be up to 64×64,
 the catalog may contain eight maps, and a map may contain 64 decorative props.
@@ -678,6 +681,7 @@ returns to the menu after the configured hold or a user skip.
 ## Controls and modes
 
 - WASD or arrows: camera-relative movement.
+- Left Shift: Tank Shoulder Jets along movement input, or current aim while stationary.
 - Hold/release left mouse: preview and fire the main attack.
 - Tap left mouse or press Space: auto-aim. Guardian first considers a wounded ally in
   range; other cases target the nearest visible enemy.
@@ -699,9 +703,10 @@ Static, Roam, or Fight.
 
 `ContentCatalog` owns the mutable authoring records, typed character definitions, typed
 ability definitions, and validated map definitions. Each character has a stable ID,
-display name, model asset ID, role, health/ammo values, and handles for its main and
-ultimate abilities. Ability behavior is a tagged enum with typed projectile, area, or
-dash payloads.
+display name, model asset ID, role, health/ammo values, handles for its main and ultimate
+abilities, and an optional mobility handle. Ability behavior is a tagged enum with typed
+projectile, area, or dash payloads. Projectile content can define self-healing from
+actual damage; dash content defines duration, speed, knockback, and crate behavior.
 
 The current config schema retains `WeaponDef` as a compatibility/authoring record.
 `ContentCatalogRebuildTyped()` converts it into the runtime character/ability catalog
@@ -760,10 +765,17 @@ The simulation uses fixed pools and deterministic xorshift random state. Player 
 captured once per frame, so tests can replay the same input sequence without linking
 keyboard or mouse reads into simulation.
 
-Damage, healing, ammo, cooldown, ultimate gain, deaths, respawns, concealment, dash
+Damage, healing, ammo, cooldown, optional mobility, ultimate gain, deaths, respawns,
+concealment, dash
 collision, crate damage, projectiles, rain fields, and sound-wave status application all
 belong to `src/game/`. Periodic effects use generic, team-aware `StatusEffect` slots:
 the same status heals allies and damages enemies according to the source team.
+
+Tank's main projectiles restore 20% of enemy health actually removed, so overkill,
+blocked damage, crates, Charge, and overheal do not create extra sustain. Shoulder Jets
+is a non-damaging roughly four-unit boost on a 2.5-second cooldown. It stops on solid
+cover; Fight bots use it while closing meaningful gaps or retreating. Charge remains a
+separate super that damages, knocks back, and destroys crates.
 
 Simulation never spawns particles or mutates camera state. It emits typed events for
 muzzle flashes, impacts, explosions, deaths, crate breaks, float text, lights,

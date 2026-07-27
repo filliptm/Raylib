@@ -30,6 +30,7 @@ void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 p
     b->moveFacing = b->aimAngle;
     b->renderYaw = b->aimAngle;
     b->shotYaw = b->aimAngle;
+    b->dashAbility = -1;
     b->bobPhase = GameRandomInt(&w.session->random, 0, 628) / 100.0f;
     b->aiTarget = -1;
     b->strafeDir = (GameRandomInt(&w.session->random, 0, 1) == 0) ? -1.0f : 1.0f;
@@ -60,31 +61,35 @@ void BrawlerAwardSuper(GameContext w, int idx, float amount)
     if (b->superCharge > 1.0f) b->superCharge = 1.0f;
 }
 
-void BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3 hitPos)
+int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3 hitPos)
 {
+    if (idx < 0 || idx >= w.session->brawlerCount || damage <= 0) return 0;
     Brawler *b = &w.session->brawlers[idx];
-    if (!b->alive || damage <= 0) return;
+    if (!b->alive) return 0;
 
     // God mode still flashes and shows numbers, so feedback stays readable.
     if (b->isPlayer && w.tuning->godMode)
     {
         b->hitFlash = 1.0f;
-        return;
+        return 0;
     }
 
+    int before = b->health;
     b->health -= damage;
+    if (b->health < 0) b->health = 0;
+    int removed = before - b->health;
     b->hitFlash = 1.0f;
 
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", damage);
     GameEmitFloatText(w.session, hitPos, buf, (attacker == w.session->playerIdx) ? (Color){ 255, 235, 140, 255 } : (Color){ 255, 150, 150, 255 });
 
-    if (b->health <= 0)
+    if (b->health == 0)
     {
-        b->health = 0;
         b->alive = false;
         b->respawnTimer = b->isPlayer ? w.tuning->playerRespawn : w.tuning->enemyRespawn;
         b->dashTimer = 0.0f;
+        b->dashAbility = -1;
 
         GameEmitDeath(w.session, b->position, TEAM_COLORS[b->team]);
 
@@ -100,6 +105,7 @@ void BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector
         }
         if (b->isPlayer) w.session->deaths++;
     }
+    return removed;
 }
 
 int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 hitPos)
@@ -224,6 +230,36 @@ bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
     return true;
 }
 
+bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
+{
+    if (idx < 0 || idx >= w.session->brawlerCount) return false;
+
+    Brawler *b = &w.session->brawlers[idx];
+    const CharacterDefinition *character = ContentCharacter(w.content, b->cls);
+    const AbilityDefinition *ability = ContentMobilityAbility(w.content, b->cls);
+    if (!b->alive || !character || !ability ||
+        ability->behavior != ABILITY_BEHAVIOR_DASH ||
+        b->mobilityCooldown > 0.0f || b->dashTimer > 0.0f)
+        return false;
+
+    direction.y = 0.0f;
+    if (Vector3Length(direction) < 0.001f) return false;
+
+    b->dashTimer = ability->data.dash.duration;
+    b->dashDir = Vector3Normalize(direction);
+    b->dashAbility = character->mobilityAbility;
+    b->dashHitMask = 0;
+    b->mobilityCooldown = ability->cooldown;
+    b->velocity = (Vector3){ 0 };
+    b->revealTimer = w.tuning->fireReveal;
+    GameEmitMuzzle(w.session, b->position,
+                   atan2f(b->dashDir.x, b->dashDir.z),
+                   (Color){ 92, 220, 255, 255 });
+    GameEmitLight(w.session, (Vector3){ b->position.x, 0.8f, b->position.z },
+                  (Color){ 92, 220, 255, 255 }, 2.2f, 0.16f);
+    return true;
+}
+
 bool BrawlerCanSee(GameContext w, int viewer, int target)
 {
     if (viewer < 0 || target < 0) return false;
@@ -293,45 +329,74 @@ int BrawlerMostWoundedAlly(GameContext w, int idx, float maxDistance)
 static void UpdateDash(GameContext w, int idx, float dt)
 {
     Brawler *b = &w.session->brawlers[idx];
-    const AbilityDefinition *ability = ContentSuperAbility(w.content, b->cls);
-
-    b->dashTimer -= dt;
-
-    Vector3 next = Vector3Add(b->position, Vector3Scale(b->dashDir, w.tuning->dashSpeed * dt));
-
-    // A charge smashes through crates rather than stopping dead on them.
-    if (ArenaTypeAt(&w.session->arena, next.x, next.z) == TILE_CRATE)
+    const AbilityDefinition *ability = ContentAbility(w.content, b->dashAbility);
+    if (!ability || ability->behavior != ABILITY_BEHAVIOR_DASH)
     {
-        if (ArenaDamageAt(&w.session->arena, next.x, next.z, w.tuning->crateHealth))
-            GameEmitCrateBreak(w.session, (Vector3){ next.x, 0.6f, next.z });
+        b->dashTimer = 0.0f;
+        b->dashAbility = -1;
+        return;
+    }
+
+    float moveDt = fminf(dt, b->dashTimer);
+    b->dashTimer -= moveDt;
+    if (b->dashTimer < 0.0001f) b->dashTimer = 0.0f;
+
+    float speed = ability->data.dash.speed > 0.0f
+                ? ability->data.dash.speed : w.tuning->dashSpeed;
+    Vector3 next = Vector3Add(b->position, Vector3Scale(b->dashDir, speed*moveDt));
+
+    // Destructive dashes sample the leading edge of the brawler, so the crate breaks
+    // before circle resolution can pin the actor against its face.
+    Vector3 dashNose = Vector3Add(next, Vector3Scale(b->dashDir, BRAWLER_RADIUS));
+    if (ability->data.dash.breaksCrates &&
+        ArenaTypeAt(&w.session->arena, dashNose.x, dashNose.z) == TILE_CRATE)
+    {
+        if (ArenaDamageAt(&w.session->arena, dashNose.x, dashNose.z,
+                          w.tuning->crateHealth))
+            GameEmitCrateBreak(w.session,
+                               (Vector3){ dashNose.x, 0.6f, dashNose.z });
     }
 
     Vector3 resolved = ArenaResolveCircle(&w.session->arena, next, BRAWLER_RADIUS);
-    // Running into a solid wall ends the charge early.
-    if (Vector3Distance(resolved, next) > 0.35f) b->dashTimer = 0.0f;
+    // A regular boost stops on both cover types; Charge destroys crates first but
+    // still ends immediately against a permanent wall.
+    if (Vector3Distance(resolved, next) > 0.01f) b->dashTimer = 0.0f;
     b->position = resolved;
 
-    for (int i = 0; i < w.session->brawlerCount; i++)
+    if (ability->damage > 0)
     {
-        Brawler *t = &w.session->brawlers[i];
-        if (!t->alive || t->team == b->team) continue;
-        if (b->dashHitMask & (1 << i)) continue;
-
-        if (Vector3Distance(b->position, t->position) < BRAWLER_RADIUS * 2.2f)
+        for (int i = 0; i < w.session->brawlerCount; i++)
         {
-            BrawlerApplyDamage(w, i, ability->damage, idx, t->position);
-            b->dashHitMask |= (1 << i);
+            Brawler *t = &w.session->brawlers[i];
+            if (!t->alive || t->team == b->team) continue;
+            if (b->dashHitMask & (1 << i)) continue;
 
-            // Knock the victim back so the charge reads as physical.
-            Vector3 push = Vector3Scale(b->dashDir, 3.0f);
-            Vector3 shoved = Vector3Add(t->position, push);
-            t->position = ArenaResolveCircle(&w.session->arena, shoved, BRAWLER_RADIUS);
-            GameEmitImpact(w.session, t->position, (Color){ 255, 220, 120, 255 }, 12);
+            if (Vector3Distance(b->position, t->position) < BRAWLER_RADIUS*2.2f)
+            {
+                BrawlerApplyDamage(w, i, ability->damage, idx, t->position);
+                b->dashHitMask |= (1 << i);
+
+                if (ability->data.dash.knockback > 0.0f)
+                {
+                    Vector3 push = Vector3Scale(b->dashDir,
+                                                ability->data.dash.knockback);
+                    Vector3 shoved = Vector3Add(t->position, push);
+                    t->position = ArenaResolveCircle(&w.session->arena, shoved,
+                                                     BRAWLER_RADIUS);
+                }
+                GameEmitImpact(w.session, t->position,
+                               (Color){ 255, 220, 120, 255 }, 12);
+            }
         }
     }
 
+    Color trail = ability->damage > 0
+                ? (Color){ 255, 200, 110, 180 }
+                : (Color){ 92, 220, 255, 180 };
     GameEmitParticle(w.session, b->position, (Vector3){ 0, 1.0f, 0 },
-                    (Color){ 255, 200, 110, 180 }, 0.3f, 0.28f, PARTICLE_SMOKE);
+                     trail, 0.3f, 0.28f, PARTICLE_SMOKE);
+
+    if (b->dashTimer <= 0.0f) b->dashAbility = -1;
 }
 
 //------------------------------------------------------------------------------------
@@ -354,6 +419,8 @@ void BrawlersUpdate(GameContext w, float dt)
         if (b->attackCd > 0.0f) b->attackCd -= dt;
         if (b->hitFlash > 0.0f) b->hitFlash = fmaxf(0.0f, b->hitFlash - dt * 5.0f);
         if (b->revealTimer > 0.0f) b->revealTimer -= dt;
+        if (b->mobilityCooldown > 0.0f)
+            b->mobilityCooldown = fmaxf(0.0f, b->mobilityCooldown - dt);
         if (b->aimHold > 0.0f) b->aimHold = fmaxf(0.0f, b->aimHold - dt);
         if (b->spawnScale < 1.0f) b->spawnScale = fminf(1.0f, b->spawnScale + dt * 4.5f);
 

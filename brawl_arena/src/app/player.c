@@ -90,6 +90,23 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
         return;
     }
 
+    // Optional character mobility favors the current movement direction. With no
+    // movement input it follows the aim, so a stationary Tank can still pop forward.
+    if (input->mobilityPressed)
+    {
+        Vector3 direction = input->moveIntent;
+        if (Vector3Length(direction) < 0.001f)
+            direction = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
+
+        if (BrawlerTryMobility(game, idx, direction))
+        {
+            w->controller.charging = false;
+            w->controller.aimingSuper = false;
+            b->deliberateAim = false;
+            return;
+        }
+    }
+
     //--- Super: hold right mouse to aim, release to fire ------------------------
     if (input->superHeld && b->superCharge >= 1.0f)
     {

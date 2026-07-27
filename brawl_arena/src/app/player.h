@@ -13,6 +13,7 @@ typedef struct PlayerInput {
     bool attackReleased;
     bool superHeld;
     bool autoAttackPressed;
+    bool mobilityPressed;
     bool actionsBlocked;        // UI owns the pointer this frame
 } PlayerInput;
 

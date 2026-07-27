@@ -50,6 +50,7 @@ typedef struct MapDefinition {
 typedef struct WeaponDef {
     const char *name;
     const char *flavor;
+    const char *mobilityName;
     int maxHealth;
     int maxAmmo;
     MainAttackKind mainKind;
@@ -63,10 +64,14 @@ typedef struct WeaponDef {
     float cooldown;
     float reloadPerAmmo;
     float superPerHit;
+    float selfHealRatio;
     bool rangeScaled;
     float duration;
     float tickRate;
     float growTime;
+    float mobilityCooldown;
+    float mobilityDuration;
+    float mobilitySpeed;
     const char *superName;
     SuperKind superKind;
     int sPellets;
@@ -117,6 +122,9 @@ typedef struct AreaAbility {
 
 typedef struct DashAbility {
     float duration;
+    float speed;
+    float knockback;
+    bool breaksCrates;
 } DashAbility;
 
 typedef struct AbilityDefinition {
@@ -130,6 +138,7 @@ typedef struct AbilityDefinition {
     float cooldown;
     float reloadPerAmmo;
     float superPerHit;
+    float selfHealRatio;
     union {
         ProjectileAbility projectile;
         AreaAbility area;
@@ -147,6 +156,7 @@ typedef struct CharacterDefinition {
     int maxAmmo;
     int mainAbility;
     int superAbility;
+    int mobilityAbility;
 } CharacterDefinition;
 
 typedef struct ContentCatalog {

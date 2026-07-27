@@ -31,7 +31,7 @@ static bool Initialize(App *app)
     GameRandomSeed(&app->session.random, 0x12345678u);
     app->session.playerIdx = 0;
     app->session.brawlerCount = 2;
-    BrawlerSpawn(game, 0, TEAM_PLAYER, CLASS_SNIPER,
+    BrawlerSpawn(game, 0, TEAM_PLAYER, CLASS_BRUISER,
                  ArenaSpawnFor(&app->session.arena, TEAM_PLAYER, 0), true);
     BrawlerSpawn(game, 1, TEAM_ENEMY, CLASS_SHOTGUNNER,
                  ArenaSpawnFor(&app->session.arena, TEAM_ENEMY, 0), false);
@@ -64,6 +64,7 @@ int main(void)
         input.moveIntent = frame < 45 ? (Vector3){ 1.0f, 0.0f, 0.0f } : (Vector3){ 0 };
         input.attackPressed = frame == 0;
         input.attackReleased = frame == 10;
+        input.mobilityPressed = frame == 35;
 
         PlayerInput replayInput = input;
         replayInput.aimPoint = replay.session.brawlers[1].position;

@@ -1,6 +1,6 @@
 # Brawl Arena development guide
 
-Last code-verified: 2026-07-26
+Last code-verified: 2026-07-27
 
 ## Build targets
 
@@ -10,7 +10,7 @@ make run                # build and launch
 make debug              # clean debug build
 make check-architecture # dependency-policy check
 make validate-config    # validate tracked canonical project values
-make test               # five headless behavior/integration executables
+make test               # six headless behavior/integration executables
 make sanitize           # clean sanitizer headless run
 make clean
 ```
@@ -114,6 +114,7 @@ test exist to keep simulation usable without a window.
 | `test_no_attack_shake` | every kit plus impact/damage/death camera isolation |
 | `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability |
 | `test_gameplay` | identical input replay and simulation event/presentation isolation |
+| `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
 
 Tests use path overrides and temporary fixtures. They must not touch the developer's
 ignored local tuning/profile files.
@@ -124,6 +125,7 @@ After changes to runtime/presentation:
 
 - Main menu, Brawlers, Practice, Play, Escape/back, and fade transitions.
 - All five kit previews and both main/ultimate firing.
+- Tank Reclamation healing, Shift Shoulder Jets cooldown/cover stop, and Charge.
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.
 - Static, Roam, and Fight bots.
 - Gem spawn, pickup, death drop, countdown, win/result return.
