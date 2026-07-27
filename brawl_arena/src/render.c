@@ -223,14 +223,21 @@ static void SubmitLights(World *w, Assets *a)
 }
 
 //------------------------------------------------------------------------------------
-// Ground decals and glows, drawn unlit with additive or alpha blending.
+// Ground decals and glows, drawn unlit with additive or alpha blending. The raw helper
+// deliberately leaves depth-mask ownership with its caller so nested additive passes
+// cannot accidentally turn depth writes back on halfway through.
 //------------------------------------------------------------------------------------
-static void DrawGroundGlow(Assets *a, Vector3 pos, float radius, Color tint)
+static void DrawGroundGlowRaw(Assets *a, Vector3 pos, float radius, Color tint)
 {
-    rlDisableDepthMask();
     Matrix m = TRS((Vector3){ radius*2.0f, 1.0f, radius*2.0f }, 0.0f,
                    (Vector3){ pos.x, ARENA_DECAL_Y, pos.z });
     DrawLit(a, a->plane, m, a->texGlow, tint, (Vector2){ 1.0f, 1.0f }, 1.0f);
+}
+
+static void DrawGroundGlow(Assets *a, Vector3 pos, float radius, Color tint)
+{
+    rlDisableDepthMask();
+    DrawGroundGlowRaw(a, pos, radius, tint);
     rlEnableDepthMask();
 }
 
@@ -742,8 +749,8 @@ static void DrawAbilityFields(World *w, Assets *a)
             Color fill = { 65, 218, 190, (unsigned char)(44*fade) };
             Color edge = { 116, 255, 218, (unsigned char)(185*fade) };
             DrawAimDisc(field->position, radius, fill, edge);
-            DrawGroundGlow(a, field->position, radius,
-                           (Color){ 62, 226, 190, (unsigned char)(54*fade) });
+            DrawGroundGlowRaw(a, field->position, radius,
+                              (Color){ 62, 226, 190, (unsigned char)(54*fade) });
 
             // Stable x/z samples with looping y phases read as a compact rain shower
             // without allocating a particle for every drop.
@@ -807,7 +814,7 @@ static void DrawAbilityFields(World *w, Assets *a)
         Color aura = healing ? (Color){ 74, 255, 176, 105 }
                              : (Color){ 255, 82, 156, 105 };
         float pulse = 0.92f + 0.10f*sinf(w->time*12.0f);
-        DrawGroundGlow(a, b->position, 1.15f*pulse, aura);
+        DrawGroundGlowRaw(a, b->position, 1.15f*pulse, aura);
     }
 
     rlEnableDepthMask();

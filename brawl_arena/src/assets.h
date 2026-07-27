@@ -73,6 +73,7 @@ typedef struct Assets {
 
     // post uniforms
     int locResolution, locBloom, locVignette, locDepthTex, locOutline;
+    int locClipNear, locClipFar;
     int locStyleTime, locPixelate, locPainterly, locHalftone, locPosterize;
     int locGrain, locCA, locSaturation, locBrightness;
     bool depthOk;           // scene target carries a sampleable depth texture

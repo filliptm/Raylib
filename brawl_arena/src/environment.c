@@ -203,9 +203,10 @@ static void DrawWallTile(const Arena *arena, Assets *assets, int tx, int tz)
     Vector3 c = ArenaTileCenter(tx, tz);
     StationPalette palette = TilePalette(tx, tz);
 
-    // The structural core and plinth occupy the same full tile as collision. Modular
-    // wall faces sit just inside its exposed edges, and the imported panel closes the top.
-    Matrix core = EnvTRS((Vector3){ TILE_SIZE*0.94f, WALL_HEIGHT*0.94f, TILE_SIZE*0.94f },
+    // Collision still occupies the full tile, but the visible structural core is recessed
+    // behind the imported wall skins. Leaving a real gap prevents two nearly parallel
+    // surfaces from competing as the camera moves.
+    Matrix core = EnvTRS((Vector3){ TILE_SIZE*0.86f, WALL_HEIGHT*0.94f, TILE_SIZE*0.86f },
                          0.0f, (Vector3){ c.x, WALL_HEIGHT*0.47f, c.z });
     DrawLit(assets, assets->cube, core, assets->texMetal, WALL_CORE,
             (Vector2){ 1.0f, 1.0f }, 0.0f);

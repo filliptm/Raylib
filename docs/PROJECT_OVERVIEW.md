@@ -568,8 +568,10 @@ checks.
 
 ## Application shell
 
-The game opens a 1280×800 MSAA window and disables raylib's default Escape-to-close
-behavior so Escape can mean “back.”
+The game opens a fixed 1280×800 window with four-sample MSAA and a vertical-sync request.
+Its fallback frame ceiling matches the active monitor refresh rate, or 60 Hz when the
+rate is unavailable. raylib's default Escape-to-close behavior is disabled so Escape
+can mean “back.”
 
 The shell has:
 
@@ -1038,24 +1040,26 @@ The generated floor remains the low-draw-count gameplay grid and the generated w
 meshes remain fallbacks. `environment.c` layers Kenney Space Station Kit models over that
 foundation:
 
-- Permanent tiles retain a full collision-aligned structural core. Exposed sides receive
-  wall, window, door, banner, or console faces, and imported panels close their tops.
+- Permanent tiles retain full-tile collision. Their visible structural core is recessed
+  behind the wall skins; exposed sides receive wall, window, door, banner, or console
+  faces, and imported panels close their tops.
 - Destructible tiles use containers in the cargo half and computer/power banks in the
   operations half. Their health tint, hit flash, and disappearance follow the tile state.
 - Bush tiles use low station panels as hydroponic beds under the existing grass.
 - Spawn pads, reactor floor details, supports, pipes, rails, and exterior work platforms
   are presentation only and do not add simulation collision.
-- Shared height constants keep the base deck, imported floor inlays, passive decals, and
-  active targeting/effect overlays on distinct planes. This prevents coplanar station
-  geometry, shadows, glows, and aim shapes from z-fighting.
+- Shared height constants keep the base deck at -0.08, imported floor-inlay tops at 0.02,
+  passive decals at 0.065, and active targeting/effect overlays at 0.12. This keeps
+  station geometry, shadows, glows, and aim shapes on distinct depth planes.
 
 The complete runtime-ready GLB set is tracked under
 `resources/environment/kenney_space_station/`; `Assets.station` loads the 22 models used
 by this arena. The pack's original orange 512×512 atlas and purple variation are shared
-by the custom scene draw path. The source ZIP, FBX, OBJ, previews, and sample scene are not
-tracked. The bundled `LICENSE.txt` and `SOURCE.md` record the CC0 license and provenance.
-An unavailable station model falls back independently to generated geometry so a solid
-tile cannot become visually empty.
+by the custom scene draw path. Both atlases generate mipmaps and use trilinear filtering
+for angled or distant surfaces. The source ZIP, FBX, OBJ, previews, and sample scene are
+not tracked. The bundled `LICENSE.txt` and `SOURCE.md` record the CC0 license and
+provenance. An unavailable station model falls back independently to generated geometry
+so a solid tile cannot become visually empty.
 
 Bush concealment is visually represented by a dark ground tile and instanced grass. A
 generated `texBush` texture exists but is not currently used by rendering.
@@ -1083,6 +1087,7 @@ their exact location.
 
 The optional full-screen post shader combines:
 
+- FXAA-style scene-edge smoothing.
 - Bright-neighborhood bloom.
 - Painterly quadrant filtering.
 - Pixelation.
@@ -1094,7 +1099,17 @@ The optional full-screen post shader combines:
 - Vignette.
 - Depth-assisted outlines when the custom depth target is available.
 
-The render target is fixed to the 1280×800 window. The window is not resizable.
+The perspective cameras use a 0.5-to-120 clip range instead of raylib's 0.01-to-1000
+default, concentrating depth-buffer precision around the playable space. Post-process
+depth linearization receives the same near/far values, and its outline transition uses a
+soft threshold. Scene-color and depth sampling clamp at the render-target boundary so
+edge smoothing and outlines do not wrap pixels across the screen. Additive ability-field
+helpers leave depth-mask state under the ownership of the enclosing pass so a nested glow
+cannot resume depth writes before the pass ends.
+
+The render target is fixed to the 1280×800 window. It is single-sample, so the final pass
+provides the edge smoothing even though the default framebuffer requests four-sample
+MSAA. The window is not resizable.
 
 ## Rigged-character asset
 

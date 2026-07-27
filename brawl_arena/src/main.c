@@ -178,9 +178,14 @@ static void BankResult(World *w)
 
 int main(void)
 {
-    SetConfigFlags(FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
-    SetTargetFPS(60);
+
+    // Vsync owns presentation; the refresh-rate ceiling is a fallback for platforms
+    // where the swap interval cannot be enabled. Matching the active display avoids the
+    // uneven 60-versus-100/120 Hz cadence that made fine station edges appear to shimmer.
+    int refreshRate = GetMonitorRefreshRate(GetCurrentMonitor());
+    SetTargetFPS(refreshRate > 0 ? refreshRate : 60);
 
     // ESC must mean "back", not "quit", now that there are screens to back out of.
     SetExitKey(KEY_NULL);

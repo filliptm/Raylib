@@ -4,12 +4,12 @@
 #include "assets.h"
 #include "types.h"
 
-// Keep parallel floor surfaces on explicit, shared height layers. Imported inlays are
-// fitted just below gameplay ground, passive glows/shadows sit above them, and active
-// targeting/effect geometry gets a separate higher layer so the depth buffer never has
-// to choose between nearly coplanar surfaces.
-#define ARENA_DECK_Y       (-0.055f)
-#define ARENA_INLAY_TOP_Y  (-0.020f)
+// Keep parallel floor surfaces on explicit, shared height layers. The generated deck is
+// recessed below imported inlays, passive glows/shadows sit above them, and active
+// targeting/effect geometry gets a separate higher layer. The 0.10-unit deck/inlay gap
+// remains visually shallow while giving the depth buffer generous physical separation.
+#define ARENA_DECK_Y       (-0.080f)
+#define ARENA_INLAY_TOP_Y    0.020f
 #define ARENA_DECAL_Y        0.065f
 #define ARENA_PREVIEW_Y      0.120f
 

@@ -13,6 +13,12 @@
 #include <string.h>
 #include <math.h>
 
+// The arena and menu cameras never need raylib's 0.01..1000 default range. Moving the
+// near plane out is the important part: it concentrates depth precision where the
+// station's closely layered deck, panels, decals, and characters actually live.
+static const float SCENE_CLIP_NEAR = 0.5f;
+static const float SCENE_CLIP_FAR = 120.0f;
+
 static const char *CHARACTER_MODEL_PATHS[CLASS_COUNT] = {
     [CLASS_SHOTGUNNER] = "resources/sentinel.glb",
     [CLASS_BRUISER] = "resources/ironclad_guardian.glb",
@@ -198,6 +204,8 @@ static const char *FS_POST =
 "uniform float bloomStrength;\n"
 "uniform float vignetteStrength;\n"
 "uniform float outlineStrength;\n"
+"uniform float clipNear;\n"
+"uniform float clipFar;\n"
 "uniform float styleTime;\n"
 "uniform float stylePixelate;\n"
 "uniform float stylePainterly;\n"
@@ -211,7 +219,38 @@ static const char *FS_POST =
 "float linDepth(vec2 uv)\n"
 "{\n"
 "    float z = texture(depthTex, uv).r*2.0 - 1.0;\n"
-"    return (2.0*0.01*1000.0)/(1000.01 - z*999.99);\n"     // raylib near/far planes
+"    return (2.0*clipNear*clipFar)/(clipFar + clipNear - z*(clipFar - clipNear));\n"
+"}\n"
+"float sceneLuma(vec3 color)\n"
+"{\n"
+"    return dot(color, vec3(0.299, 0.587, 0.114));\n"
+"}\n"
+"vec3 sampleSceneAA(vec2 uv)\n"
+"{\n"
+"    vec2 px = 1.0/resolution;\n"
+"    vec3 rgbNW = texture(texture0, uv + vec2(-1.0, -1.0)*px).rgb;\n"
+"    vec3 rgbNE = texture(texture0, uv + vec2( 1.0, -1.0)*px).rgb;\n"
+"    vec3 rgbSW = texture(texture0, uv + vec2(-1.0,  1.0)*px).rgb;\n"
+"    vec3 rgbSE = texture(texture0, uv + vec2( 1.0,  1.0)*px).rgb;\n"
+"    vec3 rgbM  = texture(texture0, uv).rgb;\n"
+"    float lumaNW = sceneLuma(rgbNW);\n"
+"    float lumaNE = sceneLuma(rgbNE);\n"
+"    float lumaSW = sceneLuma(rgbSW);\n"
+"    float lumaSE = sceneLuma(rgbSE);\n"
+"    float lumaM  = sceneLuma(rgbM);\n"
+"    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));\n"
+"    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));\n"
+"    vec2 dir = vec2(-((lumaNW + lumaNE) - (lumaSW + lumaSE)),\n"
+"                     ((lumaNW + lumaSW) - (lumaNE + lumaSE)));\n"
+"    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE)*0.03125, 0.0078125);\n"
+"    float rcpDirMin = 1.0/(min(abs(dir.x), abs(dir.y)) + dirReduce);\n"
+"    dir = clamp(dir*rcpDirMin, vec2(-8.0), vec2(8.0))*px;\n"
+"    vec3 rgbA = 0.5*(texture(texture0, uv + dir*(1.0/3.0 - 0.5)).rgb +\n"
+"                     texture(texture0, uv + dir*(2.0/3.0 - 0.5)).rgb);\n"
+"    vec3 rgbB = rgbA*0.5 + 0.25*(texture(texture0, uv + dir*-0.5).rgb +\n"
+"                                  texture(texture0, uv + dir* 0.5).rgb);\n"
+"    float lumaB = sceneLuma(rgbB);\n"
+"    return (lumaB < lumaMin || lumaB > lumaMax) ? rgbA : rgbB;\n"
 "}\n"
 "vec3 sampleBright(vec2 uv)\n"
 "{\n"
@@ -255,11 +294,12 @@ static const char *FS_POST =
 "    if (styleCA > 0.003)\n"                                // lens fringe, radial from centre
 "    {\n"
 "        vec2 off = (uv - 0.5)*styleCA*0.012;\n"
-"        base = vec3(texture(texture0, uv + off).r,\n"
-"                    texture(texture0, uv).g,\n"
-"                    texture(texture0, uv - off).b);\n"
+"        vec3 plus = sampleSceneAA(uv + off);\n"
+"        vec3 middle = sampleSceneAA(uv);\n"
+"        vec3 minus = sampleSceneAA(uv - off);\n"
+"        base = vec3(plus.r, middle.g, minus.b);\n"
 "    }\n"
-"    else base = texture(texture0, uv).rgb;\n"
+"    else base = sampleSceneAA(uv);\n"
 "\n"
 "    if (stylePainterly > 0.003) base = mix(base, kuwahara(uv), stylePainterly);\n"
 "    vec3 color = base;\n"
@@ -302,7 +342,7 @@ static const char *FS_POST =
 "        d = max(d, abs(linDepth(fragTexCoord + vec2(0.0, px.y)) - dc));\n"
 "        d = max(d, abs(linDepth(fragTexCoord - vec2(0.0, px.y)) - dc));\n"
 "        float t = 0.20 + dc*0.03;\n"
-"        float edge = clamp((d - t)/t, 0.0, 1.0);\n"
+"        float edge = smoothstep(t, t*2.35, d);\n"
 "        color = mix(color, vec3(0.02, 0.02, 0.05), edge*outlineStrength);\n"
 "    }\n"
 "\n"
@@ -869,9 +909,15 @@ static void LoadStationAssets(Assets *a)
     a->stationTexturesOk = a->texStationOrange.id > 0 && a->texStationPurple.id > 0;
 
     if (a->texStationOrange.id > 0)
-        SetTextureFilter(a->texStationOrange, TEXTURE_FILTER_BILINEAR);
+    {
+        GenTextureMipmaps(&a->texStationOrange);
+        SetTextureFilter(a->texStationOrange, TEXTURE_FILTER_TRILINEAR);
+    }
     if (a->texStationPurple.id > 0)
-        SetTextureFilter(a->texStationPurple, TEXTURE_FILTER_BILINEAR);
+    {
+        GenTextureMipmaps(&a->texStationPurple);
+        SetTextureFilter(a->texStationPurple, TEXTURE_FILTER_TRILINEAR);
+    }
 
     int loaded = 0;
     for (int id = 0; id < STATION_MODEL_COUNT; id++)
@@ -897,6 +943,12 @@ static void LoadStationAssets(Assets *a)
 bool AssetsLoad(Assets *a, int screenW, int screenH)
 {
     *a = (Assets){ 0 };
+
+    // BeginMode3D reads these rlgl-wide values for both the menu podium and match camera.
+    // Keep the post shader in sync below; mismatched values corrupt linearized outlines.
+    rlSetClipPlanes(SCENE_CLIP_NEAR, SCENE_CLIP_FAR);
+    TraceLog(LOG_INFO, "RENDER: perspective clip range %.2f..%.1f",
+             SCENE_CLIP_NEAR, SCENE_CLIP_FAR);
 
     //--- Shaders --------------------------------------------------------------
     a->lighting = LoadShaderFromMemory(VS_LIGHTING, FS_LIGHTING);
@@ -942,6 +994,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->locVignette   = GetShaderLocation(a->post, "vignetteStrength");
         a->locDepthTex   = GetShaderLocation(a->post, "depthTex");
         a->locOutline    = GetShaderLocation(a->post, "outlineStrength");
+        a->locClipNear   = GetShaderLocation(a->post, "clipNear");
+        a->locClipFar    = GetShaderLocation(a->post, "clipFar");
         a->locStyleTime  = GetShaderLocation(a->post, "styleTime");
         a->locPixelate   = GetShaderLocation(a->post, "stylePixelate");
         a->locPainterly  = GetShaderLocation(a->post, "stylePainterly");
@@ -954,6 +1008,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
 
         Vector2 res = { (float)screenW, (float)screenH };
         SetShaderValue(a->post, a->locResolution, &res, SHADER_UNIFORM_VEC2);
+        SetShaderValue(a->post, a->locClipNear, &SCENE_CLIP_NEAR, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->post, a->locClipFar, &SCENE_CLIP_FAR, SHADER_UNIFORM_FLOAT);
     }
 
     a->locDither = GetShaderLocation(a->lighting, "dither");
@@ -1130,6 +1186,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         TraceLog(LOG_WARNING, "TOON: depth texture unavailable, ink outlines disabled");
     }
     SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
+    SetTextureWrap(a->sceneTarget.texture, TEXTURE_WRAP_CLAMP);
+    if (a->depthOk) SetTextureWrap(a->sceneTarget.depth, TEXTURE_WRAP_CLAMP);
 
     return a->lightingOk;
 }
