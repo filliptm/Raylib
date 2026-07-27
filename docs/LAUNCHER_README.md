@@ -1,10 +1,15 @@
 # Raylib Examples Launcher
 
-A graphical launcher program to browse, view, and run all 182 raylib examples.
+A graphical launcher program for browsing and running the indexed raylib examples.
+
+The collection contains 182 examples in the seven primary categories, but the current
+index omits `shapes/shapes_lines_drawing.c`. The launcher therefore displays 181 entries.
+See [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) for the code-verified inventory and known
+limitations.
 
 ## Overview
 
-This project contains all official raylib examples (182 total) organized by category:
+The primary collection contains 182 raylib examples organized by category:
 
 - **Core** (45 examples) - Window management, input, cameras, timing
 - **Shapes** (32 examples) - 2D drawing, collisions, animations
@@ -16,13 +21,16 @@ This project contains all official raylib examples (182 total) organized by cate
 
 ## Quick Start
 
+Run launcher commands from the repository root because its example paths are relative.
+
 ### 1. Run the Launcher
 
 ```bash
 ./example_launcher
 ```
 
-The launcher will display a graphical menu with all 182 examples.
+The launcher will display a graphical menu with the 181 currently indexed primary
+examples.
 
 ### 2. Navigate and Select
 
@@ -31,7 +39,7 @@ The launcher will display a graphical menu with all 182 examples.
 - `PAGE UP/DOWN` - Jump multiple examples
 - `HOME/END` - Go to first/last example
 - `ENTER` - Compile and run selected example
-- `C` - View source code of selected example
+- `C` - Print the selected example's source code to the terminal
 - `ESC` - Exit launcher
 
 ### 3. Browse by Category
@@ -69,7 +77,7 @@ gcc core/core_basic_window.c -o core_basic_window $(pkg-config --cflags --libs r
 .
 ├── example_launcher.c          # Main launcher program
 ├── example_launcher            # Compiled launcher executable
-├── raylib-examples/            # All 182 examples
+├── raylib-examples/            # 182 primary examples plus 6 others
 │   ├── core/                   # Core examples
 │   ├── shapes/                 # Shapes examples
 │   ├── textures/               # Texture examples
@@ -77,10 +85,13 @@ gcc core/core_basic_window.c -o core_basic_window $(pkg-config --cflags --libs r
 │   ├── models/                 # 3D model examples
 │   ├── shaders/                # Shader examples
 │   ├── audio/                  # Audio examples
-│   ├── examples_list.txt       # Complete example index
+│   ├── examples_list.txt       # Current 187-entry index
 │   ├── Makefile                # Build system
 │   └── README.md               # Official examples README
-└── documentation/              # Raylib documentation
+└── docs/                       # Repository-level documentation
+    ├── README.md               # Documentation index
+    ├── PROJECT_OVERVIEW.md     # Code-verified project guide
+    └── LAUNCHER_README.md      # This launcher guide
 ```
 
 ## Requirements
@@ -91,13 +102,13 @@ gcc core/core_basic_window.c -o core_basic_window $(pkg-config --cflags --libs r
 
 ## Features
 
-✅ Browse all 182 examples in one place
+✅ Browse all 181 currently indexed primary examples in one place
 ✅ Color-coded categories
 ✅ Difficulty ratings displayed (★☆☆☆ to ★★★★)
 ✅ One-click compile and run
-✅ Source code viewing
+✅ Source code printing to the terminal
 ✅ Smooth scrolling navigation
-✅ Search/filter by category
+✅ Filtering by category
 
 ## Example Difficulty Levels
 
@@ -110,7 +121,7 @@ gcc core/core_basic_window.c -o core_basic_window $(pkg-config --cflags --libs r
 
 1. **Start with Core examples** - Learn window management and input first
 2. **Follow difficulty progression** - Begin with ★☆☆☆ examples
-3. **Read the source code** - Press 'C' to view code before running
+3. **Read the source code** - Press `C` to print it in the terminal before running
 4. **Check resources** - Some examples need resource files (images, models, shaders)
 
 ## Troubleshooting
@@ -159,7 +170,8 @@ gcc example.c -o example.exe -lraylib -lopengl32 -lgdi32 -lwinmm
 - **Official Raylib**: https://www.raylib.com
 - **Examples Online**: https://www.raylib.com/examples.html
 - **GitHub Repo**: https://github.com/raysan5/raylib
-- **Documentation**: See `documentation/raylib/` folder
+- **Repository documentation**: See [the documentation index](README.md)
+- **Examples documentation**: See `raylib-examples/README.md`
 
 ## Credits
 

@@ -1,250 +1,94 @@
-# Raylib Examples Collection
+# Raylib Game Prototypes and Examples
 
-Complete collection of all 182 official raylib examples with a graphical launcher.
+This repository is a raylib workspace containing an examples browser and three original
+game prototypes. It is not a single game or a single build target.
 
-## 🎮 Quick Start
+The current projects are:
 
-```bash
-./example_launcher
-```
+| Project | Purpose | Status |
+|---|---|---|
+| `raylib-examples/` + `example_launcher.c` | Browse, study, compile, and run the local raylib examples collection | Reference collection and macOS launcher |
+| `squad_runner/` | Endless 3D squad autorunner built as one compact C program | Playable prototype |
+| `hearthstone/` | Modular 3D card-game experiment with AI, editor, networking, data, and test scaffolding | Broad prototype; several systems remain partially integrated |
+| `brawl_arena/` | Top-down 3D arena brawler with Gem Grab, a practice sandbox, live tuning, procedural rendering, and a rigged-character pipeline | Most active and cohesive game |
 
-This opens a graphical menu where you can:
-- Browse all 182 examples by category
-- View source code
-- Compile and run examples with one keypress
+## Start here
 
-## 📚 What's Included
+Read [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) for the maintained,
+code-verified guide to every project. It covers:
 
-### Examples by Category
+- What each project is intended to demonstrate.
+- How its runtime and major systems work.
+- Build, run, input, data, asset, and test paths.
+- Which features are live and which are scaffolding.
+- Known limitations and documentation drift.
+- The verification commands appropriate to each project.
 
-| Category | Count | Description |
-|----------|-------|-------------|
-| **Core** | 45 | Window management, input, cameras, timing |
-| **Shapes** | 32 | 2D drawing, collisions, animations |
-| **Textures** | 26 | Image loading, sprites, particles |
-| **Text** | 15 | Fonts, text rendering, input boxes |
-| **Models** | 25 | 3D models, meshes, animations |
-| **Shaders** | 31 | GLSL shaders, lighting, effects |
-| **Audio** | 8 | Sound effects, music streaming |
-| **Total** | **182** | Complete raylib example collection |
+Project-specific documentation remains useful for deeper implementation notes:
 
-## 🎯 Features
+- [Documentation index](docs/README.md)
+- [Launcher guide](docs/LAUNCHER_README.md)
+- [brawl_arena/README.md](brawl_arena/README.md)
+- [brawl_arena/docs/CHARACTER_PIPELINE.md](brawl_arena/docs/CHARACTER_PIPELINE.md)
+- [hearthstone/README.md](hearthstone/README.md)
+- [hearthstone/docs/](hearthstone/docs/)
 
-✅ **Graphical Launcher** - Browse all examples in an interactive menu
-✅ **One-Click Compile & Run** - Press ENTER to compile and execute
-✅ **Source Code Viewer** - Press C to view example code
-✅ **Color-Coded Categories** - Easy visual organization
-✅ **Difficulty Ratings** - From ★☆☆☆ (basic) to ★★★★ (advanced)
-✅ **Complete Documentation** - Learn raylib step-by-step
+When a project-specific README disagrees with `docs/PROJECT_OVERVIEW.md`, verify the
+behavior in code. Some older local documentation describes an earlier stage of its
+project.
 
-## 🎨 Launcher Controls
+## Requirements
 
-| Key | Action |
-|-----|--------|
-| `↑/↓` | Navigate examples |
-| `PAGE UP/DOWN` | Jump 20 examples |
-| `HOME/END` | First/Last example |
-| `ENTER` | Compile & Run |
-| `C` | View source code |
-| `ESC` | Exit launcher |
+The original games are written in C99 and use raylib. The current macOS setup expects:
 
-## 📂 Project Structure
-
-```
-Raylib/
-├── example_launcher.c        # Launcher source code
-├── example_launcher          # Compiled launcher
-├── LAUNCHER_README.md        # Detailed launcher docs
-├── README.md                 # This file
-│
-├── raylib-examples/          # All 182 examples
-│   ├── core/                 # 45 core examples
-│   ├── shapes/               # 32 shapes examples
-│   ├── textures/             # 26 texture examples
-│   ├── text/                 # 15 text examples
-│   ├── models/               # 25 3D model examples
-│   ├── shaders/              # 31 shader examples
-│   ├── audio/                # 8 audio examples
-│   ├── examples_list.txt     # Complete index
-│   ├── Makefile              # Build system
-│   └── resources/            # Assets for examples
-│
-└── documentation/
-    └── raylib/
-        ├── README.md         # Raylib overview
-        ├── GETTING_STARTED.md
-        ├── GRAPHICS_2D.md
-        ├── GRAPHICS_3D.md
-        ├── AUDIO.md
-        └── INPUT_HANDLING.md
-```
-
-## 🚀 Running Examples
-
-### Method 1: Using the Launcher (Recommended)
-
-```bash
-./example_launcher
-```
-
-Navigate with arrow keys and press ENTER to run.
-
-### Method 2: Manual Compilation
-
-```bash
-cd raylib-examples/core
-gcc core_basic_window.c -o example $(pkg-config --cflags --libs raylib) \
-    -framework OpenGL -framework Cocoa -framework IOKit
-./example
-```
-
-### Method 3: Using Make
-
-```bash
-cd raylib-examples
-make core/core_basic_window
-./core/core_basic_window
-```
-
-## 📖 Learning Path
-
-### Beginner (★☆☆☆)
-1. `core_basic_window` - Create your first window
-2. `core_input_keys` - Handle keyboard input
-3. `core_input_mouse` - Mouse interaction
-4. `shapes_basic_shapes` - Draw 2D shapes
-5. `textures_logo_raylib` - Load and display images
-
-### Intermediate (★★☆☆)
-1. `core_2d_camera` - Camera controls
-2. `shapes_collision_area` - Collision detection
-3. `textures_sprite_animation` - Animated sprites
-4. `text_input_box` - Text input handling
-5. `models_geometric_shapes` - 3D basics
-
-### Advanced (★★★☆)
-1. `core_2d_camera_platformer` - Platformer camera
-2. `shapes_top_down_lights` - 2D lighting
-3. `textures_bunnymark` - Performance optimization
-4. `models_mesh_picking` - 3D picking
-5. `shaders_postprocessing` - Shader effects
-
-### Expert (★★★★)
-1. `core_2d_camera_split_screen` - Split-screen rendering
-2. `shapes_digital_clock` - Complex animations
-3. `textures_image_kernel` - Image processing
-4. `models_rlgl_solar_system` - Advanced 3D
-5. `shaders_deferred_rendering` - Advanced rendering
-
-## 🛠️ Requirements
-
-- **Raylib 5.5+** - `brew install raylib`
-- **GCC or Clang** - C compiler
-- **macOS/Linux/Windows** - Cross-platform
-
-### Installation
-
-**macOS:**
 ```bash
 brew install raylib
+pkg-config --modversion raylib
 ```
 
-**Linux (Ubuntu/Debian):**
+The checked environment uses raylib 5.5.0. Linux builds are supported by some project
+Makefiles, but the root example launcher constructs a macOS-specific compiler command.
+
+## Common entry points
+
+Run these commands from the repository root:
+
 ```bash
-sudo apt install libraylib-dev
+# Build the graphical examples launcher.
+clang -std=c99 -Wall -Wextra example_launcher.c -o example_launcher \
+  $(pkg-config --cflags --libs raylib) \
+  -framework OpenGL -framework Cocoa -framework IOKit
+
+# Build or run the original games.
+make -C squad_runner
+make -C squad_runner run
+
+make -C hearthstone
+make -C hearthstone run
+make -C hearthstone test
+
+make -C brawl_arena
+make -C brawl_arena run
 ```
 
-**Windows:**
-Download from [raylib releases](https://github.com/raysan5/raylib/releases)
+Each executable opens a graphical window. `make` only builds; `make run` builds and then
+launches.
 
-## 🎓 Resources
+## Repository conventions
 
-- **Official Website**: https://www.raylib.com
-- **Examples Online**: https://www.raylib.com/examples.html
-- **GitHub**: https://github.com/raysan5/raylib
-- **Discord**: https://discord.gg/raylib
-- **Cheatsheet**: https://www.raylib.com/cheatsheet/cheatsheet.html
+- `build/`, object files, game binaries, logs, and `brawl_arena/tuning.cfg` are generated
+  locally and ignored where appropriate. The existing root `example_launcher` binary is
+  already tracked despite its ignore rule; use a `/tmp` output for verification unless
+  intentionally refreshing that artifact.
+- The source character archives under `brawl_arena/*.zip` are local import material. The
+  repacked runtime model is `brawl_arena/resources/sentinel.glb`.
+- `raylib-examples/` is a vendored/reference collection. Avoid broad rewrites there unless
+  the task explicitly concerns the examples.
+- Repository-wide instructions for coding agents are in [AGENTS.md](AGENTS.md).
 
-## 📝 Example Categories
+## Current focus
 
-### Core (45 examples)
-Window management, input handling, cameras, file I/O, timing, VR, automation
-
-### Shapes (32 examples)
-2D drawing primitives, collisions, easing, recursion, lighting, particles
-
-### Textures (26 examples)
-Image loading, manipulation, sprites, particles, blending, tiling
-
-### Text (15 examples)
-Font loading, text rendering, Unicode, 3D text, styling, input boxes
-
-### Models (25 examples)
-3D shapes, model loading (OBJ, GLTF, VOX), animations, skybox, heightmaps
-
-### Shaders (31 examples)
-GLSL shaders, lighting, raymarching, fog, post-processing, PBR, deferred rendering
-
-### Audio (8 examples)
-Sound loading, music streaming, multi-channel audio, audio effects
-
-## 🎨 Color Coding
-
-The launcher uses colors to identify categories:
-
-- 🔵 **Core** - Sky Blue
-- 🔴 **Shapes** - Red
-- 🟢 **Textures** - Green
-- 🟡 **Text** - Yellow
-- 🟣 **Models** - Purple
-- 🟠 **Shaders** - Orange
-- 🩷 **Audio** - Pink
-
-## 💡 Tips
-
-1. **Start simple** - Begin with ★☆☆☆ examples
-2. **Read the code** - Press 'C' in launcher to view source
-3. **Modify examples** - Best way to learn is by experimenting
-4. **Check resources** - Some examples need assets from `resources/` folder
-5. **Use the docs** - See `documentation/raylib/` for detailed guides
-
-## 🐛 Troubleshooting
-
-**Compilation errors:**
-```bash
-# Make sure raylib is installed
-brew install raylib
-
-# Verify installation
-pkg-config --cflags --libs raylib
-```
-
-**Missing resources:**
-Some examples need resources. Run from the example's directory:
-```bash
-cd raylib-examples/textures
-gcc textures_logo_raylib.c -o example $(pkg-config --cflags --libs raylib) \
-    -framework OpenGL -framework Cocoa -framework IOKit
-./example
-```
-
-**Launcher not loading examples:**
-Ensure `raylib-examples/examples_list.txt` exists.
-
-## 📜 License
-
-All examples are from the official raylib repository and follow raylib's license (zlib/libpng).
-
-The launcher program is created for educational purposes.
-
-## 🙏 Credits
-
-- **Raylib** by Ramon Santamaria (@raysan5)
-- All individual example authors (see source files)
-- Raylib community contributors
-
----
-
-**Enjoy learning game development with Raylib! 🎮✨**
-
-For detailed launcher documentation, see [LAUNCHER_README.md](LAUNCHER_README.md)
+The Git history and code organization indicate that Brawl Arena is the active product
+direction. Squad Runner is a small earlier prototype, Hearthstone is a wider experimental
+module with unfinished integrations, and the examples collection is primarily a learning
+and reference environment.
