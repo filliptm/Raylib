@@ -9,6 +9,10 @@
 // second. Advancing at a flat 60 played every clip ~2% fast.
 #define CHARACTER_CLIP_FPS (1000.0f/17.0f)
 
+// Seconds over which an outgoing locomotion clip blends beneath its replacement,
+// so a clip change no longer snaps the skeleton to frame zero.
+#define CHARACTER_CROSSFADE_DURATION 0.10f
+
 typedef struct CharacterAnimationSelection {
     int clip;
     float playbackRate;

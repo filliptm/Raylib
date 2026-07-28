@@ -225,6 +225,7 @@ typedef struct Tuning {
     float playerRespawn;
     float enemyRespawn;
     float classSwapLockout;
+    float inputBuffer;
     float matchResultHold;
     float timeScale;
     int crateHealth;

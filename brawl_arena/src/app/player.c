@@ -27,6 +27,56 @@ static int AutoAimTarget(App *w, int idx)
     return BrawlerNearestVisibleEnemy(game, idx);
 }
 
+// One shared release-fire path for immediate and buffered attacks. A quick tap
+// auto-aims (Guardians favor a badly hurt ally; everyone else picks the nearest
+// visible enemy, mirroring mobile-style auto-aim); a held release fires down the
+// deliberate aim line.
+static bool FireMainAttack(App *w, int idx, bool tap)
+{
+    GameContext game = AppGameContext(w);
+    Brawler *b = &w->session.brawlers[idx];
+    float aimLen = w->controller.aimDist;
+
+    if (tap)
+    {
+        int target = AutoAimTarget(w, idx);
+        if (target >= 0)
+        {
+            Vector3 t = w->session.brawlers[target].position;
+            Vector3 d = Vector3Subtract(t, b->position);
+            d.y = 0.0f;
+
+            const AbilityDefinition *mainAbility =
+                ContentMainAbility(&w->content, b->cls);
+            float shotSpeed =
+                (mainAbility->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+                 mainAbility->behavior == ABILITY_BEHAVIOR_LOB)
+                ? mainAbility->data.projectile.speed : 0.0f;
+            if (mainAbility->behavior == ABILITY_BEHAVIOR_RETURNING)
+                shotSpeed = mainAbility->data.returning.outboundSpeed;
+            float travel = (shotSpeed > 0.1f) ? Vector3Length(d)/shotSpeed : 0.0f;
+            Vector3 lead = Vector3Add(t, Vector3Scale(w->session.brawlers[target].velocity, travel * 0.7f));
+            Vector3 ld = Vector3Subtract(lead, b->position);
+
+            b->aimAngle = atan2f(ld.x, ld.z);
+            if (BrawlerTryAttack(game, idx,
+                                 Vector3Length((Vector3){ ld.x, 0.0f, ld.z })))
+            {
+                BrawlerFaceShot(game, idx, b->aimAngle, 0.45f);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    if (BrawlerTryAttack(game, idx, aimLen))
+    {
+        BrawlerFaceShot(game, idx, b->aimAngle, 0.25f);
+        return true;
+    }
+    return false;
+}
+
 void PlayerUpdate(App *w, const PlayerInput *input, float dt)
 {
     GameContext game = AppGameContext(w);
@@ -144,46 +194,23 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     if (input->attackReleased && w->controller.charging)
     {
         w->controller.charging = false;
-
-        if (w->controller.chargeTime < TAP_THRESHOLD)
-        {
-            // Guardians favor a badly hurt ally; every other quick shot selects the
-            // nearest visible enemy, mirroring mobile-style auto-aim.
-            int target = AutoAimTarget(w, idx);
-            if (target >= 0)
-            {
-                Vector3 t = w->session.brawlers[target].position;
-                Vector3 d = Vector3Subtract(t, b->position);
-                d.y = 0.0f;
-
-                const AbilityDefinition *mainAbility =
-                    ContentMainAbility(&w->content, b->cls);
-                float shotSpeed =
-                    (mainAbility->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
-                     mainAbility->behavior == ABILITY_BEHAVIOR_LOB)
-                    ? mainAbility->data.projectile.speed : 0.0f;
-                if (mainAbility->behavior == ABILITY_BEHAVIOR_RETURNING)
-                    shotSpeed = mainAbility->data.returning.outboundSpeed;
-                float travel = (shotSpeed > 0.1f) ? Vector3Length(d)/shotSpeed : 0.0f;
-                Vector3 lead = Vector3Add(t, Vector3Scale(w->session.brawlers[target].velocity, travel * 0.7f));
-                Vector3 ld = Vector3Subtract(lead, b->position);
-
-                b->aimAngle = atan2f(ld.x, ld.z);
-                if (BrawlerTryAttack(game, idx,
-                                     Vector3Length((Vector3){ ld.x, 0.0f, ld.z })))
-                    BrawlerFaceShot(game, idx, b->aimAngle, 0.45f);
-            }
-            else
-            {
-                if (BrawlerTryAttack(game, idx, aimLen))
-                    BrawlerFaceShot(game, idx, b->aimAngle, 0.25f);
-            }
-        }
+        bool tap = w->controller.chargeTime < TAP_THRESHOLD;
+        if (FireMainAttack(w, idx, tap))
+            w->controller.attackBufferTimer = 0.0f;
         else
         {
-            if (BrawlerTryAttack(game, idx, aimLen))
-                BrawlerFaceShot(game, idx, b->aimAngle, 0.25f);
+            // Missed by a cooldown hair (or an ammo pip mid-refill): remember the
+            // release briefly and keep retrying, so clicks near the edge still fire.
+            w->controller.attackBufferTimer = w->tune.inputBuffer;
+            w->controller.attackBufferTap = tap;
         }
+    }
+    else if (w->controller.attackBufferTimer > 0.0f && !w->controller.charging)
+    {
+        w->controller.attackBufferTimer -= dt;
+        if (FireMainAttack(w, idx, w->controller.attackBufferTap) ||
+            w->controller.attackBufferTimer <= 0.0f)
+            w->controller.attackBufferTimer = 0.0f;
     }
 
     // Space is a straight auto-aim shot, handy while repositioning.

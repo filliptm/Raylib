@@ -83,6 +83,11 @@ typedef struct CharacterAnimState {
     int cls;            // BrawlerClass owning `clip`; a kit swap forces a restart
     bool loop;
     bool valid;         // false until the first update after a reset
+    // Crossfade out of the previous clip: its pose freezes at the switch moment
+    // and blends away over CHARACTER_CROSSFADE_DURATION. -1 when no fade runs.
+    int fadeClip;
+    float fadeTime;     // seconds into fadeClip at the moment of the switch
+    float fadeAge;      // seconds since the switch
 } CharacterAnimState;
 
 typedef struct PresentationState {
@@ -101,6 +106,7 @@ typedef struct PresentationState {
     int vfxLayersSpawned;
     VfxEffectId lastVfxEffect;
     float shake;
+    float shakePhase;
 } PresentationState;
 
 #endif

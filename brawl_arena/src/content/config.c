@@ -165,6 +165,7 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
     ADD_FLOAT("gameplay.player_respawn", SCOPE_PROJECT, t->playerRespawn, 0.1, 30.0);
     ADD_FLOAT("gameplay.enemy_respawn", SCOPE_PROJECT, t->enemyRespawn, 0.1, 30.0);
     ADD_FLOAT("gameplay.class_swap_lockout", SCOPE_PROJECT, t->classSwapLockout, 0.0, 30.0);
+    ADD_FLOAT("gameplay.input_buffer", SCOPE_PROJECT, t->inputBuffer, 0.0, 0.5);
     ADD_FLOAT("gameplay.result_hold_duration", SCOPE_PROJECT, t->matchResultHold, 0.5, 30.0);
     ADD_FLOAT("gameplay.time_scale", SCOPE_PROJECT, t->timeScale, 0.01, 4.0);
     ADD_FLOAT("gameplay.super_gain_multiplier", SCOPE_PROJECT, t->superMult, 0.0, 10.0);

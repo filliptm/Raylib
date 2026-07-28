@@ -22,6 +22,10 @@ typedef struct PlayerController {
     // resets it instead of leaking state through file-scope statics.
     bool gamepadAttackHeld;
     bool gamepadSecondaryHeld;
+    // A release that lands during the tail of a cooldown is remembered briefly and
+    // retried, so near-edge clicks fire instead of being eaten.
+    float attackBufferTimer;
+    bool attackBufferTap;
 } PlayerController;
 
 typedef struct AppFlow {

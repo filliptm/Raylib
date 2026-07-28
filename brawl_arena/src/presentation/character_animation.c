@@ -11,9 +11,9 @@ static float ClampPlayback(float value)
     return value;
 }
 
-// A clip change restarts its cycle (there is no crossfade), so switches between
-// looping locomotion clips are debounced: a clip must have played this long before
-// a boundary-grazing heading or speed may replace it.
+// A clip change restarts its cycle (softened by a short crossfade), so switches
+// between looping locomotion clips are debounced: a clip must have played this long
+// before a boundary-grazing heading or speed may replace it.
 #define LOCOMOTION_MIN_DWELL 0.15f
 
 static bool IsLocomotionClip(const RiggedCharacter *character, int clip)
@@ -151,6 +151,15 @@ void CharacterAnimationsUpdate(
         if (!state->valid || selection.clip != state->clip ||
             state->cls != (int)b->cls)
         {
+            // Crossfade only between clips of the same rig; a kit swap or the first
+            // update after a reset starts clean.
+            if (state->valid && state->cls == (int)b->cls && state->clip >= 0)
+            {
+                state->fadeClip = state->clip;
+                state->fadeTime = state->time;
+                state->fadeAge = 0.0f;
+            }
+            else state->fadeClip = -1;
             state->clip = selection.clip;
             state->cls = (int)b->cls;
             state->time = 0.0f;
@@ -160,6 +169,26 @@ void CharacterAnimationsUpdate(
         state->loop = selection.loop;
         state->clipAge += dt;
         state->time += dt*selection.playbackRate;
+
+        if (state->fadeClip >= 0)
+        {
+            state->fadeAge += dt;
+            if (state->fadeAge >= CHARACTER_CROSSFADE_DURATION)
+                state->fadeClip = -1;
+        }
+
+        // Wrap looping playback by the clip length: an unbounded clock loses float
+        // precision over a long session and the sampled frame turns steppy.
+        if (state->loop && state->clip >= 0 && state->clip < character->animCount)
+        {
+            float frames = (float)character->anims[state->clip].frameCount;
+            if (frames > 0.0f)
+            {
+                float duration = frames/CHARACTER_CLIP_FPS;
+                if (state->time >= duration)
+                    state->time = fmodf(state->time, duration);
+            }
+        }
     }
 }
 

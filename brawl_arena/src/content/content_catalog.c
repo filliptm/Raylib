@@ -157,6 +157,7 @@ void TuningSetDefaults(Tuning *tuning)
         .playerRespawn = DEFAULT_PLAYER_RESPAWN,
         .enemyRespawn = DEFAULT_ENEMY_RESPAWN,
         .classSwapLockout = 3.0f,
+        .inputBuffer = 0.12f,
         .matchResultHold = DEFAULT_MATCH_RESULT_HOLD,
         .timeScale = 1.0f,
         .crateHealth = DEFAULT_CRATE_HEALTH,

@@ -168,20 +168,25 @@ static void BankResult(App *w)
 
 int main(void)
 {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
+    // Configuration loads before the window exists so presentation flags can follow
+    // it: with post-processing on, the scene renders into a non-multisampled FBO,
+    // where an MSAA backbuffer only taxes the fullscreen blit.
+    ConfigInitialize(&world);
+
+    unsigned int flags = FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE;
+    if (!world.tune.postFx) flags |= FLAG_MSAA_4X_HINT;
+    SetConfigFlags(flags);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
     SetWindowMinSize(960, 600);
 
-    // Vsync owns presentation; the refresh-rate ceiling is a fallback for platforms
-    // where the swap interval cannot be enabled. Matching the active display avoids the
-    // uneven 60-versus-100/120 Hz cadence that made fine station edges appear to shimmer.
-    int refreshRate = GetMonitorRefreshRate(GetCurrentMonitor());
-    SetTargetFPS(refreshRate > 0 ? refreshRate : 60);
+    // Vsync owns frame pacing on its own. Layering the CPU-side frame limiter on
+    // top of the blocking buffer swap made the two clocks beat against each other,
+    // producing alternating short/long frames.
+    SetTargetFPS(0);
 
     // ESC must mean "back", not "quit", now that there are screens to back out of.
     SetExitKey(KEY_NULL);
 
-    ConfigInitialize(&world);
     UiSystemLoad(&ui);
     char mapStatus[256];
     if (!MapCatalogLoad(&world.content, "data/maps/manifest.cfg",

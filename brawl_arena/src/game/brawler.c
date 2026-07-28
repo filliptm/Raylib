@@ -341,7 +341,9 @@ bool BrawlerTryAttack(GameContext w, int idx, float aimDist)
     bool freeAmmo = b->isPlayer && w.tuning->infiniteAmmo;
     if (!freeAmmo && b->ammo < 1.0f) return false;
     if (!freeAmmo) b->ammo -= 1.0f;
-    b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown;
+    // attackCd is at most one frame below zero here; carrying it keeps sustained
+    // fire cadence exact instead of quantized to frame boundaries.
+    b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown + b->attackCd;
     InterruptHealthRegeneration(w, b);
     WeaponsFire(w, idx, false, aimDist);
     return true;
@@ -355,7 +357,9 @@ bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
         return false;
 
     if (!(b->isPlayer && w.tuning->infiniteAmmo)) b->superCharge = 0.0f;
-    b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown;
+    // A super may fire mid-cooldown, so only a negative sub-frame remainder carries.
+    b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown +
+                  (b->attackCd < 0.0f ? b->attackCd : 0.0f);
     InterruptHealthRegeneration(w, b);
     WeaponsFire(w, idx, true, aimDist);
     return true;
@@ -690,7 +694,11 @@ void BrawlersUpdate(GameContext w, float dt)
         }
 
         // Timers
+        // The cooldown keeps its sub-frame overshoot for exactly one frame so a shot
+        // fired the moment it expires can roll the remainder into the next cooldown;
+        // after that the stale remainder is cleared so idle time earns no head start.
         if (b->attackCd > 0.0f) b->attackCd -= dt;
+        else if (b->attackCd < 0.0f) b->attackCd = 0.0f;
         if (b->hitFlash > 0.0f) b->hitFlash = fmaxf(0.0f, b->hitFlash - dt * 5.0f);
         if (b->revealTimer > 0.0f) b->revealTimer -= dt;
         if (b->mobilityCooldown > 0.0f)
@@ -768,7 +776,7 @@ void BrawlersUpdate(GameContext w, float dt)
             UpdateDash(w, i, dt);
             b->bobPhase += dt * 22.0f;
             b->renderYaw = AngleLerp(b->renderYaw, atan2f(b->dashDir.x, b->dashDir.z),
-                                     Clamp(24.0f * dt, 0.0f, 1.0f));
+                                     SmoothFactor(24.0f, dt));
             continue;
         }
 
@@ -785,7 +793,7 @@ void BrawlersUpdate(GameContext w, float dt)
         }
         Vector3 desired =
             Vector3Scale(b->moveIntent, w.tuning->moveSpeed*moveMultiplier);
-        float acceleration = Clamp(w.tuning->moveAccel*dt, 0.0f, 1.0f);
+        float acceleration = SmoothFactor(w.tuning->moveAccel, dt);
         b->velocity.x = Lerp(b->velocity.x, desired.x, acceleration);
         b->velocity.z = Lerp(b->velocity.z, desired.z, acceleration);
 
@@ -829,7 +837,7 @@ void BrawlersUpdate(GameContext w, float dt)
             targetYaw = b->moveFacing;
         }
 
-        b->renderYaw = AngleLerp(b->renderYaw, targetYaw, Clamp(turnRate * dt, 0.0f, 1.0f));
+        b->renderYaw = AngleLerp(b->renderYaw, targetYaw, SmoothFactor(turnRate, dt));
     }
 
     // Visibility is resolved from the player's side, for rendering and for the HUD.

@@ -36,15 +36,19 @@ void CameraUpdate(App *world, float deltaTime)
         }
     }
 
-    view->camFocus = Vector3Lerp(view->camFocus, desired, 6.0f*deltaTime);
+    view->camFocus = Vector3Lerp(view->camFocus, desired, SmoothFactor(6.0f, deltaTime));
 
+    // Shake is layered fixed-frequency noise rather than fresh randomness each
+    // frame, so its character does not change with the display's refresh rate.
     Vector3 shake = { 0 };
     if (view->shake > 0.0f)
     {
-        float strength = view->shake*0.22f;
-        shake.x = (GetRandomValue(-100, 100)/100.0f)*strength;
-        shake.y = (GetRandomValue(-100, 100)/100.0f)*strength;
-        shake.z = (GetRandomValue(-100, 100)/100.0f)*strength;
+        view->shakePhase += deltaTime;
+        float strength = view->shake*0.22f*0.625f;
+        float t = view->shakePhase;
+        shake.x = (sinf(t*143.0f) + 0.6f*sinf(t*97.0f))*strength;
+        shake.y = (sinf(t*127.0f + 1.7f) + 0.6f*sinf(t*89.0f))*strength;
+        shake.z = (sinf(t*151.0f + 3.1f) + 0.6f*sinf(t*103.0f))*strength;
     }
 
     view->camera.position =

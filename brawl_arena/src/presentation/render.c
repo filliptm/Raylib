@@ -762,8 +762,14 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
         }
     }
 
+    int fadeClip = anim->valid ? anim->fadeClip : -1;
+    float fadeAlpha = 1.0f;
+    if (fadeClip >= 0 && CHARACTER_CROSSFADE_DURATION > 0.0f)
+        fadeAlpha = anim->fadeAge/CHARACTER_CROSSFADE_DURATION;
+
     AssetsDrawCharacter(a, b->cls, b->position, b->renderYaw, b->spawnScale,
                         clip, time*CHARACTER_CLIP_FPS, loop,
+                        fadeClip, anim->fadeTime*CHARACTER_CLIP_FPS, fadeAlpha,
                         tint, dither, emissive,
                         w->presentation.actions[idx].action,
                         CharacterActionProgress(&w->presentation.actions[idx]),

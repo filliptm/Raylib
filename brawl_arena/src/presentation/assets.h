@@ -198,8 +198,13 @@ void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrengt
 // A current action is crossfaded over locomotion. When its optional authored clip is
 // missing, a shared Meshy-biped procedural pose is used. `socketPose` receives the
 // final posed joint locations in world space and may be NULL.
+// `fadeClip`/`fadeFrame`/`fadeAlpha` crossfade out of a previous clip: the outgoing
+// pose (frozen at `fadeFrame`) blends beneath the incoming clip with weight
+// 1-fadeAlpha. Pass fadeClip -1 (and fadeAlpha 1) when no fade is active.
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
-                         int animIndex, float frame, bool loop, Color tint, float dither,
+                         int animIndex, float frame, bool loop,
+                         int fadeClip, float fadeFrame, float fadeAlpha,
+                         Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
                          CharacterSocketPose *socketPose,

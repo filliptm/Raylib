@@ -2,6 +2,7 @@
 #define BRAWL_CORE_TYPES_H
 
 #include "raylib.h"
+#include <math.h>
 #include <stdbool.h>
 
 #define MAX_ARENA_WIDTH 64
@@ -35,7 +36,9 @@
 
 #define BRAWLER_RADIUS 0.65f
 #define DEFAULT_MOVE_SPEED 11.0f
-#define DEFAULT_MOVE_ACCEL 30.0f
+// Exponential-approach rate. 41.5 reproduces the response the old clamped
+// linear factor had at 60 Hz (0.5 per frame), now identical at every frame rate.
+#define DEFAULT_MOVE_ACCEL 41.5f
 #define DEFAULT_MAX_AMMO 3
 #define DEFAULT_CRATE_HEALTH 1000
 #define DEFAULT_MATCH_RESULT_HOLD 4.5f
@@ -43,6 +46,15 @@
 #define DEFAULT_FIRE_REVEAL_TIME 1.0f
 #define DEFAULT_PLAYER_RESPAWN 3.0f
 #define DEFAULT_ENEMY_RESPAWN 4.0f
+
+// Frame-rate-independent smoothing factor for exponential approach:
+// value = Lerp(value, target, SmoothFactor(rate, dt)). Unlike a raw rate*dt lerp
+// factor this composes identically across frame rates and can never overshoot,
+// so handling does not change between a 30 Hz and a 144 Hz session.
+static inline float SmoothFactor(float rate, float dt)
+{
+    return 1.0f - expf(-rate*dt);
+}
 
 typedef enum { TEAM_PLAYER = 0, TEAM_ENEMY = 1 } Team;
 

@@ -165,7 +165,7 @@ void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candida
             AssetsDrawCharacter(a, candidate, scene->preview.position, yaw, scale,
                                 character->clipIdle,
                                 scene->previewTime*CHARACTER_CLIP_FPS,
-                                true, WHITE,
+                                true, -1, 0.0f, 1.0f, WHITE,
                                 0.0f, 0.0f, CHARACTER_ACTION_NONE, 0.0f, 0.0f,
                                 0, lightPos, lightCol, 2, scene->camera.position);
         }

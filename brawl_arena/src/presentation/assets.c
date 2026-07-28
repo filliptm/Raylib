@@ -1185,6 +1185,38 @@ static Transform BlendPoseTransform(Transform base, Transform action, float weig
     };
 }
 
+// Samples a clip at a fractional frame, interpolating between the neighbouring
+// authored poses. Whole-frame stepping made characters pose-step whenever the
+// display ran faster than the clip rate or playback was slowed.
+static void SamplePose(const ModelAnimation *anim, float frame, bool loop,
+                       Transform *pose)
+{
+    float position = frame;
+    int f0, f1;
+    if (loop)
+    {
+        position = fmodf(position, (float)anim->frameCount);
+        if (position < 0.0f) position += (float)anim->frameCount;
+        f0 = (int)position;
+        if (f0 >= anim->frameCount) f0 = anim->frameCount - 1;
+        f1 = (f0 + 1)%anim->frameCount;
+    }
+    else
+    {
+        if (position < 0.0f) position = 0.0f;
+        if (position > (float)(anim->frameCount - 1))
+            position = (float)(anim->frameCount - 1);
+        f0 = (int)position;
+        f1 = (f0 + 1 < anim->frameCount) ? f0 + 1 : f0;
+    }
+    float t = position - (float)f0;
+    for (int bone = 0; bone < anim->boneCount; bone++)
+        pose[bone] = (t > 0.0001f)
+                   ? BlendPoseTransform(anim->framePoses[f0][bone],
+                                        anim->framePoses[f1][bone], t)
+                   : anim->framePoses[f0][bone];
+}
+
 static bool BoneDescendsFrom(const RiggedCharacter *character, int bone, int root)
 {
     for (int guard = 0; guard < character->model.boneCount && bone >= 0; guard++)
@@ -1342,7 +1374,9 @@ static void StoreCharacterSockets(const RiggedCharacter *character,
 }
 
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
-                         int animIndex, float frame, bool loop, Color tint, float dither,
+                         int animIndex, float frame, bool loop,
+                         int fadeClip, float fadeFrame, float fadeAlpha,
+                         Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
                          CharacterSocketPose *socketPose,
@@ -1382,19 +1416,29 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
         ModelAnimation anim = character->anims[idx];
         if (anim.frameCount > 0)
         {
-            int f = (int)frame;
-            if (loop)
-            {
-                f %= anim.frameCount;
-                if (f < 0) f += anim.frameCount;
-            }
-            else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
-
             if (anim.boneCount > 0 && anim.boneCount <= CHARACTER_BONE_LIMIT)
             {
                 Transform pose[CHARACTER_BONE_LIMIT];
-                for (int bone = 0; bone < anim.boneCount; bone++)
-                    pose[bone] = anim.framePoses[f][bone];
+                SamplePose(&anim, frame, loop, pose);
+
+                // Crossfade: the outgoing clip's pose, frozen at the moment of the
+                // switch, eases away beneath the incoming clip.
+                if (fadeAlpha < 0.999f && fadeClip >= 0 &&
+                    fadeClip < character->animCount)
+                {
+                    ModelAnimation outgoing = character->anims[fadeClip];
+                    if (outgoing.frameCount > 0 &&
+                        outgoing.boneCount == anim.boneCount)
+                    {
+                        Transform fadePose[CHARACTER_BONE_LIMIT];
+                        SamplePose(&outgoing, fadeFrame, true, fadePose);
+                        float in = Clamp(fadeAlpha, 0.0f, 1.0f);
+                        in = in*in*(3.0f - 2.0f*in);
+                        for (int bone = 0; bone < anim.boneCount; bone++)
+                            pose[bone] = BlendPoseTransform(fadePose[bone],
+                                                            pose[bone], in);
+                    }
+                }
 
                 bool authoredApplied = false;
                 int actionClip = ActionClipFor(character, action);
@@ -1402,16 +1446,16 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                     actionClip < character->animCount)
                 {
                     ModelAnimation authored = character->anims[actionClip];
-                    int actionFrame = authored.frameCount > 1
-                                    ? (int)(Clamp(actionProgress, 0.0f, 1.0f)*
-                                            (authored.frameCount - 1))
-                                    : 0;
                     if (authored.boneCount == anim.boneCount &&
                         authored.frameCount > 0)
                     {
+                        float actionPos = Clamp(actionProgress, 0.0f, 1.0f)*
+                                          (float)(authored.frameCount - 1);
+                        Transform actionPose[CHARACTER_BONE_LIMIT];
+                        SamplePose(&authored, actionPos, false, actionPose);
                         for (int bone = 0; bone < anim.boneCount; bone++)
                             pose[bone] = BlendPoseTransform(
-                                pose[bone], authored.framePoses[actionFrame][bone],
+                                pose[bone], actionPose[bone],
                                 Clamp(actionWeight, 0.0f, 1.0f));
                         authoredApplied = true;
                     }
@@ -1432,7 +1476,18 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                 UpdateModelAnimationBones(character->model, composed, 0);
                 StoreCharacterSockets(character, pose, m, socketPose);
             }
-            else UpdateModelAnimationBones(character->model, anim, f);
+            else
+            {
+                // Bone-limit fallback: stepped whole-frame playback.
+                int f = (int)frame;
+                if (loop)
+                {
+                    f %= anim.frameCount;
+                    if (f < 0) f += anim.frameCount;
+                }
+                else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
+                UpdateModelAnimationBones(character->model, anim, f);
+            }
         }
     }
 
