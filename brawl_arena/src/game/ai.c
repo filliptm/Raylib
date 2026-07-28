@@ -8,9 +8,11 @@
 #include "content_catalog.h"
 #include <math.h>
 
+#define AI_ROUTE_CLEARANCE (BRAWLER_RADIUS + 0.05f)
+
 //------------------------------------------------------------------------------------
-// Cheap steering: if the way ahead is blocked, fan out to either side until a probe
-// comes back clear. Enough to stop bots grinding into wall corners.
+// Short-range steering uses the same circle body as movement. Point probes incorrectly
+// marked routes beside corners as clear even when a brawler could not fit there.
 //------------------------------------------------------------------------------------
 static Vector3 AvoidSteer(GameContext w, Vector3 pos, Vector3 dir, float side)
 {
@@ -18,7 +20,8 @@ static Vector3 AvoidSteer(GameContext w, Vector3 pos, Vector3 dir, float side)
     dir = Vector3Normalize(dir);
 
     Vector3 probe = Vector3Add(pos, Vector3Scale(dir, w.tuning->aiProbeAhead));
-    if (!ArenaSolidAt(&w.session->arena, probe.x, probe.z)) return dir;
+    if (ArenaSweepCircleClear(
+            &w.session->arena, pos, probe, BRAWLER_RADIUS)) return dir;
 
     const float angles[] = { 40.0f, 75.0f, 110.0f, 145.0f, 180.0f };
     float base = atan2f(dir.x, dir.z);
@@ -31,10 +34,116 @@ static Vector3 AvoidSteer(GameContext w, Vector3 pos, Vector3 dir, float side)
             float a = base + sign * angles[i] * DEG2RAD;
             Vector3 cand = { sinf(a), 0.0f, cosf(a) };
             Vector3 p = Vector3Add(pos, Vector3Scale(cand, w.tuning->aiProbeAhead));
-            if (!ArenaSolidAt(&w.session->arena, p.x, p.z)) return cand;
+            if (ArenaSweepCircleClear(
+                    &w.session->arena, pos, p, BRAWLER_RADIUS)) return cand;
         }
     }
     return dir;
+}
+
+static bool NavigableCell(const Arena *arena, int tx, int tz)
+{
+    if (!ArenaInBounds(arena, tx, tz)) return false;
+    TileType type = arena->tiles[tz][tx].type;
+    if (type == TILE_WALL || type == TILE_CRATE) return false;
+    return ArenaCircleClear(
+        arena, ArenaTileCenter(arena, tx, tz), AI_ROUTE_CLEARANCE);
+}
+
+Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float side)
+{
+    from.y = 0.0f;
+    goal.y = 0.0f;
+    Vector3 direct = Vector3Subtract(goal, from);
+    direct.y = 0.0f;
+    if (Vector3Length(direct) < 0.001f) return (Vector3){ 0 };
+
+    if (ArenaSweepCircleClear(
+            &w.session->arena, from, goal, BRAWLER_RADIUS))
+        return Vector3Normalize(direct);
+
+    const Arena *arena = &w.session->arena;
+    int startX = ArenaTileX(arena, from.x);
+    int startZ = ArenaTileZ(arena, from.z);
+    if (!ArenaInBounds(arena, startX, startZ))
+        return AvoidSteer(w, from, direct, side);
+
+    // If a target lies too close to cover, route to the closest body-clear tile. Combat
+    // and gem pickup radii can finish the interaction without demanding an invalid pose.
+    int goalX = -1, goalZ = -1;
+    float closest = 1e30f;
+    for (int tz = 0; tz < arena->height; tz++)
+    {
+        for (int tx = 0; tx < arena->width; tx++)
+        {
+            if (!NavigableCell(arena, tx, tz)) continue;
+            Vector3 center = ArenaTileCenter(arena, tx, tz);
+            float dx = center.x - goal.x;
+            float dz = center.z - goal.z;
+            float distanceSquared = dx*dx + dz*dz;
+            if (distanceSquared >= closest) continue;
+            closest = distanceSquared;
+            goalX = tx;
+            goalZ = tz;
+        }
+    }
+    if (goalX < 0)
+        return AvoidSteer(w, from, direct, side);
+
+    short previous[MAX_ARENA_HEIGHT][MAX_ARENA_WIDTH];
+    short queueX[MAX_ARENA_WIDTH*MAX_ARENA_HEIGHT];
+    short queueZ[MAX_ARENA_WIDTH*MAX_ARENA_HEIGHT];
+    for (int tz = 0; tz < arena->height; tz++)
+        for (int tx = 0; tx < arena->width; tx++)
+            previous[tz][tx] = -1;
+
+    int head = 0, tail = 0;
+    int startIndex = startZ*arena->width + startX;
+    previous[startZ][startX] = (short)startIndex;
+    queueX[tail] = (short)startX;
+    queueZ[tail++] = (short)startZ;
+
+    static const int DX[4] = { 1, 0, -1, 0 };
+    static const int DZ[4] = { 0, 1, 0, -1 };
+    int directionOffset = side < 0.0f ? 0 : 2;
+
+    while (head < tail && previous[goalZ][goalX] < 0)
+    {
+        int tx = queueX[head];
+        int tz = queueZ[head++];
+        int currentIndex = tz*arena->width + tx;
+
+        for (int step = 0; step < 4; step++)
+        {
+            int direction = (step + directionOffset) & 3;
+            int nextX = tx + DX[direction];
+            int nextZ = tz + DZ[direction];
+            if (!NavigableCell(arena, nextX, nextZ) ||
+                previous[nextZ][nextX] >= 0) continue;
+            previous[nextZ][nextX] = (short)currentIndex;
+            queueX[tail] = (short)nextX;
+            queueZ[tail++] = (short)nextZ;
+        }
+    }
+
+    if (previous[goalZ][goalX] < 0)
+        return AvoidSteer(w, from, direct, side);
+
+    int stepX = goalX;
+    int stepZ = goalZ;
+    int stepIndex = stepZ*arena->width + stepX;
+    while (previous[stepZ][stepX] != startIndex &&
+           previous[stepZ][stepX] != stepIndex)
+    {
+        stepIndex = previous[stepZ][stepX];
+        stepX = stepIndex % arena->width;
+        stepZ = stepIndex / arena->width;
+    }
+
+    Vector3 waypoint = ArenaTileCenter(arena, stepX, stepZ);
+    Vector3 toWaypoint = Vector3Subtract(waypoint, from);
+    toWaypoint.y = 0.0f;
+    return AvoidSteer(w, from, toWaypoint, side);
 }
 
 //------------------------------------------------------------------------------------
@@ -46,8 +155,9 @@ static Vector3 PickWanderPoint(GameContext w, Vector3 from)
         float r = GameRandomInt(&w.session->random, 6, 20);
         Vector3 p = { from.x + sinf(a) * r, 0.0f, from.z + cosf(a) * r };
 
-        if (!ArenaSolidAt(&w.session->arena, p.x, p.z) &&
-            ArenaLineOfSight(&w.session->arena, from, p))
+        if (ArenaCircleClear(&w.session->arena, p, BRAWLER_RADIUS) &&
+            ArenaSweepCircleClear(
+                &w.session->arena, from, p, BRAWLER_RADIUS))
             return p;
     }
     return from;
@@ -206,7 +316,8 @@ void AIUpdate(GameContext w, float dt)
                     if (allyDist > mainAbility->range*0.88f)
                     {
                         b->aiState = AI_CHASE;
-                        b->moveIntent = AvoidSteer(w, b->position, toAlly, b->strafeDir);
+                        b->moveIntent = AINavigationDirection(
+                            w, b->position, ally->position, b->strafeDir);
                     }
                     else
                     {
@@ -237,9 +348,9 @@ void AIUpdate(GameContext w, float dt)
 
             if (gemIdx >= 0)
             {
-                Vector3 toGem = Vector3Subtract(w.session->gems[gemIdx].position, b->position);
-                toGem.y = 0.0f;
-                b->moveIntent = AvoidSteer(w, b->position, toGem, b->strafeDir);
+                b->moveIntent = AINavigationDirection(
+                    w, b->position, w.session->gems[gemIdx].position,
+                    b->strafeDir);
                 if (Vector3Length(b->velocity) > 0.4f)
                     b->aimAngle = atan2f(b->velocity.x, b->velocity.z);
                 continue;
@@ -251,9 +362,10 @@ void AIUpdate(GameContext w, float dt)
                 b->aiTimer = 3.0f + GameRandomInt(&w.session->random, 0, 200) / 100.0f;
             }
 
-            Vector3 dir = Vector3Subtract(b->aiWander, b->position);
-            dir.y = 0.0f;
-            b->moveIntent = Vector3Scale(AvoidSteer(w, b->position, dir, b->strafeDir), 0.7f);
+            b->moveIntent = Vector3Scale(
+                AINavigationDirection(
+                    w, b->position, b->aiWander, b->strafeDir),
+                0.7f);
 
             if (Vector3Length(b->velocity) > 0.4f)
                 b->aimAngle = atan2f(b->velocity.x, b->velocity.z);
@@ -284,13 +396,12 @@ void AIUpdate(GameContext w, float dt)
             Vector3 bush;
             if (FindNearbyBush(w, b->position, &bush))
             {
-                Vector3 toBush = Vector3Subtract(bush, b->position);
-                toBush.y = 0.0f;
-                if (Vector3Length(toBush) > 0.6f)
-                    away = Vector3Normalize(Vector3Add(Vector3Scale(away, 0.5f), Vector3Normalize(toBush)));
+                b->moveIntent = AINavigationDirection(
+                    w, b->position, bush, b->strafeDir);
             }
-
-            b->moveIntent = AvoidSteer(w, b->position, away, b->strafeDir);
+            else
+                b->moveIntent = AvoidSteer(
+                    w, b->position, away, b->strafeDir);
             if (TryTacticalMobility(w, i, b->moveIntent)) continue;
 
             // Still fights back, just less eagerly.
@@ -313,11 +424,13 @@ void AIUpdate(GameContext w, float dt)
             // past it to start a fight it cannot yet win.
             if (gemIdx >= 0 && gemDist < dist)
             {
-                Vector3 toGem = Vector3Subtract(w.session->gems[gemIdx].position, b->position);
-                toGem.y = 0.0f;
-                b->moveIntent = AvoidSteer(w, b->position, toGem, b->strafeDir);
+                b->moveIntent = AINavigationDirection(
+                    w, b->position, w.session->gems[gemIdx].position,
+                    b->strafeDir);
             }
-            else b->moveIntent = AvoidSteer(w, b->position, toTarget, b->strafeDir);
+            else
+                b->moveIntent = AINavigationDirection(
+                    w, b->position, t->position, b->strafeDir);
 
             // Mobility kits spend their short cooldown closing meaningful gaps, while
             // retaining the charged super for its separate combat payoff.

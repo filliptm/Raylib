@@ -657,20 +657,19 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
                     pull = Vector3Scale(
                         Vector3Normalize(pull),
                         fminf(p->outboundPull, Vector3Length(pull)));
-                    t->position = ArenaResolveCircle(
-                        &w.session->arena, Vector3Add(t->position, pull),
-                        BRAWLER_RADIUS);
+                    t->position = ArenaMoveCircle(
+                        &w.session->arena, t->position, pull,
+                        BRAWLER_RADIUS).position;
                 }
             }
             else if (!p->outbound && p->returnKnockback > 0.0f)
             {
                 Vector3 direction = Vector3Normalize(
                     (Vector3){ p->velocity.x, 0.0f, p->velocity.z });
-                t->position = ArenaResolveCircle(
-                    &w.session->arena,
-                    Vector3Add(t->position,
-                               Vector3Scale(direction, p->returnKnockback)),
-                    BRAWLER_RADIUS);
+                t->position = ArenaMoveCircle(
+                    &w.session->arena, t->position,
+                    Vector3Scale(direction, p->returnKnockback),
+                    BRAWLER_RADIUS).position;
             }
         }
 

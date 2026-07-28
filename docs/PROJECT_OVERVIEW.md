@@ -847,7 +847,14 @@ keyboard or mouse reads into simulation.
 Damage, healing, ammo, cooldown, optional secondary abilities, ultimate gain, deaths,
 respawns, concealment, dash collision, shield interception, crate damage, returning
 projectiles, rain fields, sound-wave status application, and out-of-combat regeneration
-all belong to `src/game/`. Every living
+all belong to `src/game/`. Brawlers use substepped circle sweeps against permanent walls
+and intact crates. Contact preserves tangential movement, removes inward velocity, and
+keeps each brawler solid against terrain. Brawlers intentionally do not collide with one
+another, so allies and opponents can overlap and pass through freely. The acceleration
+response is clamped so slow frames cannot extrapolate beyond authored speed. Bot probes
+use the same body radius, with a fixed-capacity breadth-first route over live wall/crate
+tiles when the direct sweep is blocked; breaking a crate changes routing on the next
+update. Every living
 brawler restores 13% maximum health at the three-second quiet mark and once per second
 afterward. Successful main/ultimate casts and actual health loss reset combat time;
 failed attacks, movement, aiming, Shoulder Jets, and received healing do not.

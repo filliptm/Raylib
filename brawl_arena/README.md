@@ -99,6 +99,14 @@ and never costs you accuracy.
 three pips), with each pip reloading continuously and independently. You cannot hold the
 trigger; you manage a small budget of shots and reposition while it refills.
 
+**Wall sliding and body-aware routing.** Brawlers move as swept circles in bounded
+substeps, so frame spikes and tuned movement speeds cannot skip through a wall or crate.
+Contact removes only velocity aimed into cover, preserving responsive movement along
+wall faces and around corners. Brawlers do not collide with one another, so players,
+allies, and enemies can overlap and cross freely without changing terrain collision.
+Bots use the same body clearance for short probes and a live tile route when a direct
+path is blocked; destroyed crates open that route on the next update.
+
 **Out-of-combat regeneration.** Every living brawler follows the same recovery rule.
 After three gameplay seconds without successfully firing a main attack or ultimate and
 without losing health, the brawler immediately restores 13% of maximum health. Further

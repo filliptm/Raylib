@@ -150,4 +150,5 @@ asset policy; invalid record syntax rejects the map.
     alignment check.
 
 The test validates runtime dimensions, IDs, spawn counts, crate health, sealed borders,
-cover/concealment presence where expected, and spawn-to-objective reachability.
+cover/concealment presence where expected, spawn-to-objective reachability, circular
+body clearance, swept wall/crate stops, and tangential wall sliding.

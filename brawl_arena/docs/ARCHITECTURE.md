@@ -102,6 +102,20 @@ Simulation constraints:
 5. Emit `GameEvent` values for observable presentation.
 6. Preserve fixed-pool allocation behavior unless capacity is deliberately redesigned.
 
+`ArenaMoveCircle()` is the shared terrain-movement primitive. It sweeps a circular body
+in bounded substeps, resolves wall/crate overlap, and preserves tangential movement while
+reporting the outward contact normal. Ordinary movement removes only inward velocity;
+dashes and knockback use the same sweep while retaining their separate stop/destruction
+rules. Brawlers deliberately have no actor-to-actor collision: every team may overlap
+and pass through every other brawler while each body still resolves independently
+against terrain.
+
+AI short probes use the same brawler radius rather than point occupancy.
+`AINavigationDirection()` follows a direct body-clear sweep when possible and otherwise
+builds a small breadth-first route over the live arena grid. Crates participate while
+intact and disappear from routing immediately when destroyed. This remains deterministic
+and allocation-free through fixed stack arrays bounded by the arena capacities.
+
 ## Input, commands, and events
 
 Device state is captured once per rendered frame into `PlayerInput`. `PlayerUpdate()` is

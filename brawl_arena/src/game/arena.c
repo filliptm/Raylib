@@ -104,12 +104,13 @@ bool ArenaBushAt(const Arena *a, float x, float z)
 Vector3 ArenaResolveCircle(const Arena *a, Vector3 pos, float radius)
 {
     int cx = ArenaTileX(a, pos.x), cz = ArenaTileZ(a, pos.z);
+    int span = (int)ceilf(radius/a->tileSize) + 1;
 
-    for (int pass = 0; pass < 2; pass++)
+    for (int pass = 0; pass < 4; pass++)
     {
-        for (int tz = cz - 1; tz <= cz + 1; tz++)
+        for (int tz = cz - span; tz <= cz + span; tz++)
         {
-            for (int tx = cx - 1; tx <= cx + 1; tx++)
+            for (int tx = cx - span; tx <= cx + span; tx++)
             {
                 if (!ArenaInBounds(a, tx, tz)) continue;
                 TileType type = a->tiles[tz][tx].type;
@@ -146,6 +147,121 @@ Vector3 ArenaResolveCircle(const Arena *a, Vector3 pos, float radius)
         }
     }
     return pos;
+}
+
+bool ArenaCircleClear(const Arena *a, Vector3 pos, float radius)
+{
+    if (!a || a->tileSize <= 0.0f || radius < 0.0f) return false;
+    float halfWidth = a->width*a->tileSize*0.5f;
+    float halfHeight = a->height*a->tileSize*0.5f;
+    if (pos.x - radius < -halfWidth || pos.x + radius > halfWidth ||
+        pos.z - radius < -halfHeight || pos.z + radius > halfHeight)
+        return false;
+
+    int cx = ArenaTileX(a, pos.x), cz = ArenaTileZ(a, pos.z);
+    int span = (int)ceilf(radius/a->tileSize) + 1;
+    float contactRadius = fmaxf(0.0f, radius - 0.0001f);
+    float radiusSquared = contactRadius*contactRadius;
+
+    for (int tz = cz - span; tz <= cz + span; tz++)
+    {
+        for (int tx = cx - span; tx <= cx + span; tx++)
+        {
+            if (!ArenaInBounds(a, tx, tz)) continue;
+            TileType type = a->tiles[tz][tx].type;
+            if (type != TILE_WALL && type != TILE_CRATE) continue;
+
+            Vector3 center = ArenaTileCenter(a, tx, tz);
+            float half = a->tileSize*0.5f;
+            float nearX = Clamp(pos.x, center.x - half, center.x + half);
+            float nearZ = Clamp(pos.z, center.z - half, center.z + half);
+            float dx = pos.x - nearX;
+            float dz = pos.z - nearZ;
+            if (dx*dx + dz*dz < radiusSquared) return false;
+        }
+    }
+    return true;
+}
+
+static int MovementSteps(const Arena *a, float distance, float radius)
+{
+    if (distance <= 0.00001f) return 1;
+    float maxStep = fminf(a->tileSize*0.25f, fmaxf(radius*0.5f, 0.05f));
+    int steps = (int)ceilf(distance/maxStep);
+    return steps > 0 ? steps : 1;
+}
+
+bool ArenaSweepCircleClear(const Arena *a, Vector3 from, Vector3 to, float radius)
+{
+    if (!a || a->tileSize <= 0.0f) return false;
+    Vector3 delta = Vector3Subtract(to, from);
+    delta.y = 0.0f;
+    int steps = MovementSteps(a, Vector3Length(delta), radius);
+
+    for (int i = 0; i <= steps; i++)
+    {
+        float amount = (float)i/(float)steps;
+        Vector3 sample = Vector3Add(from, Vector3Scale(delta, amount));
+        if (!ArenaCircleClear(a, sample, radius)) return false;
+    }
+    return true;
+}
+
+ArenaMoveResult ArenaMoveCircle(const Arena *a, Vector3 start, Vector3 displacement,
+                                float radius)
+{
+    ArenaMoveResult result = { 0 };
+    if (!a || a->tileSize <= 0.0f)
+    {
+        result.position = start;
+        return result;
+    }
+
+    start.y = 0.0f;
+    displacement.y = 0.0f;
+    result.position = ArenaResolveCircle(a, start, radius);
+
+    int steps = MovementSteps(a, Vector3Length(displacement), radius);
+    Vector3 step = Vector3Scale(displacement, 1.0f/(float)steps);
+    Vector3 normalSum = { 0 };
+
+    for (int i = 0; i < steps; i++)
+    {
+        Vector3 proposed = Vector3Add(result.position, step);
+        Vector3 resolved = ArenaResolveCircle(a, proposed, radius);
+        Vector3 correction = Vector3Subtract(resolved, proposed);
+        correction.y = 0.0f;
+
+        if (Vector3LengthSqr(correction) <= 0.0000001f)
+        {
+            result.position = proposed;
+            continue;
+        }
+
+        Vector3 normal = Vector3Normalize(correction);
+        result.collided = true;
+        normalSum = Vector3Add(normalSum, normal);
+
+        // Retry this substep with only the tangential component. This keeps contact
+        // responsive instead of repeatedly pushing the body into the same wall.
+        Vector3 slide = step;
+        float into = Vector3DotProduct(slide, normal);
+        if (into < 0.0f)
+            slide = Vector3Subtract(slide, Vector3Scale(normal, into));
+
+        Vector3 slideProposed = Vector3Add(result.position, slide);
+        Vector3 slideResolved = ArenaResolveCircle(a, slideProposed, radius);
+        Vector3 slideCorrection = Vector3Subtract(slideResolved, slideProposed);
+        slideCorrection.y = 0.0f;
+        if (Vector3LengthSqr(slideCorrection) > 0.0000001f)
+            normalSum = Vector3Add(normalSum, Vector3Normalize(slideCorrection));
+        result.position = slideResolved;
+    }
+
+    if (Vector3LengthSqr(normalSum) > 0.0000001f)
+        result.normal = Vector3Normalize(normalSum);
+    result.position.y = 0.0f;
+    return result;
 }
 
 bool ArenaLineOfSight(const Arena *a, Vector3 from, Vector3 to)

@@ -3,6 +3,12 @@
 
 #include "game_types.h"
 
+typedef struct ArenaMoveResult {
+    Vector3 position;
+    Vector3 normal;
+    bool collided;
+} ArenaMoveResult;
+
 void ArenaLoad(Arena *a, const MapDefinition *map, int crateHealth);
 
 // Spawn point for a team slot, wrapping if the map has fewer points than brawlers.
@@ -20,6 +26,14 @@ bool ArenaBushAt(const Arena *a, float x, float z);
 
 // Pushes a circle out of any solid tile it overlaps. Returns the corrected position.
 Vector3 ArenaResolveCircle(const Arena *a, Vector3 pos, float radius);
+
+// Body-aware collision queries used by movement and navigation.
+bool ArenaCircleClear(const Arena *a, Vector3 pos, float radius);
+bool ArenaSweepCircleClear(const Arena *a, Vector3 from, Vector3 to, float radius);
+
+// Moves a circle through the arena in bounded steps and slides along contact surfaces.
+ArenaMoveResult ArenaMoveCircle(const Arena *a, Vector3 start, Vector3 displacement,
+                                float radius);
 
 // True if nothing solid stands between the two points.
 bool ArenaLineOfSight(const Arena *a, Vector3 from, Vector3 to);

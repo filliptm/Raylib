@@ -145,8 +145,8 @@ test exist to keep simulation usable without a window.
 | `test_config` | source layering, validation, save/promotion/reset, profile, migration |
 | `test_healer` | typed Guardian content and rain/Resonance timing/outcomes |
 | `test_no_attack_shake` | every kit plus impact/damage/death camera isolation |
-| `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability |
-| `test_gameplay` | identical input replay and simulation event/presentation isolation |
+| `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability, circle clearance, swept wall/crate collision, and wall sliding |
+| `test_gameplay` | identical input replay, simulation event/presentation isolation, slow-frame velocity clamping, ally/enemy actor pass-through, and an integrated Helios-9 bot route |
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |

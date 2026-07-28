@@ -556,26 +556,39 @@ static void UpdateDash(GameContext w, int idx, float dt)
 
     float speed = ability->data.dash.speed > 0.0f
                 ? ability->data.dash.speed : w.tuning->dashSpeed;
-    Vector3 next = Vector3Add(b->position, Vector3Scale(b->dashDir, speed*moveDt));
+    Vector3 displacement = Vector3Scale(b->dashDir, speed*moveDt);
 
-    // Destructive dashes sample the leading edge of the brawler, so the crate breaks
-    // before circle resolution can pin the actor against its face.
-    Vector3 dashNose = Vector3Add(next, Vector3Scale(b->dashDir, BRAWLER_RADIUS));
-    if (ability->data.dash.breaksCrates &&
-        ArenaTypeAt(&w.session->arena, dashNose.x, dashNose.z) == TILE_CRATE)
+    // Sample the leading edge across the entire step so tuned/high-frame-time Charges
+    // cannot tunnel past a crate before the body sweep gets a chance to stop.
+    if (ability->data.dash.breaksCrates)
     {
-        if (ArenaDamageAt(&w.session->arena, dashNose.x, dashNose.z,
-                          w.tuning->crateHealth))
-            GameEmitCrateBreak(w.session,
-                               (Vector3){ dashNose.x, 0.6f, dashNose.z });
+        float sampleLength = fminf(w.session->arena.tileSize*0.25f,
+                                   BRAWLER_RADIUS*0.5f);
+        int samples = (int)ceilf(Vector3Length(displacement)/sampleLength);
+        if (samples < 1) samples = 1;
+        for (int sample = 1; sample <= samples; sample++)
+        {
+            Vector3 dashNose = Vector3Add(
+                b->position,
+                Vector3Scale(displacement, (float)sample/(float)samples));
+            dashNose = Vector3Add(
+                dashNose, Vector3Scale(b->dashDir, BRAWLER_RADIUS));
+            if (ArenaTypeAt(&w.session->arena,
+                            dashNose.x, dashNose.z) != TILE_CRATE) continue;
+            if (ArenaDamageAt(&w.session->arena, dashNose.x, dashNose.z,
+                              w.tuning->crateHealth))
+                GameEmitCrateBreak(
+                    w.session, (Vector3){ dashNose.x, 0.6f, dashNose.z });
+        }
     }
 
-    Vector3 resolved = ArenaResolveCircle(&w.session->arena, next, BRAWLER_RADIUS);
+    ArenaMoveResult move = ArenaMoveCircle(
+        &w.session->arena, b->position, displacement, BRAWLER_RADIUS);
     // A regular boost stops on both cover types; Charge destroys crates first but
     // still ends immediately against a permanent wall.
-    bool blocked = Vector3Distance(resolved, next) > 0.01f;
+    bool blocked = move.collided;
     if (blocked) b->dashTimer = 0.0f;
-    b->position = resolved;
+    b->position = move.position;
 
     if (ability->damage > 0)
     {
@@ -594,9 +607,9 @@ static void UpdateDash(GameContext w, int idx, float dt)
                 {
                     Vector3 push = Vector3Scale(b->dashDir,
                                                 ability->data.dash.knockback);
-                    Vector3 shoved = Vector3Add(t->position, push);
-                    t->position = ArenaResolveCircle(&w.session->arena, shoved,
-                                                     BRAWLER_RADIUS);
+                    t->position = ArenaMoveCircle(
+                        &w.session->arena, t->position, push,
+                        BRAWLER_RADIUS).position;
                 }
                 GameEmitImpact(w.session, t->position,
                                (Color){ 255, 220, 120, 255 }, 12);
@@ -640,6 +653,16 @@ static void UpdateDash(GameContext w, int idx, float dt)
                      trail, 0.3f, 0.28f, PARTICLE_SMOKE);
 
     if (b->dashTimer <= 0.0f) b->dashAbility = -1;
+}
+
+static void RemoveInwardVelocity(Brawler *b, Vector3 normal)
+{
+    if (Vector3LengthSqr(normal) <= 0.0000001f) return;
+    float inward = Vector3DotProduct(b->velocity, normal);
+    if (inward < 0.0f)
+        b->velocity = Vector3Subtract(
+            b->velocity, Vector3Scale(normal, inward));
+    b->velocity.y = 0.0f;
 }
 
 //------------------------------------------------------------------------------------
@@ -754,34 +777,15 @@ void BrawlersUpdate(GameContext w, float dt)
         }
         Vector3 desired =
             Vector3Scale(b->moveIntent, w.tuning->moveSpeed*moveMultiplier);
-        b->velocity.x = Lerp(b->velocity.x, desired.x, w.tuning->moveAccel * dt);
-        b->velocity.z = Lerp(b->velocity.z, desired.z, w.tuning->moveAccel * dt);
+        float acceleration = Clamp(w.tuning->moveAccel*dt, 0.0f, 1.0f);
+        b->velocity.x = Lerp(b->velocity.x, desired.x, acceleration);
+        b->velocity.z = Lerp(b->velocity.z, desired.z, acceleration);
 
-        Vector3 next = Vector3Add(b->position, Vector3Scale(b->velocity, dt));
-        next.y = 0.0f;
-        b->position = ArenaResolveCircle(&w.session->arena, next, BRAWLER_RADIUS);
-
-        // Keep brawlers from stacking on the same tile.
-        for (int j = 0; j < w.session->brawlerCount; j++)
-        {
-            if (j == i) continue;
-            Brawler *o = &w.session->brawlers[j];
-            if (!o->alive) continue;
-
-            float dx = b->position.x - o->position.x;
-            float dz = b->position.z - o->position.z;
-            float d2 = dx * dx + dz * dz;
-            float minD = BRAWLER_RADIUS * 2.0f;
-
-            if (d2 < minD * minD && d2 > 0.0001f)
-            {
-                float d = sqrtf(d2);
-                float push = (minD - d) * 0.5f;
-                b->position.x += (dx / d) * push;
-                b->position.z += (dz / d) * push;
-                b->position = ArenaResolveCircle(&w.session->arena, b->position, BRAWLER_RADIUS);
-            }
-        }
+        ArenaMoveResult move = ArenaMoveCircle(
+            &w.session->arena, b->position,
+            Vector3Scale(b->velocity, dt), BRAWLER_RADIUS);
+        b->position = move.position;
+        if (move.collided) RemoveInwardVelocity(b, move.normal);
 
         float speed = Vector3Length(b->velocity);
         if (speed > 0.4f)
@@ -789,8 +793,6 @@ void BrawlersUpdate(GameContext w, float dt)
             b->moveFacing = atan2f(b->velocity.x, b->velocity.z);
             b->bobPhase += dt * (8.0f + speed);
         }
-
-        b->inBush = ArenaBushAt(&w.session->arena, b->position.x, b->position.z);
 
         //--- Visual facing -----------------------------------------------------
         // Priority: a shot just fired > deliberate aiming > direction of travel.
@@ -826,6 +828,9 @@ void BrawlersUpdate(GameContext w, float dt)
     for (int i = 0; i < w.session->brawlerCount; i++)
     {
         Brawler *b = &w.session->brawlers[i];
+        b->inBush = b->alive &&
+                    ArenaBushAt(&w.session->arena,
+                                b->position.x, b->position.z);
 
         if (b->team == TEAM_PLAYER || b->isPlayer) { b->visible = true; continue; }
         if (!b->inBush || b->revealTimer > 0.0f)   { b->visible = true; continue; }

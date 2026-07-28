@@ -1,5 +1,6 @@
 #include "arena.h"
 #include "map_content.h"
+#include "raymath.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -87,6 +88,78 @@ static bool CheckRuntimeMap(const MapDefinition *definition, int expectedPlayers
     return true;
 }
 
+static Arena CollisionFixture(void)
+{
+    Arena arena = { 0 };
+    arena.width = 7;
+    arena.height = 7;
+    arena.tileSize = 2.0f;
+    for (int tz = 0; tz < arena.height; tz++)
+    {
+        for (int tx = 0; tx < arena.width; tx++)
+        {
+            bool border = tx == 0 || tz == 0 ||
+                          tx == arena.width - 1 || tz == arena.height - 1;
+            arena.tiles[tz][tx].type = border ? TILE_WALL : TILE_FLOOR;
+        }
+    }
+    arena.tiles[3][3].type = TILE_WALL;
+    arena.tiles[5][5] = (Tile){ .type = TILE_CRATE, .health = 1000 };
+    return arena;
+}
+
+static bool CheckCircleMovement(void)
+{
+    Arena arena = CollisionFixture();
+
+    Vector3 pointClearBodyBlocked = { 0.0f, 0.0f, 1.5f };
+    CHECK(!ArenaSolidAt(&arena, pointClearBodyBlocked.x,
+                       pointClearBodyBlocked.z),
+          "fixture point should be outside the wall tile");
+    CHECK(!ArenaCircleClear(&arena, pointClearBodyBlocked, BRAWLER_RADIUS),
+          "body-aware clearance ignored a wall corner/edge");
+
+    ArenaMoveResult stopped = ArenaMoveCircle(
+        &arena, (Vector3){ 0.0f, 0.0f, -3.0f },
+        (Vector3){ 0.0f, 0.0f, 6.0f }, BRAWLER_RADIUS);
+    CHECK(stopped.collided, "fast movement did not report the wall");
+    CHECK(stopped.position.z < -1.64f,
+          "fast movement tunneled through a full wall tile");
+    CHECK(stopped.normal.z < -0.9f,
+          "wall collision did not return an outward normal");
+    CHECK(ArenaCircleClear(&arena, stopped.position, BRAWLER_RADIUS),
+          "wall stop left the body penetrating cover");
+
+    ArenaMoveResult slide = ArenaMoveCircle(
+        &arena, (Vector3){ -1.65f, 0.0f, -0.5f },
+        (Vector3){ 2.0f, 0.0f, 1.0f }, BRAWLER_RADIUS);
+    CHECK(slide.collided, "diagonal wall contact was not detected");
+    CHECK(slide.position.x < -1.64f && slide.position.z > 0.35f,
+          "wall contact discarded tangential movement instead of sliding");
+    CHECK(ArenaCircleClear(&arena, slide.position, BRAWLER_RADIUS),
+          "wall slide ended inside cover");
+
+    CHECK(!ArenaSweepCircleClear(
+              &arena, (Vector3){ -2.5f, 0.0f, 1.5f },
+              (Vector3){ 2.5f, 0.0f, 1.5f }, BRAWLER_RADIUS),
+          "sweep reduced a brawler to a point beside cover");
+    CHECK(ArenaSweepCircleClear(
+              &arena, (Vector3){ -2.5f, 0.0f, 2.0f },
+              (Vector3){ 2.5f, 0.0f, 2.0f }, BRAWLER_RADIUS),
+          "clear sweep above cover was rejected");
+
+    ArenaMoveResult crateStop = ArenaMoveCircle(
+        &arena, (Vector3){ 0.0f, 0.0f, 4.0f },
+        (Vector3){ 8.0f, 0.0f, 0.0f }, BRAWLER_RADIUS);
+    CHECK(crateStop.collided && crateStop.position.x < 2.36f,
+          "swept movement tunneled through a crate");
+    CHECK(arena.tiles[5][5].type == TILE_CRATE &&
+          arena.tiles[5][5].health == 1000,
+          "movement collision changed destructible-cover state");
+
+    return true;
+}
+
 static bool RunTests(void)
 {
     ContentCatalog catalog = { 0 };
@@ -101,6 +174,7 @@ static bool RunTests(void)
     CHECK(helios && training, "stable map lookup failed");
     CHECK(CheckRuntimeMap(helios, 3, 3, true), "Helios-9 runtime validation failed");
     CHECK(CheckRuntimeMap(training, 2, 2, false), "training fixture validation failed");
+    CHECK(CheckCircleMovement(), "circle movement validation failed");
 
     return true;
 }
@@ -108,6 +182,6 @@ static bool RunTests(void)
 int main(void)
 {
     if (!RunTests()) return 1;
-    puts("external map catalog, Helios-9, and secondary fixture passed");
+    puts("external maps, circle sweeps, sliding, and cover collision passed");
     return 0;
 }
