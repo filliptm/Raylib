@@ -61,7 +61,7 @@ is disabled so this navigation remains explicit.
 | Input | Action |
 |-------|--------|
 | `WASD` / arrows or left stick | Move |
-| `Left Shift` | Use the active secondary: Tank fires Shoulder Jets; Scrapper holds Magnetic Scrap Shell as a 360-degree damage bubble |
+| `Left Shift` | Use the active secondary: Scrapper holds its Shell, Longshot grapples toward aim, Mortar plants a mine, and Tank fires Shoulder Jets |
 | Mouse or right stick | Aim |
 | Hold/release `LMB` or right trigger | Preview/fire the main attack |
 | Tap `LMB`, `SPACE`, or gamepad A | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
@@ -144,6 +144,20 @@ movement input first and current aim when stationary. It deals no damage, grants
 invulnerability, stops on walls or crates, and cannot destroy cover. The charged Charge
 super remains the longer damaging dash that knocks enemies back and smashes crates.
 
+**Longshot grapple.** Mag-Line Grapple fires along the current aim direction up to 10
+world units on a 7.5-second cooldown. After a 0.15-second launch beat it pulls Longshot
+to a body-safe point over 0.45 seconds. Permanent walls and crates shorten the endpoint
+without taking damage; actors do not block the cable. Longshot cannot fire during the
+launch or pull, and an external pull/knockback cancels traversal without refunding the
+cooldown. Fight bots reserve it for retreating.
+
+**Mortar mine control.** Concussion Mine places one persistent charge at Mortar's feet
+on an 8-second cooldown. It arms after 0.55 seconds, ignores its owner and allies, then
+triggers when a visible enemy enters 2.4 units. The 3.2-unit blast deals 400 damage and
+4.5 units of knockback but grants no super charge. Walls and crates block detection and
+blast damage. Planting again replaces Mortar's old mine; death, class change, or match
+reset removes it. Fight bots plant it when an enemy presses into the trigger zone.
+
 **Supers charged by useful hits.** Every damaging pellet that lands fills the meter, as
 does each Guardian rain pulse that damages an enemy or actually restores an ally; a
 takedown tops it up. No timers — participating in the fight is what earns your super.
@@ -218,7 +232,7 @@ independently when its controls are taller than the window.
 | **MATCH** | Gem Grab toggle, team size, target count, countdown/vent timing, match state, and objective actions |
 | **BOTS** | Behaviour mode, bot count (0–7), mixed or fixed kits, respawn delay, AI health thresholds/probe distance, and respawn / kill / heal buttons |
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
-| **KIT** | Live edit of the active kit, including ammo capacity and behavior-specific main/super values. Scrapper exposes returning speeds, Wrecking Disc pull/knockback, and Shell capacity/healing/recharge/break timing; Tank exposes Shoulder Jets and self-healing; Guardian exposes rain and Resonance timing, plus reset/save-as-project actions |
+| **KIT** | Live edit of the active kit, including ammo capacity and behavior-specific main/super/secondary values. Scrapper exposes Shell lifecycle; Longshot exposes Grapple range/launch/pull timing; Mortar exposes Mine arm/trigger/blast/damage/knockback; Tank exposes Shoulder Jets and self-healing; Guardian exposes rain and Resonance timing, plus reset/save-as-project actions |
 | **VISUAL** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
 | **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, live VFX diagnostics, direct effect/action previews, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
 | **PREVIEW / UI** | One shared home/roster showcase transform and camera plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
@@ -322,11 +336,12 @@ source sheets; `make check-ui` verifies dimensions, hashes, provenance files, ow
 and the absence of downloaded archives.
 
 **Ability VFX** are a reusable presentation library rather than art embedded in a
-character model. Stable gameplay events select one of 34 recipes, and each recipe layers
+character model. Stable gameplay events select one of 41 recipes, and each recipe layers
 CC0 flipbooks or particle shapes over the existing procedural particles, lights, rings,
 and authoritative telegraphs. Scrapper adds saw return/catch and Shell
-start/hit/collapse/restore feedback to its industrial sparks, Longshot uses clean cyan rail
-energy, Mortar adds animated explosions/smoke/scorch, Tank distinguishes
+start/hit/collapse/restore feedback to its industrial sparks. Longshot adds a persistent
+cyan cable and separate fire/hook/pull/land phases. Mortar adds a solid armed charge,
+exact trigger/blast rings, and place/arm/detonate phases. Tank distinguishes
 blue non-damaging Shoulder Jets from gold destructive Charge and draws teal reclaim
 energy back from successful hits, and Guardian layers restorative rain and resonance
 marks over its real field geometry. Imported recipe layers render at a shared `4.0×`
@@ -432,8 +447,10 @@ down plays a death clip that holds until just before the respawn. A stationary a
 keeps the authored idle as its base while a short, explicitly emitted action overlay,
 facing, muzzle light, projectiles, and ability VFX sell the cast. That overlay blends
 back out and repeated attacks restart it; it never borrows timing from concealment.
-When an optional semantic action clip is unavailable, the renderer applies a restrained
-upper-body procedural pose. The bush-reveal timer never selects an animation. The
+When an optional semantic action clip is unavailable, the renderer applies a procedural
+pose. Grapple uses a three-beat reach/brace/tuck motion and Mine Deploy uses a full-body
+kneel/plant/recovery motion; the primitive Mortar fallback also crouches while planting.
+The bush-reveal timer never selects an animation. The
 generic `combat_stance` clip is retained in the asset contract for a future continuous
 blended aiming state rather than being played as an unsynchronized firing loop. Tracked
 mesh-only models live under
@@ -446,9 +463,10 @@ to each model's animation rest pose, and writes self-contained raylib assets und
 motion, mesh-index, and texture contracts. Dense imports are split into raylib-safe
 16-bit indexed primitives automatically; Longshot is the current high-detail example.
 The current twelve-clip libraries do not contain authored action clips, so all current
-rigged characters use those shared procedural `MAIN`, `SUPER`, `CAST`, `MOBILITY`, and
-`GUARD` overlays. Optional future clips may replace an overlay by using `attack_main`
-(or `shoot`), `attack_super`, `cast`, `mobility`, or `guard`. raylib has no locomotion
+rigged characters use those shared procedural `MAIN`, `SUPER`, `CAST`, `MOBILITY`,
+`GUARD`, `GRAPPLE`, and `MINE_DEPLOY` overlays. Optional future clips may replace an
+overlay by using `attack_main` (or `shoot`), `attack_super`, `cast`, `mobility`, `guard`,
+`grapple`, or `mine_deploy`. raylib has no locomotion
 crossfade, so base clip changes restart the cycle - a known small pop.
 
 Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
@@ -468,8 +486,8 @@ is sufficient; repeated animation exports are not required):
 | Kit | HP | Attack | Super |
 |-----|----|--------|-------|
 | **SCRAPPER** | 3800 | `RIPSAW` — 700 out + 700 back; Shift Shell absorbs 1,200 damage from 360° and heals 30% absorbed | `WRECKING DISC` — 1,100 per leg, breaks crates, outbound pull, return knockback |
-| **LONGSHOT** | 2800 | Single shot, scales from 50% to 100% damage with travel distance | `RAILGUN` — piercing, hits everyone in a line |
-| **MORTAR** | 3200 | Arcing lob that clears walls, splash on landing | `BARRAGE` — three shells in a fan |
+| **LONGSHOT** | 2800 | Single shot, scales from 50% to 100% damage with travel distance; Shift Grapple pulls up to 10 units | `RAILGUN` — piercing, hits everyone in a line |
+| **MORTAR** | 3200 | Arcing lob that clears walls; Shift plants a 400-damage Concussion Mine | `BARRAGE` — three shells in a fan |
 | **TANK** | 8009 | 6-pellet burst; heals about 49.9% of actual damage; Shift jets every 2.5s | `CHARGE` — dash that damages, knocks back and smashes crates |
 | **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 255-damage/263-healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
 
@@ -571,6 +589,8 @@ sandbox it started as, with the static training bots.
 - Mortar still uses the primitive fallback character.
 - Headless tests cover version-3 configuration plus v1/v2 migration, Guardian behavior,
   Tank sustain/mobility/Charge, Scrapper returning discs/Shell lifecycle/AI/cover/ownership,
+  Longshot Grapple timing/cover/cancellation, Mortar Mine
+  arming/team/LOS/replacement/cleanup,
   out-of-combat regeneration timing and interruption, all-kit camera isolation, external
   maps, deterministic replay, events, presentation isolation, and deterministic
   character retargeting/asset contracts and stationary-fire animation isolation, plus

@@ -141,8 +141,8 @@ eliminations leave camera shake unchanged.
 
 - Five compatibility `WeaponDef` authoring records.
 - Five typed `CharacterDefinition` records.
-- Twelve active typed `AbilityDefinition` records in a fifteen-slot fixed array: two per
-  character plus Tank and Scrapper secondary abilities.
+- Fourteen active typed `AbilityDefinition` records in a fifteen-slot fixed array: two
+  per character plus Scrapper, Longshot, Mortar, and Tank secondary abilities.
 - One `CharacterShowcaseDefinition` with a shared model transform, camera position,
   target, and vertical FOV for every character and menu screen.
 - Up to eight validated `MapDefinition` records and selected map state.
@@ -151,12 +151,15 @@ eliminations leave camera shake unchanged.
 live authoring edit, `ContentCatalogRebuildTyped()` produces the runtime definitions used
 by game, AI, menus, HUD summaries, and aim previews.
 
-An ability has a behavior tag and a typed projectile, area, dash, returning, or shield
-payload. Characters may expose main, super, and optional secondary handles. Projectile
+An ability has a behavior tag and a typed projectile, area, dash, returning, shield,
+grapple, or mine payload. Characters may expose main, super, and optional secondary
+handles. Projectile
 definitions can snapshot a self-heal ratio, dash payloads carry speed, duration,
 knockback, and crate-breaking policy, returning payloads carry outbound/return phase
 rules, and shield payloads carry capacity, movement, absorb-healing, recharge, and break
-lockout values. Generic
+lockout values. Grapple payloads own launch/pull timing and use the ability range;
+mine payloads own arm/trigger/knockback values while the ability owns blast
+radius/damage. Generic
 periodic `StatusEffect` slots support both ally healing-over-time and enemy
 damage-over-time. New abilities should add reusable behavior handlers rather than
 character-specific fields to `Brawler`.
@@ -187,8 +190,9 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   state restoration.
 - `render_state.h`: batch-safe depth-write transitions shared by transparent,
   additive, billboard, decal, field, and preview passes.
-- `ability_visuals.c`: active rain/sound fields, Scrapper Shell, and all aim previews.
-- `character_animation.c`: pure match clip selection from life, dash, velocity, and
+- `ability_visuals.c`: active rain/sound fields, Scrapper Shell, persistent grapple
+  cables, mine trigger/blast telegraphs, and all aim previews.
+- `character_animation.c`: pure match clip selection from life, dash/grapple, velocity, and
   facing, plus presentation-only action-state timing/blend envelopes. Concealment reveal
   and attack cooldown timers never double as animation state.
 - `menu_scene.c`: hangar, podium, lights, non-rotating preview brawler, and application

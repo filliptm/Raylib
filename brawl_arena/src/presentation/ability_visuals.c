@@ -1,6 +1,7 @@
 #include "ability_visuals.h"
 
 #include "arena.h"
+#include "brawler.h"
 #include "content_catalog.h"
 #include "environment.h"
 #include "render_state.h"
@@ -145,6 +146,26 @@ static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge)
     rlEnableBackfaceCulling();
 }
 
+static void DrawGroundRing(Vector3 center, float radius, float thickness,
+                           Color color)
+{
+    enum { SEGMENTS = 40 };
+    Vector3 previous = {
+        center.x, ARENA_PREVIEW_Y, center.z + radius
+    };
+    for (int segment = 1; segment <= SEGMENTS; segment++)
+    {
+        float angle = (segment/(float)SEGMENTS)*PI*2.0f;
+        Vector3 point = {
+            center.x + sinf(angle)*radius,
+            ARENA_PREVIEW_Y,
+            center.z + cosf(angle)*radius
+        };
+        DrawGroundEdge(previous, point, thickness, color);
+        previous = point;
+    }
+}
+
 static void DrawActiveFields(App *world, Assets *assets)
 {
     BeginBlendMode(BLEND_ADDITIVE);
@@ -153,7 +174,34 @@ static void DrawActiveFields(App *world, Assets *assets)
     for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
     {
         AbilityField *field = &world->session.abilityFields[i];
-        if (!field->active || field->maxLife <= 0.0f) continue;
+        if (!field->active) continue;
+
+        if (field->type == ABILITY_FIELD_MINE)
+        {
+            float armProgress = field->growTime > 0.0f
+                              ? Clamp(1.0f - field->armTime/field->growTime,
+                                      0.0f, 1.0f)
+                              : 1.0f;
+            float pulse = 0.5f + 0.5f*sinf(
+                world->session.time*(field->armed ? 9.0f : 18.0f) + i);
+            Color trigger = field->armed
+                          ? (Color){ 255, 108, 54,
+                                     (unsigned char)(145 + 80*pulse) }
+                          : (Color){ 255, 194, 76,
+                                     (unsigned char)(70 + 100*armProgress) };
+            DrawGroundRing(field->position, field->triggerRadius,
+                           field->armed ? 0.075f : 0.045f, trigger);
+            DrawGroundRing(field->position, field->radius, 0.028f,
+                           (Color){ 255, 154, 76,
+                                    (unsigned char)(34 + 32*pulse) });
+            DrawGroundGlow(assets, field->position,
+                           0.50f + 0.10f*pulse,
+                           (Color){ trigger.r, trigger.g, trigger.b,
+                                    (unsigned char)(50 + 36*pulse) });
+            continue;
+        }
+
+        if (field->maxLife <= 0.0f) continue;
 
         float age = field->maxLife - field->life;
         float progress = Clamp(age/field->maxLife, 0.0f, 1.0f);
@@ -252,6 +300,48 @@ static void DrawActiveFields(App *world, Assets *assets)
                              : (Color){ 255, 82, 156, 105 };
         float pulse = 0.92f + 0.10f*sinf(world->session.time*12.0f);
         DrawGroundGlow(assets, brawler->position, 1.15f*pulse, aura);
+    }
+
+    RenderEndNoDepthWrite();
+    EndBlendMode();
+}
+
+static void DrawActiveGrapples(App *world)
+{
+    BeginBlendMode(BLEND_ADDITIVE);
+    RenderBeginNoDepthWrite();
+
+    for (int i = 0; i < world->session.brawlerCount; i++)
+    {
+        Brawler *brawler = &world->session.brawlers[i];
+        if (!brawler->alive || !brawler->visible ||
+            !BrawlerIsGrappling(brawler))
+            continue;
+
+        Vector3 hand = {
+            brawler->position.x, 1.10f, brawler->position.z
+        };
+        if (world->presentation.sockets[i].valid[VFX_SOCKET_RIGHT_HAND])
+            hand = world->presentation.sockets[i]
+                .positions[VFX_SOCKET_RIGHT_HAND];
+        Vector3 anchor = {
+            brawler->grappleAnchor.x, 0.24f, brawler->grappleAnchor.z
+        };
+        Color cable = { 88, 224, 255, 225 };
+        DrawCylinderEx(hand, anchor, 0.045f, 0.070f, 7, cable);
+
+        float length = Vector3Distance(hand, anchor);
+        int nodes = (int)fminf(12.0f, ceilf(length/0.75f));
+        for (int node = 1; node < nodes; node++)
+        {
+            float travel = fmodf(
+                node/(float)nodes + world->session.time*2.2f, 1.0f);
+            Vector3 point = Vector3Lerp(hand, anchor, travel);
+            DrawSphere(point, 0.055f,
+                       (Color){ 198, 250, 255, 210 });
+        }
+        DrawSphere(anchor, 0.14f,
+                   (Color){ 126, 238, 255, 230 });
     }
 
     RenderEndNoDepthWrite();
@@ -460,6 +550,7 @@ static void DrawAimPreview(App *world, Assets *assets)
 void AbilityVisualsDraw(App *world, Assets *assets)
 {
     DrawActiveFields(world, assets);
+    DrawActiveGrapples(world);
     DrawActiveShields(world);
     DrawAimPreview(world, assets);
 }

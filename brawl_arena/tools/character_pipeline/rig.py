@@ -47,6 +47,8 @@ OPTIONAL_CLIPS = (
     "cast",
     "mobility",
     "guard",
+    "grapple",
+    "mine_deploy",
 )
 CHARACTER_METADATA_KEY = "brawlArenaCharacter"
 LIBRARY_METADATA_KEY = "brawlArenaAnimationLibrary"

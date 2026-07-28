@@ -102,7 +102,7 @@ int main(void)
           fabsf(mobility->data.dash.speed - 22.0f) < 0.0001f &&
           mobility->damage == 0 && !mobility->data.dash.breaksCrates,
           "Shoulder Jets typed content is incomplete");
-    CHECK(ContentMobilityAbility(&content, CLASS_SNIPER) == NULL,
+    CHECK(ContentMobilityAbility(&content, CLASS_HEALER) == NULL,
           "mobility was assigned to a kit without configured values");
 
     SetupDuel(&session, &content);

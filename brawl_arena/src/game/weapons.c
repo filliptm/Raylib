@@ -22,6 +22,63 @@ static AbilityField *AllocAbilityField(GameContext w)
     return NULL;
 }
 
+bool WeaponsMineActive(GameContext w, int owner, bool *armed)
+{
+    if (armed) *armed = false;
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+    {
+        AbilityField *field = &w.session->abilityFields[i];
+        if (!field->active || field->type != ABILITY_FIELD_MINE ||
+            field->owner != owner)
+            continue;
+        if (armed) *armed = field->armed;
+        return true;
+    }
+    return false;
+}
+
+bool WeaponsPlaceMine(GameContext w, int owner,
+                      const AbilityDefinition *ability)
+{
+    if (!ability || ability->behavior != ABILITY_BEHAVIOR_MINE ||
+        owner < 0 || owner >= w.session->brawlerCount)
+        return false;
+
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+    {
+        AbilityField *existing = &w.session->abilityFields[i];
+        if (existing->active && existing->type == ABILITY_FIELD_MINE &&
+            existing->owner == owner)
+            existing->active = false;
+    }
+
+    AbilityField *field = AllocAbilityField(w);
+    if (!field) return false;
+    Brawler *b = &w.session->brawlers[owner];
+    *field = (AbilityField){
+        .position = { b->position.x, 0.0f, b->position.z },
+        .radius = ability->radius,
+        .growTime = ability->data.mine.armTime,
+        .armTime = ability->data.mine.armTime,
+        .triggerRadius = ability->data.mine.triggerRadius,
+        .knockback = ability->data.mine.knockback,
+        .damage = ability->damage,
+        .team = b->team,
+        .owner = owner,
+        .type = ABILITY_FIELD_MINE,
+        .active = true
+    };
+
+    Vector3 ground = { b->position.x, 0.14f, b->position.z };
+    GameEmitVfxAttached(
+        w.session, VFX_MORTAR_MINE_PLACE,
+        (Vector3){ b->position.x, 0.90f, b->position.z },
+        ground, b->aimAngle, 1.0f,
+        (Color){ 255, 176, 72, 255 },
+        owner, VFX_SOCKET_RIGHT_HAND, -1, VFX_SOCKET_NONE);
+    return true;
+}
+
 static VfxEffectId CastVfxFor(BrawlerClass cls, bool super)
 {
     switch (cls)
@@ -520,6 +577,92 @@ static void AbilityFieldsUpdate(GameContext w, float dt)
         AbilityField *field = &w.session->abilityFields[i];
         if (!field->active) continue;
 
+        if (field->type == ABILITY_FIELD_MINE)
+        {
+            if (field->owner < 0 ||
+                field->owner >= w.session->brawlerCount ||
+                !w.session->brawlers[field->owner].alive)
+            {
+                field->active = false;
+                continue;
+            }
+            const AbilityDefinition *secondary = ContentSecondaryAbility(
+                w.content, w.session->brawlers[field->owner].cls);
+            if (!secondary ||
+                secondary->behavior != ABILITY_BEHAVIOR_MINE)
+            {
+                field->active = false;
+                continue;
+            }
+
+            if (!field->armed)
+            {
+                field->armTime = fmaxf(0.0f, field->armTime - dt);
+                if (field->armTime <= 0.0f)
+                {
+                    field->armed = true;
+                    GameEmitVfx(
+                        w.session, VFX_MORTAR_MINE_ARM,
+                        field->position, field->position, 0.0f, 1.0f,
+                        TEAM_COLORS[field->team]);
+                }
+                continue;
+            }
+
+            bool triggered = false;
+            for (int target = 0; target < w.session->brawlerCount; target++)
+            {
+                Brawler *b = &w.session->brawlers[target];
+                if (!b->alive || b->team == field->team) continue;
+                if (Vector3Distance(b->position, field->position) >
+                    field->triggerRadius)
+                    continue;
+                if (!ArenaLineOfSight(
+                        &w.session->arena, field->position, b->position))
+                    continue;
+                triggered = true;
+                break;
+            }
+            if (!triggered) continue;
+
+            GameEmitVfx(
+                w.session, VFX_MORTAR_MINE_DETONATE,
+                field->position, field->position, 0.0f,
+                field->radius, (Color){ 255, 146, 62, 255 });
+            GameEmitExplosion(
+                w.session, field->position, field->radius,
+                (Color){ 255, 146, 62, 255 });
+
+            for (int target = 0; target < w.session->brawlerCount; target++)
+            {
+                Brawler *b = &w.session->brawlers[target];
+                if (!b->alive || b->team == field->team) continue;
+                Vector3 away = Vector3Subtract(b->position, field->position);
+                away.y = 0.0f;
+                float distance = Vector3Length(away);
+                if (distance > field->radius ||
+                    !ArenaLineOfSight(
+                        &w.session->arena, field->position, b->position))
+                    continue;
+                if (distance <= 0.001f)
+                {
+                    float angle =
+                        (float)(((target + 1)*37 + (field->owner + 1)*17) & 15)*
+                        (PI*2.0f/16.0f);
+                    away = (Vector3){ sinf(angle), 0.0f, cosf(angle) };
+                }
+                else away = Vector3Scale(away, 1.0f/distance);
+
+                BrawlerApplyDamageDetailed(
+                    w, target, field->damage, field->owner,
+                    (Vector3){ b->position.x, 0.75f, b->position.z });
+                BrawlerDisplace(
+                    w, target, Vector3Scale(away, field->knockback));
+            }
+            field->active = false;
+            continue;
+        }
+
         field->life -= dt;
         if (field->type == ABILITY_FIELD_RAIN) UpdateRainField(w, field, dt);
         if (field->life <= 0.0f) field->active = false;
@@ -660,19 +803,15 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
                     pull = Vector3Scale(
                         Vector3Normalize(pull),
                         fminf(p->outboundPull, Vector3Length(pull)));
-                    t->position = ArenaMoveCircle(
-                        &w.session->arena, t->position, pull,
-                        BRAWLER_RADIUS).position;
+                    BrawlerDisplace(w, i, pull);
                 }
             }
             else if (!p->outbound && p->returnKnockback > 0.0f)
             {
                 Vector3 direction = Vector3Normalize(
                     (Vector3){ p->velocity.x, 0.0f, p->velocity.z });
-                t->position = ArenaMoveCircle(
-                    &w.session->arena, t->position,
-                    Vector3Scale(direction, p->returnKnockback),
-                    BRAWLER_RADIUS).position;
+                BrawlerDisplace(
+                    w, i, Vector3Scale(direction, p->returnKnockback));
             }
         }
 

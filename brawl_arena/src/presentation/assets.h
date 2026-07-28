@@ -20,10 +20,13 @@ typedef struct RiggedCharacter {
     // Optional library clips. Current generated characters use the shared
     // procedural action overlay when these tracks are absent.
     int clipActionMain, clipActionSuper, clipActionCast, clipActionMobility;
-    int clipActionGuard;
+    int clipActionGuard, clipActionGrapple, clipActionMineDeploy;
     int boneHips, boneSpine, boneChest;
+    int boneHead;
     int boneLeftShoulder, boneLeftArm, boneLeftForeArm, boneLeftHand;
     int boneRightShoulder, boneRightArm, boneRightForeArm, boneRightHand;
+    int boneLeftUpLeg, boneLeftLeg;
+    int boneRightUpLeg, boneRightLeg;
     int boneLeftFoot, boneRightFoot;
     float scale;            // normalises source units to CHARACTER_TARGET_H
     float footOffset;       // lifts the model so its feet land on y = 0

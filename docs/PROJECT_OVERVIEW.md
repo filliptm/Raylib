@@ -551,8 +551,8 @@ The current roster contains five kits:
 | Kit | Role | Main attack | Ultimate |
 |---|---|---|---|
 | Scrapper | damage | returning Ripsaw that can hit once on each leg, plus renewable Magnetic Scrap Shell | returning crate-breaking Wrecking Disc with outbound pull and return knockback |
-| Longshot | marksman | range-scaled single projectile | piercing Railgun |
-| Mortar | artillery | arcing splash shell | three-shell Barrage |
+| Longshot | marksman | range-scaled single projectile plus Shift Mag-Line Grapple | piercing Railgun |
+| Mortar | artillery | arcing splash shell plus Shift Concussion Mine | three-shell Barrage |
 | Tank | tank | short six-pellet burst that self-heals from actual damage, plus Shift Shoulder Jets | damaging crate-breaking Charge |
 | Guardian | support | growing rain field that repeatedly damages enemies and heals allies | wide Resonance cone that applies enemy damage-over-time or ally healing-over-time |
 
@@ -610,6 +610,10 @@ The headless suite covers:
 - Scrapper Ripsaw/Wrecking Disc outbound and return hits, cover policy, ownership,
   Magnetic Scrap Shell absorption/healing/recharge/break/rearm, and Fight-bot
   threat prediction/release.
+- Longshot Mag-Line Grapple launch/pull timing, attack lock, cooldown, cover endpoint,
+  and external-displacement cancellation.
+- Mortar Concussion Mine arming, ally filtering, line-of-sight, blast
+  damage/knockback, replacement, and owner cleanup.
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
@@ -701,7 +705,7 @@ configuration, profile data, and navigation survive because they have separate o
 there is no preserve-and-reconstruct whole-application reset.
 
 Fixed capacities currently include eight brawlers, 512 projectiles, 15 typed content
-abilities (twelve currently active), 24 active ability
+abilities (fourteen currently active), 24 active ability
 fields, four statuses per brawler, 40 gems, 1,024 game events, 1,024 presentation
 particles, 192 priority-managed VFX layers, 64 float texts, 64 effect lights, and 24
 shockwaves. Maps may be up to 64×64, the catalog may contain eight maps, and a map may
@@ -741,9 +745,10 @@ returns to the menu after the configured hold or the explicit Continue action.
 ## Controls and modes
 
 - WASD/arrows or left stick: camera-relative movement.
-- Left Shift or left bumper: use the current kit's secondary. Tank fires Shoulder Jets
-  along movement input, or current aim while stationary; Scrapper holds its
-  360-degree Magnetic Scrap Shell until released or broken.
+- Left Shift or left bumper: use the current kit's secondary. Scrapper holds its
+  360-degree Magnetic Scrap Shell until released or broken; Longshot grapples toward
+  current aim; Mortar places a mine at its feet; Tank fires Shoulder Jets along
+  movement input, or current aim while stationary.
 - Hold/release left mouse or right trigger: preview and fire the main attack.
 - Tap left mouse or press Space: auto-aim. Guardian first considers a wounded ally in
   range; gamepad A is the same quick action.
@@ -768,9 +773,10 @@ ability definitions, and validated map definitions. Each character has a stable 
 display name, model asset ID, role, health/ammo values, handles for its main and ultimate
 abilities, and an optional secondary handle. It also owns one project-authorable
 showcase transform/camera shared by every character and both menu screens. Ability
-behavior is a tagged enum with typed projectile, area, dash, returning-disc, or shield
-payloads. Projectile content can define self-healing from actual damage; dash content
-defines duration, speed, knockback, and crate behavior.
+behavior is a tagged enum with typed projectile, area, dash, returning-disc, shield,
+grapple, or mine payloads. Projectile content can define self-healing from actual
+damage; dash content defines duration, speed, knockback, and crate behavior; grapples
+define launch/pull timing and range; mines define arm/trigger/blast/damage/knockback.
 
 The current config schema retains `WeaponDef` as a compatibility/authoring record.
 `ContentCatalogRebuildTyped()` converts it into the runtime character/ability catalog
@@ -868,6 +874,19 @@ Shoulder Jets is a non-damaging roughly four-unit boost on a 2.5-second cooldown
 stops on solid cover; Fight bots use it while closing meaningful gaps or retreating.
 Charge remains a separate super that damages, knocks back, and destroys crates.
 
+Longshot's Mag-Line Grapple aims up to 10 world units, waits 0.15 seconds for its hook,
+then pulls to a body-safe endpoint over 0.45 seconds on a 7.5-second cooldown. Walls and
+crates shorten the endpoint without taking damage, actors do not block travel, and
+main/super actions are locked during traversal. External displacement cancels the
+grapple without refunding cooldown. Fight bots use it while retreating.
+
+Mortar's Concussion Mine is a persistent one-per-owner field placed at Mortar's feet on
+an 8-second cooldown. It arms after 0.55 seconds, ignores allies, and requires line of
+sight to trigger at 2.4 units. Its 3.2-unit blast deals 400 damage and 4.5 units of
+knockback, also respects cover, and grants no super charge. A new placement replaces
+the old mine; owner death, class change, and session reset remove it. Fight bots deploy
+it against enemies pressing inside the trigger area.
+
 Scrapper's 700-damage Ripsaw travels outward for 13 units, turns at range or solid
 cover, and returns to the owner's current position. It may damage each target once per
 leg, does not damage crates, and disappears when caught, when its return strikes solid
@@ -907,8 +926,9 @@ The presentation layer owns:
   optional semantic clip—or a restrained upper-body procedural fallback—over
   locomotion, while facing, muzzle light, projectiles, and ability VFX carry the shot.
   The current twelve-clip libraries have no authored action clips, so current characters
-  use the procedural fallback, including Scrapper's braced Shell pose (the internal
-  semantic action/clip name remains `guard`).
+  use the procedural fallback, including Scrapper's braced Shell pose, Longshot's
+  reach/brace/tuck Grapple, and Mortar's fallback crouched Mine Deploy. The internal
+  optional clip names are `guard`, `grapple`, and `mine_deploy`.
 - A Helios-9 hangar/menu scene and non-rotating character previews, retaining idle
   animation without automatic yaw rotation. Every character and both menu screens use
   the same exact showcase: 180° yaw, 0.90 scale, zero offset, camera
@@ -926,11 +946,13 @@ The presentation layer owns:
   textures.
 - Instanced wind/brawler-reactive grass.
 - Dynamic point-light selection.
-- Projectile, solid-effect, ability-field, and aim-preview visuals.
-- A presentation-only 34-recipe ability library built from seven generated CC0
+- Projectile, solid-effect, ability-field, and aim-preview visuals, including a
+  persistent Grapple cable and solid Mine with authoritative trigger/blast rings.
+- A presentation-only 41-recipe ability library built from seven generated CC0
   flipbook/shape atlases, existing particles, lights, and shockwaves. Casts, beams,
-  returning saw transitions/catches, Shell start/hit/collapse/restore, shoulder jets, healing
-  returns, and received effects can follow semantic hand,
+  returning saw transitions/catches, Shell start/hit/collapse/restore, Grapple
+  fire/hook/pull/land, Mine place/arm/detonate, shoulder jets, healing returns, and
+  received effects can follow semantic hand,
   shoulder, chest, foot, or center sockets from the final animated pose; primitive and
   incomplete rigs retain approximate socket positions. Imported recipe layers use a
   shared `4.0×` presentation scale for match-camera readability without changing

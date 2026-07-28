@@ -177,6 +177,31 @@ static const VfxRecipeDefinition RECIPES[VFX_EFFECT_COUNT] = {
             ANIM_BILLBOARD(VFX_ATLAS_DIVINE_IMPACT, 12, 42.0f, 0.0f, 0.30f, 0.30f, 0.95f, 0.75f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE)
         }
     },
+    [VFX_LONGSHOT_GRAPPLE_FIRE] = {
+        "longshot_grapple_fire", 1.55f, 2, 3, {
+            SHAPE_BILLBOARD(SHAPE_MUZZLE, 0.30f, 0.72f, 1.82f, 1.0f, 0.0f, VFX_ANCHOR_START, true),
+            SHAPE_BEAM(SHAPE_TRACE, 0.34f, 0.34f, 1.0f, 0.0f, true),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.28f, 0.36f, 1.28f, 0.95f, 0.0f, VFX_ANCHOR_END, true)
+        }
+    },
+    [VFX_LONGSHOT_GRAPPLE_HOOK] = {
+        "longshot_grapple_hook", 1.35f, 2, 2, {
+            ANIM_BILLBOARD(VFX_ATLAS_AIR_BURST, 16, 44.0f, 0.0f, 0.38f, 0.36f, 1.35f, 1.0f, 0.0f, VFX_ANCHOR_END, true, VFX_BLEND_ADDITIVE),
+            SHAPE_GROUND(SHAPE_CIRCLE, 0.48f, 0.44f, 1.38f, 0.92f, 0.0f, VFX_ANCHOR_END, true)
+        }
+    },
+    [VFX_LONGSHOT_GRAPPLE_PULL] = {
+        "longshot_grapple_pull", 1.30f, 2, 2, {
+            SHAPE_BEAM(SHAPE_TRACE, 0.48f, 0.46f, 0.96f, 0.0f, true),
+            ANIM_BILLBOARD(VFX_ATLAS_ENERGY_LOOP, 16, 36.0f, 0.0f, 0.48f, 0.34f, 1.18f, 0.86f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE)
+        }
+    },
+    [VFX_LONGSHOT_GRAPPLE_LAND] = {
+        "longshot_grapple_land", 1.45f, 2, 2, {
+            ANIM_GROUND(VFX_ATLAS_AIR_BURST, 24, 42.0f, 0.58f, 0.56f, 1.62f, 0.94f, 0.0f, VFX_ANCHOR_START, true),
+            SHAPE_GROUND(SHAPE_CIRCLE, 0.52f, 0.52f, 1.48f, 0.84f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
     [VFX_MORTAR_CAST] = {
         "mortar_cast", 1.0f, 1, 2, {
             SHAPE_BILLBOARD(SHAPE_MUZZLE, 0.32f, 0.62f, 1.55f, 1.0f, 0.0f, VFX_ANCHOR_START, true),
@@ -202,6 +227,26 @@ static const VfxRecipeDefinition RECIPES[VFX_EFFECT_COUNT] = {
             ANIM_BILLBOARD(VFX_ATLAS_EXPLOSION, 32, 42.0f, 0.0f, 0.76f, 0.55f, 1.15f, 1.0f, 0.0f, VFX_ANCHOR_START, false, VFX_BLEND_ADDITIVE),
             SHAPE_GROUND(SHAPE_SCORCH, 3.2f, 0.72f, 1.10f, 0.55f, 0.0f, VFX_ANCHOR_START, false),
             ANIM_BILLBOARD(VFX_ATLAS_SMOKE_LOOP, 64, 38.0f, 0.14f, 1.60f, 0.42f, 1.05f, 0.46f, 0.0f, VFX_ANCHOR_START, false, VFX_BLEND_ALPHA)
+        }
+    },
+    [VFX_MORTAR_MINE_PLACE] = {
+        "mortar_mine_place", 1.45f, 2, 3, {
+            SHAPE_BEAM(SHAPE_TRACE, 0.34f, 0.30f, 0.92f, 0.0f, true),
+            SHAPE_GROUND(SHAPE_MAGIC, 0.52f, 0.44f, 1.48f, 0.92f, 0.0f, VFX_ANCHOR_END, true),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.38f, 0.38f, 1.22f, 0.82f, 0.0f, VFX_ANCHOR_END, true)
+        }
+    },
+    [VFX_MORTAR_MINE_ARM] = {
+        "mortar_mine_arm", 1.55f, 2, 2, {
+            ANIM_GROUND(VFX_ATLAS_ENERGY_LOOP, 24, 38.0f, 0.66f, 0.46f, 1.52f, 0.94f, 0.0f, VFX_ANCHOR_START, true),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.46f, 0.42f, 1.58f, 1.0f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
+    [VFX_MORTAR_MINE_DETONATE] = {
+        "mortar_mine_detonate", 3.20f, 3, 3, {
+            ANIM_BILLBOARD(VFX_ATLAS_EXPLOSION, 32, 46.0f, 0.0f, 0.82f, 0.62f, 1.46f, 1.0f, 0.0f, VFX_ANCHOR_START, false, VFX_BLEND_ADDITIVE),
+            SHAPE_GROUND(SHAPE_SCORCH, 2.9f, 0.82f, 1.15f, 0.54f, 0.0f, VFX_ANCHOR_START, false),
+            ANIM_BILLBOARD(VFX_ATLAS_SMOKE_LOOP, 48, 38.0f, 0.12f, 1.34f, 0.44f, 1.18f, 0.48f, 0.0f, VFX_ANCHOR_START, false, VFX_BLEND_ALPHA)
         }
     },
     [VFX_TANK_CAST] = {

@@ -7,6 +7,7 @@
 #include "game_random.h"
 #include "content_catalog.h"
 #include <math.h>
+#include <stddef.h>
 
 //------------------------------------------------------------------------------------
 // Short-range steering uses the same circle body as movement. Point probes incorrectly
@@ -226,6 +227,21 @@ static bool TryTacticalMobility(GameContext w, int idx, Vector3 direction)
     return true;
 }
 
+static bool TryRetreatSecondary(GameContext w, int idx, Vector3 direction)
+{
+    Brawler *b = &w.session->brawlers[idx];
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(w.content, b->cls);
+    if (!secondary ||
+        (secondary->behavior != ABILITY_BEHAVIOR_DASH &&
+         secondary->behavior != ABILITY_BEHAVIOR_GRAPPLE))
+        return false;
+    if (!BrawlerTrySecondary(w, idx, direction)) return false;
+
+    b->aiReactTimer = fmaxf(b->aiReactTimer, 0.18f);
+    return true;
+}
+
 //------------------------------------------------------------------------------------
 void AIUpdate(GameContext w, float dt)
 {
@@ -237,7 +253,7 @@ void AIUpdate(GameContext w, float dt)
     {
         Brawler *b = &w.session->brawlers[i];
         if (b->isPlayer || !b->alive) continue;
-        if (b->dashTimer > 0.0f) continue;
+        if (b->dashTimer > 0.0f || BrawlerIsGrappling(b)) continue;
 
         // Static bots are inert targets: they hold position and never shoot back.
         if (mode == BOT_STATIC)
@@ -411,6 +427,20 @@ void AIUpdate(GameContext w, float dt)
         b->aimAngle = atan2f(aimVec.x, aimVec.z) + aimError;
         float aimDist = Vector3Length((Vector3){ aimVec.x, 0.0f, aimVec.z });
 
+        const AbilityDefinition *secondary =
+            ContentSecondaryAbility(w.content, b->cls);
+        if (secondary && secondary->behavior == ABILITY_BEHAVIOR_MINE &&
+            dist <= secondary->data.mine.triggerRadius + 2.25f &&
+            b->mobilityCooldown <= 0.0f &&
+            !WeaponsMineActive(w, i, NULL))
+        {
+            if (BrawlerTrySecondary(w, i, (Vector3){ 0 }))
+            {
+                b->aiReactTimer = fmaxf(b->aiReactTimer, 0.25f);
+                continue;
+            }
+        }
+
         //--- Retreat when hurt -----------------------------------------------------
         if (healthRatio < w.tuning->aiRetreatHealth)
         {
@@ -425,7 +455,7 @@ void AIUpdate(GameContext w, float dt)
             else
                 b->moveIntent = AvoidSteer(
                     w, b->position, away, b->strafeDir);
-            if (TryTacticalMobility(w, i, b->moveIntent)) continue;
+            if (TryRetreatSecondary(w, i, b->moveIntent)) continue;
 
             // Still fights back, just less eagerly.
             if (b->aiReactTimer <= 0.0f && dist < mainAbility->range*0.9f)

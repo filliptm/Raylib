@@ -38,6 +38,7 @@ static void SetupBrawler(const ContentCatalog *content, Brawler *brawler,
         .visible = true,
         .spawnScale = 1.0f,
         .dashAbility = -1,
+        .grappleAbility = -1,
         .shieldAbility = -1,
         .aiTarget = -1
     };
@@ -240,6 +241,38 @@ int main(void)
     CHECK(HasVfx(&session, VFX_SCRAPPER_SHIELD_RESTORE),
           "Magnetic Scrap Shell did not emit restore feedback");
 
+    // Grapple and mine use phase-specific recipes and bespoke action identities.
+    SetupDuel(&session, &content, CLASS_SNIPER);
+    game.session = &session;
+    session.brawlerCount = 1;
+    CHECK(BrawlerTrySecondary(game, 0, (Vector3){ 0, 0, 1 }),
+          "Mag-Line Grapple did not activate in the VFX test");
+    CHECK(HasVfx(&session, VFX_LONGSHOT_GRAPPLE_FIRE) &&
+          HasAction(&session, CHARACTER_ACTION_GRAPPLE),
+          "Mag-Line Grapple did not emit its launch recipe/action");
+    BrawlersUpdate(game, 0.16f);
+    CHECK(HasVfx(&session, VFX_LONGSHOT_GRAPPLE_HOOK) &&
+          HasVfx(&session, VFX_LONGSHOT_GRAPPLE_PULL),
+          "Mag-Line Grapple did not emit its hook/pull phases");
+    BrawlersUpdate(game, 0.50f);
+    CHECK(HasVfx(&session, VFX_LONGSHOT_GRAPPLE_LAND),
+          "Mag-Line Grapple did not emit its landing phase");
+
+    SetupDuel(&session, &content, CLASS_LOBBER);
+    game.session = &session;
+    CHECK(BrawlerTrySecondary(game, 0, (Vector3){ 0 }),
+          "Concussion Mine did not deploy in the VFX test");
+    CHECK(HasVfx(&session, VFX_MORTAR_MINE_PLACE) &&
+          HasAction(&session, CHARACTER_ACTION_MINE_DEPLOY),
+          "Concussion Mine did not emit its placement recipe/action");
+    ProjectilesUpdate(game, 0.56f);
+    CHECK(HasVfx(&session, VFX_MORTAR_MINE_ARM),
+          "Concussion Mine did not emit its armed phase");
+    session.brawlers[1].position = (Vector3){ 0.0f, 0.0f, 1.5f };
+    ProjectilesUpdate(game, 0.02f);
+    CHECK(HasVfx(&session, VFX_MORTAR_MINE_DETONATE),
+          "Concussion Mine did not emit its detonation recipe");
+
     // A rain field emits the authoritative field pulse plus target feedback.
     SetupDuel(&session, &content, CLASS_HEALER);
     game.session = &session;
@@ -251,6 +284,6 @@ int main(void)
     CHECK(HasVfx(&session, VFX_GUARDIAN_RAIN_DAMAGE),
           "Guardian rain did not emit target damage feedback");
 
-    printf("VFX event tests passed: all kits, saw, shield, reclaim, jets, and rain are mapped\n");
+    printf("VFX event tests passed: all kits, saw, shield, grapple, mine, reclaim, jets, and rain are mapped\n");
     return 0;
 }

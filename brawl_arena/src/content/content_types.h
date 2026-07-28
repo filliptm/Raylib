@@ -80,6 +80,12 @@ typedef struct WeaponDef {
     float secondaryRechargeDelay;
     float secondaryRechargeRate;
     float secondaryBreakLockout;
+    float secondaryRange;
+    float secondaryDelay;
+    float secondaryRadius;
+    float secondaryTriggerRadius;
+    int secondaryDamage;
+    float secondaryKnockback;
     const char *superName;
     SuperKind superKind;
     int sPellets;
@@ -114,7 +120,9 @@ typedef enum {
     ABILITY_BEHAVIOR_HEALING_BURST,
     ABILITY_BEHAVIOR_SOUND_WAVE,
     ABILITY_BEHAVIOR_RETURNING,
-    ABILITY_BEHAVIOR_SHIELD
+    ABILITY_BEHAVIOR_SHIELD,
+    ABILITY_BEHAVIOR_GRAPPLE,
+    ABILITY_BEHAVIOR_MINE
 } AbilityBehavior;
 
 typedef struct ProjectileAbility {
@@ -157,6 +165,17 @@ typedef struct ShieldAbility {
     float breakLockout;
 } ShieldAbility;
 
+typedef struct GrappleAbility {
+    float launchDelay;
+    float pullDuration;
+} GrappleAbility;
+
+typedef struct MineAbility {
+    float armTime;
+    float triggerRadius;
+    float knockback;
+} MineAbility;
+
 typedef struct AbilityDefinition {
     char id[48];
     char name[48];
@@ -175,6 +194,8 @@ typedef struct AbilityDefinition {
         DashAbility dash;
         ReturningAbility returning;
         ShieldAbility shield;
+        GrappleAbility grapple;
+        MineAbility mine;
     } data;
 } AbilityDefinition;
 

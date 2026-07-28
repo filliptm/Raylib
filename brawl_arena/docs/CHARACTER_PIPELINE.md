@@ -186,7 +186,8 @@ The generated runtime contract uses exact semantic names:
 | `death` | KO pose held until respawn |
 
 Optional action libraries may add `attack_main` (or the compatible alias `shoot`),
-`attack_super`, `cast`, `mobility`, and `guard`. `victory` remains a future
+`attack_super`, `cast`, `mobility`, `guard`, `grapple`, and `mine_deploy`. `victory`
+remains a future
 presentation seam. A generic jump remains excluded because the game has no jump
 mechanic.
 
@@ -203,15 +204,18 @@ relative to facing (forward, backward and four diagonals - a pure strafe picks t
 nearest diagonal), playback rate follows actual speed so feet track the ground, death
 plays as a one-shot that holds its final pose until just before respawn, and stationary
 casts retain idle as their locomotion base. Successful gameplay actions emit a separate
-presentation-only `MAIN`, `SUPER`, `CAST`, `MOBILITY`, or `GUARD` event. The renderer applies a
+presentation-only `MAIN`, `SUPER`, `CAST`, `MOBILITY`, `GUARD`, `GRAPPLE`, or
+`MINE_DEPLOY` event. The renderer applies a
 short blend envelope over the locomotion pose, using an optional semantic action clip
 when one exists and a restrained upper-body procedural fallback otherwise. Repeated
 actions restart that envelope. The current twelve-clip shared and override libraries do
 not contain semantic action clips, so Scrapper, Longshot, Tank, and Guardian currently
 use the procedural overlays. Magnetic Scrap Shell reuses the internal `guard` semantic
 action; its fallback braces both arms while the 360-degree bubble carries directionless
-defense readability. The other overlays remain restrained upper-body actions. They use the shared Meshy
-shoulder, arm, hand, spine, and chest names rather than being authored per character.
+defense readability. Grapple is a three-phase reach/brace/tuck pose, while Mine Deploy
+uses the hips and leg chains for a kneel/plant/recovery pose. The remaining overlays are
+restrained upper-body actions. They use the shared Meshy shoulder, arm, hand, spine,
+chest, hip, and leg names rather than being authored per character.
 
 The same final composed pose supplies semantic `CENTER`, `CHEST`, hand, shoulder, and
 foot sockets to ability VFX. Missing mappings retain the approximate socket pose seeded

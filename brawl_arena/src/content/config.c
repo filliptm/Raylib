@@ -57,7 +57,7 @@ static const char *SUPER_KIND_NAMES[SUPER_KIND_COUNT] = {
 };
 
 static const char *SECONDARY_KIND_NAMES[SECONDARY_KIND_COUNT] = {
-    "none", "dash", "shield"
+    "none", "dash", "shield", "grapple", "mine"
 };
 
 static bool g_dirty = false;
@@ -310,6 +310,18 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
                   secondaryRechargeRate, 0.0, 100000.0);
         KIT_FIELD("secondary.break_lockout", FIELD_FLOAT,
                   secondaryBreakLockout, 0.0, 30.0);
+        KIT_FIELD("secondary.range", FIELD_FLOAT,
+                  secondaryRange, 0.0, 100.0);
+        KIT_FIELD("secondary.delay", FIELD_FLOAT,
+                  secondaryDelay, 0.0, 10.0);
+        KIT_FIELD("secondary.radius", FIELD_FLOAT,
+                  secondaryRadius, 0.0, 30.0);
+        KIT_FIELD("secondary.trigger_radius", FIELD_FLOAT,
+                  secondaryTriggerRadius, 0.0, 30.0);
+        KIT_FIELD("secondary.damage", FIELD_INT,
+                  secondaryDamage, 0, 100000);
+        KIT_FIELD("secondary.knockback", FIELD_FLOAT,
+                  secondaryKnockback, 0.0, 30.0);
 
         KIT_FIELD("super.kind", FIELD_SUPER_KIND, superKind, 0, SUPER_KIND_COUNT - 1);
         KIT_FIELD("super.pellets", FIELD_INT, sPellets, 0, 64);
@@ -519,6 +531,28 @@ static bool ValidateValues(const Tuning *t,
         {
             snprintf(message, messageSize,
                      "kit.%s shield secondary is incomplete", KIT_KEYS[i]);
+            return false;
+        }
+        if (k->secondaryKind == SECONDARY_GRAPPLE &&
+            (k->mobilityCooldown <= 0.0f ||
+             k->mobilityDuration <= 0.0f ||
+             k->secondaryRange < 1.5f ||
+             k->secondaryDelay < 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s grapple secondary is incomplete", KIT_KEYS[i]);
+            return false;
+        }
+        if (k->secondaryKind == SECONDARY_MINE &&
+            (k->mobilityCooldown <= 0.0f ||
+             k->secondaryDelay <= 0.0f ||
+             k->secondaryTriggerRadius <= 0.0f ||
+             k->secondaryRadius < k->secondaryTriggerRadius ||
+             k->secondaryDamage <= 0 ||
+             k->secondaryKnockback < 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s mine secondary is incomplete", KIT_KEYS[i]);
             return false;
         }
         if (k->superKind == SUPER_PROJECTILE &&

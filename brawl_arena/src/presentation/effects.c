@@ -246,8 +246,9 @@ void FxConsumeGameEvents(App *w)
                     VfxSpawnEvent(&w->presentation, event);
                 break;
             case GAME_EVENT_CHARACTER_ACTION:
-                CharacterActionStart(&w->presentation, event->sourceBrawler,
-                                     event->characterAction);
+                CharacterActionStartTimed(
+                    &w->presentation, event->sourceBrawler,
+                    event->characterAction, event->life);
                 break;
             case GAME_EVENT_MATCH_SHAKE:
                 FxMatchShake(w, event->size);

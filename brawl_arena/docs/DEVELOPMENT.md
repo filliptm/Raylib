@@ -150,10 +150,11 @@ test exist to keep simulation usable without a window.
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
+| `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
 | `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and the shared showcase |
-| `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit action/held-Shell pose blend timing |
+| `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
-| `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell events, Tank reclaim/jets, and Guardian rain feedback |
+| `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
 | `test_character_pipeline.py` | rig rejection, merged-source rest-pose fallback, bind-relative math, deterministic baking, canonical clips, raylib-safe mesh indices, and 1K model/output validation |
 | `test_vfx_pipeline.py` | deterministic atlas generation, source provenance, and manifest validation |
 
@@ -171,6 +172,10 @@ matrix. At minimum, after changes to runtime/presentation:
 - Scrapper Ripsaw/Wrecking Disc two-leg hits, cover interaction, held Shell,
   absorb healing/recharge/break recovery, and Fight-bot raise/lower timing.
 - Tank Reclamation healing, Shift Shoulder Jets cooldown/cover stop, and Charge.
+- Longshot Mag-Line Grapple aim direction, cover stop, cable/pose phases, cooldown, and
+  external-displacement cancellation.
+- Mortar Concussion Mine placement, arm cue, trigger/blast rings, team/cover rules,
+  replacement, detonation, and Fight-bot use.
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.
 - Three-second out-of-combat regeneration, one-second pulses, and attack/damage resets.
 - Static, Roam, and Fight bots.

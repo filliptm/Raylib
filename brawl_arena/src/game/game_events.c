@@ -137,6 +137,12 @@ void GameEmitVfxAttached(GameSession *session, VfxEffectId id, Vector3 position,
 void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
                              CharacterActionId action)
 {
+    GameEmitCharacterActionTimed(session, brawlerIndex, action, 0.0f);
+}
+
+void GameEmitCharacterActionTimed(GameSession *session, int brawlerIndex,
+                                  CharacterActionId action, float duration)
+{
     if (brawlerIndex < 0 || brawlerIndex >= session->brawlerCount ||
         action <= CHARACTER_ACTION_NONE || action >= CHARACTER_ACTION_COUNT)
         return;
@@ -144,6 +150,7 @@ void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
     if (!event) return;
     event->sourceBrawler = brawlerIndex;
     event->characterAction = action;
+    event->life = duration;
 }
 
 void GameEmitMatchShake(GameSession *session, float amount)

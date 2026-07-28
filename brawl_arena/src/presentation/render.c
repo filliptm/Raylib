@@ -246,7 +246,9 @@ static void DrawArenaGeometry(App *w, Assets *a)
 //------------------------------------------------------------------------------------
 // Draws a brawler from its own fields only. No App, so the menu can stand one on a
 // podium without a match existing.
-void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const Color *bodyTint)
+static void RenderBrawlerModelAction(
+    Assets *a, Brawler *b, float time, float dither, const Color *bodyTint,
+    CharacterActionId action, float actionProgress, float actionWeight)
 {
 
     // Everything below is expressed in units of `s`, so one factor scales the whole
@@ -270,7 +272,19 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
     }
 
     Vector3 pos = b->position;
-    float bob = sinf(b->bobPhase)*0.06f*s;
+    float mineDown = 0.0f;
+    if (action == CHARACTER_ACTION_MINE_DEPLOY && actionWeight > 0.001f)
+    {
+        float descend = Clamp(actionProgress/0.30f, 0.0f, 1.0f);
+        float recover = Clamp((actionProgress - 0.68f)/0.32f, 0.0f, 1.0f);
+        mineDown = descend*(1.0f - recover)*actionWeight;
+    }
+    float grappleBrace =
+        action == CHARACTER_ACTION_GRAPPLE
+        ? Clamp((actionProgress - 0.16f)/0.36f, 0.0f, 1.0f)*
+          actionWeight : 0.0f;
+    float bob = sinf(b->bobPhase)*0.06f*s -
+                mineDown*0.24f*s - grappleBrace*0.06f*s;
     float yaw = b->renderYaw;
 
     DrawShadow(a, pos, 0.52f*s);
@@ -294,13 +308,16 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
     for (int i = 0; i < 2; i++)
     {
         float side = (i == 0) ? -1.0f : 1.0f;
-        float fwd = (i == 0) ? stride : -stride;
+        float fwd = ((i == 0) ? stride : -stride) +
+                    mineDown*0.12f*s*(i == 0 ? 1.0f : -1.0f);
         Vector3 legPos = {
             pos.x + cosf(yaw)*0.17f*s*side + sinf(yaw)*fwd,
             0.0f,
             pos.z - sinf(yaw)*0.17f*s*side + cosf(yaw)*fwd
         };
-        Matrix m = TRS((Vector3){ 0.13f*s, 0.36f*s, 0.13f*s }, yaw, legPos);
+        Matrix m = TRS((Vector3){ 0.13f*s,
+                                  0.36f*s*(1.0f - 0.30f*mineDown),
+                                  0.13f*s }, yaw, legPos);
         DrawLit(a, a->cylinder, m, a->texCloth, dark, (Vector2){ 1.0f, 1.0f }, 0.0f);
     }
 
@@ -349,6 +366,7 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
         case CLASS_HEALER:  gunLen = 0.68f; gunGirth = 0.14f;  gunReach = 0.60f; break;
         default: break;
     }
+    gunReach += grappleBrace*0.14f;
 
     float ax = sinf(yaw), az = cosf(yaw);
     Vector3 gunMid = { pos.x + ax*gunReach*s, 0.72f*s + bob, pos.z + az*gunReach*s };
@@ -388,6 +406,13 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
         DrawGroundGlow(a, pos, 1.3f, (Color){ 255, 190, 100, 150 });
 }
 
+void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither,
+                        const Color *bodyTint)
+{
+    RenderBrawlerModelAction(a, b, time, dither, bodyTint,
+                             CHARACTER_ACTION_NONE, 0.0f, 0.0f);
+}
+
 //------------------------------------------------------------------------------------
 // Projectiles: a lit core plus additive glow billboards, with a short trail.
 //------------------------------------------------------------------------------------
@@ -395,6 +420,49 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
 // glow layer has something solid to sit on top of.
 static void DrawSolidEffects(App *w, Assets *a)
 {
+    for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
+    {
+        AbilityField *field = &w->session.abilityFields[i];
+        if (!field->active || field->type != ABILITY_FIELD_MINE) continue;
+
+        float armProgress = field->growTime > 0.0f
+                          ? Clamp(1.0f - field->armTime/field->growTime,
+                                  0.0f, 1.0f)
+                          : 1.0f;
+        float rise = 0.08f + 0.08f*armProgress;
+        float spin = w->session.time*(field->armed ? 1.8f : 5.2f);
+        Color team = TEAM_COLORS[field->team];
+        Color shell = ColorLerpC((Color){ 60, 66, 82, 255 }, team, 0.20f);
+        Color signal = field->armed
+                     ? (Color){ 255, 98, 46, 255 }
+                     : (Color){ 255, 202, 82, 255 };
+
+        DrawLit(a, a->cylinder,
+                TRS((Vector3){ 0.46f, 0.14f, 0.46f }, spin,
+                    (Vector3){ field->position.x, rise,
+                               field->position.z }),
+                a->texMetal, shell, (Vector2){ 1.0f, 1.0f }, 0.08f);
+        DrawLit(a, a->sphere,
+                TRS((Vector3){ 0.16f, 0.10f, 0.16f }, spin,
+                    (Vector3){ field->position.x, rise + 0.10f,
+                               field->position.z }),
+                a->texFlat, signal, (Vector2){ 1.0f, 1.0f }, 0.92f);
+
+        for (int fin = 0; fin < 4; fin++)
+        {
+            float angle = spin + fin*PI*0.5f;
+            Vector3 finPosition = {
+                field->position.x + sinf(angle)*0.36f,
+                rise + 0.02f,
+                field->position.z + cosf(angle)*0.36f
+            };
+            DrawLit(a, a->cube,
+                    TRS((Vector3){ 0.12f, 0.06f, 0.28f },
+                        angle, finPosition),
+                    a->texMetal, shell, (Vector2){ 1.0f, 1.0f }, 0.12f);
+        }
+    }
+
     for (int i = 0; i < MAX_PROJECTILES; i++)
     {
         Projectile *p = &w->session.projectiles[i];
@@ -847,7 +915,19 @@ static void DrawBrawler(App *w, Assets *a, Brawler *b)
     if (!b->visible) return;
 
     if (modelKit) DrawBrawlerCharacterModel(w, a, b);
-    else RenderBrawlerModel(a, b, w->session.time, b->inBush ? w->tune.concealDither : 0.0f, NULL);
+    else
+    {
+        int idx = (int)(b - w->session.brawlers);
+        const CharacterActionState *action =
+            idx >= 0 && idx < MAX_BRAWLERS
+            ? &w->presentation.actions[idx] : NULL;
+        RenderBrawlerModelAction(
+            a, b, w->session.time,
+            b->inBush ? w->tune.concealDither : 0.0f, NULL,
+            action ? action->action : CHARACTER_ACTION_NONE,
+            CharacterActionProgress(action),
+            CharacterActionBlendWeight(action));
+    }
 }
 
 //------------------------------------------------------------------------------------

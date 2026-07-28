@@ -81,6 +81,10 @@ typedef struct Brawler {
     Vector3 dashDir;
     int dashAbility;
     int dashHitMask;
+    float grappleDelayTimer;
+    float grappleTimer;
+    Vector3 grappleAnchor;
+    int grappleAbility;
     StatusEffect statuses[MAX_STATUS_EFFECTS];
     bool inBush;
     bool visible;
@@ -147,7 +151,8 @@ typedef struct Projectile {
 
 typedef enum {
     ABILITY_FIELD_RAIN = 0,
-    ABILITY_FIELD_SOUND_WAVE
+    ABILITY_FIELD_SOUND_WAVE,
+    ABILITY_FIELD_MINE
 } AbilityFieldType;
 
 typedef struct AbilityField {
@@ -161,11 +166,15 @@ typedef struct AbilityField {
     float maxLife;
     float tickTimer;
     float tickRate;
+    float armTime;
+    float triggerRadius;
+    float knockback;
     int damage;
     int healing;
     Team team;
     int owner;
     AbilityFieldType type;
+    bool armed;
     bool active;
 } AbilityField;
 

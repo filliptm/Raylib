@@ -45,6 +45,8 @@ float CharacterActionDuration(CharacterActionId action);
 const char *CharacterActionName(CharacterActionId action);
 void CharacterActionStart(PresentationState *presentation, int brawlerIndex,
                           CharacterActionId action);
+void CharacterActionStartTimed(PresentationState *presentation, int brawlerIndex,
+                               CharacterActionId action, float duration);
 void CharacterActionsUpdate(PresentationState *presentation, float dt);
 float CharacterActionProgress(const CharacterActionState *state);
 float CharacterActionBlendWeight(const CharacterActionState *state);

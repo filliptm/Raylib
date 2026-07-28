@@ -22,6 +22,8 @@ void GameEmitVfxAttached(GameSession *session, VfxEffectId id, Vector3 position,
                          int targetBrawler, VfxSocket endSocket);
 void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
                              CharacterActionId action);
+void GameEmitCharacterActionTimed(GameSession *session, int brawlerIndex,
+                                  CharacterActionId action, float duration);
 void GameEmitMatchShake(GameSession *session, float amount);
 
 #endif

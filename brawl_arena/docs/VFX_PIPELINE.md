@@ -117,18 +117,19 @@ brief casts, jets, beams, and healing returns stay attached while a character mo
 
 The WORLD command-center tab exposes the runtime observability used for interactive
 checks: loaded atlas count, active/capacity/dropped layers, consumed event and spawned
-layer totals, the last recipe, direct recipe spawning, and `MAIN`, `SUPER`, `CAST`, and
-`MOBILITY`, and `GUARD` character-action previews with live action progress/blend
+layer totals, the last recipe, direct recipe spawning, and `MAIN`, `SUPER`, `CAST`,
+`MOBILITY`, `GUARD`, `GRAPPLE`, and `MINE_DEPLOY` character-action previews with live action progress/blend
 readout.
 
 ## Current recipe coverage
 
-There are 34 runtime recipes:
+There are 41 runtime recipes:
 
 - Scrapper main/super cast and impact, Ripsaw/Wrecking Disc return and catch, and
   Magnetic Scrap Shell start/hit/collapse/restore.
-- Longshot main/super cast and impact.
-- Mortar main/super cast and impact, including explosion, smoke, and scorch layers.
+- Longshot main/super cast and impact plus Grapple fire/hook/pull/land.
+- Mortar main/super cast and impact plus Mine place/arm/detonate, including explosion,
+  smoke, and scorch layers.
 - Tank main cast/impact, Reclamation path, Shoulder Jets start/trail, and Charge
   start/trail/impact.
 - Guardian rain cast/pulse/heal/damage and Resonance cast/heal/damage.
@@ -139,9 +140,11 @@ carries both the hit location and Tank location so the presentation can draw the
 return path. Shoulder Jets and Charge use separate IDs and colors so the non-damaging
 boost never reads like the destructive super.
 
-Persistent Guardian field boundaries remain procedural in `ability_visuals.c`. Imported
-art decorates each cast and tick without replacing the true growing rain radius or
-Resonance cone.
+Persistent Guardian field boundaries, Longshot's live Grapple cable, and Mortar's Mine
+trigger/blast rings remain procedural in `ability_visuals.c`. Imported art decorates
+each phase without replacing the true rain, cable endpoint, trigger, blast, or
+Resonance dimensions. The Mine itself is lit solid geometry so it writes depth before
+the additive ring pass.
 
 Returning discs also keep a procedural metal body and trail, while an active Shell draws
 a procedural full sphere tied to authoritative charge. Its energy cage uses the shared

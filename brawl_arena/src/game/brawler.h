@@ -37,6 +37,9 @@ bool BrawlerTrySuper(GameContext game, int idx, float aimDist);
 bool BrawlerTrySecondary(GameContext game, int idx, Vector3 direction);
 // Compatibility helper for callers that specifically require a dash secondary.
 bool BrawlerTryMobility(GameContext game, int idx, Vector3 direction);
+bool BrawlerIsGrappling(const Brawler *brawler);
+// Applies an external pull/knockback through terrain and cancels an active grapple.
+void BrawlerDisplace(GameContext game, int idx, Vector3 displacement);
 // Lowers a held shield and clears its release-to-rearm latch.
 void BrawlerReleaseShield(GameContext game, int idx);
 bool BrawlerProjectileThreat(GameContext game, int idx, float horizon);

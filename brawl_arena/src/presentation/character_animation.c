@@ -48,6 +48,13 @@ CharacterAnimationSelection CharacterAnimationSelect(
         return selection;
     }
 
+    if (brawler->grappleDelayTimer > 0.0f ||
+        brawler->grappleTimer > 0.0f)
+    {
+        selection.clip = character->clipIdle;
+        return selection;
+    }
+
     if (brawler->dashTimer > 0.0f)
     {
         selection.clip = character->clipRunF;
@@ -201,6 +208,8 @@ float CharacterActionDuration(CharacterActionId action)
         case CHARACTER_ACTION_CAST: return 0.72f;
         case CHARACTER_ACTION_MOBILITY: return 0.58f;
         case CHARACTER_ACTION_GUARD: return 0.78f;
+        case CHARACTER_ACTION_GRAPPLE: return 0.78f;
+        case CHARACTER_ACTION_MINE_DEPLOY: return 0.82f;
         default: return 0.0f;
     }
 }
@@ -214,6 +223,8 @@ const char *CharacterActionName(CharacterActionId action)
         case CHARACTER_ACTION_CAST: return "CAST";
         case CHARACTER_ACTION_MOBILITY: return "MOBILITY";
         case CHARACTER_ACTION_GUARD: return "GUARD";
+        case CHARACTER_ACTION_GRAPPLE: return "GRAPPLE";
+        case CHARACTER_ACTION_MINE_DEPLOY: return "MINE_DEPLOY";
         default: return "NONE";
     }
 }
@@ -221,9 +232,15 @@ const char *CharacterActionName(CharacterActionId action)
 void CharacterActionStart(PresentationState *presentation, int brawlerIndex,
                           CharacterActionId action)
 {
+    CharacterActionStartTimed(presentation, brawlerIndex, action, 0.0f);
+}
+
+void CharacterActionStartTimed(PresentationState *presentation, int brawlerIndex,
+                               CharacterActionId action, float duration)
+{
     if (!presentation || brawlerIndex < 0 || brawlerIndex >= MAX_BRAWLERS)
         return;
-    float duration = CharacterActionDuration(action);
+    if (duration <= 0.0f) duration = CharacterActionDuration(action);
     if (duration <= 0.0f) return;
     presentation->actions[brawlerIndex] = (CharacterActionState){
         .action = action,

@@ -125,6 +125,22 @@ int main(int argc, char **argv)
           first.content.weapons[CLASS_SHOTGUNNER].secondaryRechargeRate == 300.0f &&
           first.content.weapons[CLASS_SHOTGUNNER].secondaryBreakLockout == 5.0f,
           "Scrapper rework did not load from canonical config");
+    CHECK(first.content.weapons[CLASS_SNIPER].secondaryKind ==
+              SECONDARY_GRAPPLE &&
+          first.content.weapons[CLASS_SNIPER].mobilityCooldown == 7.5f &&
+          first.content.weapons[CLASS_SNIPER].mobilityDuration == 0.45f &&
+          first.content.weapons[CLASS_SNIPER].secondaryRange == 10.0f &&
+          first.content.weapons[CLASS_SNIPER].secondaryDelay == 0.15f,
+          "Longshot Grapple did not load from canonical config");
+    CHECK(first.content.weapons[CLASS_LOBBER].secondaryKind ==
+              SECONDARY_MINE &&
+          first.content.weapons[CLASS_LOBBER].mobilityCooldown == 8.0f &&
+          first.content.weapons[CLASS_LOBBER].secondaryDelay == 0.55f &&
+          first.content.weapons[CLASS_LOBBER].secondaryTriggerRadius == 2.4f &&
+          first.content.weapons[CLASS_LOBBER].secondaryRadius == 3.2f &&
+          first.content.weapons[CLASS_LOBBER].secondaryDamage == 400 &&
+          first.content.weapons[CLASS_LOBBER].secondaryKnockback == 4.5f,
+          "Mortar Concussion Mine did not load from canonical config");
     CHECK(first.content.showcase.yawDegrees == 180.0f &&
           first.content.showcase.scale == 0.90f &&
           first.content.showcase.cameraPosition.y == 2.70f &&

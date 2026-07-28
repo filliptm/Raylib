@@ -293,7 +293,7 @@ static void TabKit(CommandUi *ui)
             CommandUiText(ui, "Shift boosts along movement, then aim.",
                           COMMAND_TEXT_DIM);
         }
-        else
+        else if (k->secondaryKind == SECONDARY_SHIELD)
         {
             CommandUiSliderI(ui, "Capacity", &k->secondaryCapacity, 100, 5000);
             CommandUiSliderF(ui, "Move multiplier",
@@ -312,6 +312,37 @@ static void TabKit(CommandUi *ui)
                              &k->secondaryBreakLockout,
                              0.25f, 12.0f, "%.2fs");
             CommandUiText(ui, "Hold Shift/LB for a 360-degree damage shell.",
+                          COMMAND_TEXT_DIM);
+        }
+        else if (k->secondaryKind == SECONDARY_GRAPPLE)
+        {
+            CommandUiSliderF(ui, "Cooldown", &k->mobilityCooldown,
+                             0.25f, 15.0f, "%.2fs");
+            CommandUiSliderF(ui, "Pull duration", &k->mobilityDuration,
+                             0.10f, 1.5f, "%.2fs");
+            CommandUiSliderF(ui, "Max range", &k->secondaryRange,
+                             2.0f, 24.0f, "%.1f");
+            CommandUiSliderF(ui, "Launch delay", &k->secondaryDelay,
+                             0.0f, 0.8f, "%.2fs");
+            CommandUiText(ui, "Shift/LB anchors toward the current aim point.",
+                          COMMAND_TEXT_DIM);
+        }
+        else if (k->secondaryKind == SECONDARY_MINE)
+        {
+            CommandUiSliderF(ui, "Cooldown", &k->mobilityCooldown,
+                             0.25f, 15.0f, "%.2fs");
+            CommandUiSliderF(ui, "Arm time", &k->secondaryDelay,
+                             0.05f, 3.0f, "%.2fs");
+            CommandUiSliderF(ui, "Trigger radius",
+                             &k->secondaryTriggerRadius,
+                             0.5f, 8.0f, "%.1f");
+            CommandUiSliderF(ui, "Blast radius", &k->secondaryRadius,
+                             0.5f, 10.0f, "%.1f");
+            CommandUiSliderI(ui, "Damage", &k->secondaryDamage,
+                             20, 5000);
+            CommandUiSliderF(ui, "Knockback", &k->secondaryKnockback,
+                             0.0f, 12.0f, "%.1f");
+            CommandUiText(ui, "Shift/LB replaces the owner's mine at their feet.",
                           COMMAND_TEXT_DIM);
         }
     }
@@ -538,10 +569,11 @@ static void TabWorld(CommandUi *ui)
     }
 
     static const char *ACTION_NAMES[] = {
-        "MAIN", "SUPER", "CAST", "MOBILITY", "GUARD"
+        "MAIN", "SUPER", "CAST", "MOBILITY", "GUARD", "GRAPPLE",
+        "MINE DEPLOY"
     };
     CommandUiCycler(ui, "Character action", &g_command.actionPreview,
-                    5, ACTION_NAMES);
+                    7, ACTION_NAMES);
     if (CommandUiButton(ui, "Play selected action"))
         CharacterActionStart(
             &w->presentation, w->session.playerIdx,

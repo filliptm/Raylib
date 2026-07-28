@@ -582,6 +582,8 @@ static void ResetOptionalClips(RiggedCharacter *character)
     character->clipActionCast = -1;
     character->clipActionMobility = -1;
     character->clipActionGuard = -1;
+    character->clipActionGrapple = -1;
+    character->clipActionMineDeploy = -1;
 }
 
 static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
@@ -641,6 +643,8 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->clipActionCast = FindCharacterClip(character, "cast");
     character->clipActionMobility = FindCharacterClip(character, "mobility");
     character->clipActionGuard = FindCharacterClip(character, "guard");
+    character->clipActionGrapple = FindCharacterClip(character, "grapple");
+    character->clipActionMineDeploy = FindCharacterClip(character, "mine_deploy");
 
     // Meshy's rig chains Hips -> Spine02 -> Spine01 -> Spine, with "Spine" as the
     // CHEST joint parenting both shoulders and the neck. The whole-torso pivot is
@@ -650,6 +654,7 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->boneHips = FindCharacterBone(character, "Hips");
     character->boneSpine = FindCharacterBone(character, "Spine02");
     character->boneChest = FindCharacterBone(character, "Spine");
+    character->boneHead = FindCharacterBone(character, "Head");
     character->boneLeftShoulder = FindCharacterBone(character, "LeftShoulder");
     character->boneLeftArm = FindCharacterBone(character, "LeftArm");
     character->boneLeftForeArm = FindCharacterBone(character, "LeftForeArm");
@@ -658,6 +663,10 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->boneRightArm = FindCharacterBone(character, "RightArm");
     character->boneRightForeArm = FindCharacterBone(character, "RightForeArm");
     character->boneRightHand = FindCharacterBone(character, "RightHand");
+    character->boneLeftUpLeg = FindCharacterBone(character, "LeftUpLeg");
+    character->boneLeftLeg = FindCharacterBone(character, "LeftLeg");
+    character->boneRightUpLeg = FindCharacterBone(character, "RightUpLeg");
+    character->boneRightLeg = FindCharacterBone(character, "RightLeg");
     character->boneLeftFoot = FindCharacterBone(character, "LeftFoot");
     character->boneRightFoot = FindCharacterBone(character, "RightFoot");
 
@@ -1184,6 +1193,9 @@ static int ActionClipFor(const RiggedCharacter *character, CharacterActionId act
         case CHARACTER_ACTION_CAST: return character->clipActionCast;
         case CHARACTER_ACTION_MOBILITY: return character->clipActionMobility;
         case CHARACTER_ACTION_GUARD: return character->clipActionGuard;
+        case CHARACTER_ACTION_GRAPPLE: return character->clipActionGrapple;
+        case CHARACTER_ACTION_MINE_DEPLOY:
+            return character->clipActionMineDeploy;
         default: return -1;
     }
 }
@@ -1255,6 +1267,17 @@ static void RotatePoseSubtree(const RiggedCharacter *character, Transform *pose,
         pose[bone].rotation =
             QuaternionNormalize(QuaternionMultiply(delta, pose[bone].rotation));
     }
+}
+
+static void TranslatePoseSubtree(const RiggedCharacter *character, Transform *pose,
+                                 int root, Vector3 translation, float weight)
+{
+    if (root < 0 || root >= character->model.boneCount || weight <= 0.001f) return;
+    translation = Vector3Scale(translation, Clamp(weight, 0.0f, 1.0f));
+    for (int bone = 0; bone < character->model.boneCount; bone++)
+        if (BoneDescendsFrom(character, bone, root))
+            pose[bone].translation =
+                Vector3Add(pose[bone].translation, translation);
 }
 
 static void AimPoseArm(const RiggedCharacter *character, Transform *pose,
@@ -1343,6 +1366,75 @@ static void ApplyProceduralAction(const RiggedCharacter *character, Transform *p
                    kick*0.92f);
         RotatePoseSubtree(character, pose, character->boneSpine,
                          QuaternionFromEuler(-0.16f, 0.0f, 0.0f), kick*0.85f);
+    }
+    else if (action == CHARACTER_ACTION_GRAPPLE)
+    {
+        // Three readable beats: shoot the line, brace with an asymmetric stance,
+        // then tuck into the pull. The gameplay timer supplies the full launch+pull
+        // duration, so this pose stays synchronized even after tuning changes.
+        float launch = Clamp(progress/0.24f, 0.0f, 1.0f);
+        float pull = Clamp((progress - 0.18f)/0.48f, 0.0f, 1.0f);
+        float land = Clamp((progress - 0.78f)/0.22f, 0.0f, 1.0f);
+        float brace = pull*(1.0f - land);
+
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand,
+                   (Vector3){ 0.20f, 0.36f - pull*0.25f, 1.0f },
+                   kick*(0.70f + 0.30f*launch));
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand,
+                   (Vector3){ -0.22f, 0.12f, 0.92f },
+                   kick*(0.42f + 0.52f*brace));
+        RotatePoseSubtree(character, pose, character->boneSpine,
+                         QuaternionFromEuler(0.27f*brace,
+                                             -0.14f*(1.0f - pull),
+                                             -0.10f*brace),
+                         kick);
+        RotatePoseSubtree(character, pose, character->boneLeftUpLeg,
+                         QuaternionFromEuler(-0.24f*brace, 0.0f, 0.12f),
+                         kick*brace);
+        RotatePoseSubtree(character, pose, character->boneRightUpLeg,
+                         QuaternionFromEuler(0.18f*brace, 0.0f, -0.10f),
+                         kick*brace);
+        TranslatePoseSubtree(character, pose, character->boneHips,
+                             (Vector3){ 0.0f, -0.08f, -0.10f },
+                             kick*brace);
+    }
+    else if (action == CHARACTER_ACTION_MINE_DEPLOY)
+    {
+        // Mortar folds into a compact kneel, plants the charge with both hands,
+        // then springs back up. This is intentionally distinct from the generic cast.
+        float down = Clamp(progress/0.30f, 0.0f, 1.0f);
+        float up = Clamp((progress - 0.68f)/0.32f, 0.0f, 1.0f);
+        float crouch = down*(1.0f - up);
+        float plant = Clamp((progress - 0.16f)/0.34f, 0.0f, 1.0f);
+
+        TranslatePoseSubtree(character, pose, character->boneHips,
+                             (Vector3){ 0.0f, -0.32f, 0.07f },
+                             kick*crouch);
+        RotatePoseSubtree(character, pose, character->boneSpine,
+                         QuaternionFromEuler(-0.42f*crouch, 0.0f, 0.0f),
+                         kick);
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand,
+                   (Vector3){ -0.30f, -0.86f, 0.42f },
+                   kick*plant);
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand,
+                   (Vector3){ 0.30f, -0.86f, 0.42f },
+                   kick*plant);
+        RotatePoseSubtree(character, pose, character->boneLeftUpLeg,
+                         QuaternionFromEuler(-0.58f*crouch, 0.0f, 0.10f),
+                         kick);
+        RotatePoseSubtree(character, pose, character->boneRightUpLeg,
+                         QuaternionFromEuler(-0.58f*crouch, 0.0f, -0.10f),
+                         kick);
+        RotatePoseSubtree(character, pose, character->boneLeftLeg,
+                         QuaternionFromEuler(0.52f*crouch, 0.0f, 0.0f),
+                         kick);
+        RotatePoseSubtree(character, pose, character->boneRightLeg,
+                         QuaternionFromEuler(0.52f*crouch, 0.0f, 0.0f),
+                         kick);
     }
 }
 

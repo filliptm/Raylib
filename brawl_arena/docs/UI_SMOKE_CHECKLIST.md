@@ -103,11 +103,17 @@ screens:
 - Temporarily missing station/character assets use coherent procedural fallbacks.
 - Temporarily missing individual UI skin textures fall back independently to the
   code-drawn Helios geometry without changing layout or preventing startup.
-- Imported animation selection, grass, aim previews, Scrapper saw/Shell visuals, rain,
+- Imported animation selection, grass, aim previews, Scrapper saw/Shell visuals,
+  Longshot Grapple cable/pose phases, Mortar Mine body/rings/deploy pose, rain,
   Resonance, and result overlays remain aligned with the world.
 - Scrapper's procedural saw is readable on both legs; the full spherical Shell cage,
   low-charge instability, start/hit/collapse/restore recipes, numeric world charge bar,
   and braced pose are visible without rectangular outline artifacts.
+- Longshot's cable terminates at cover, stays attached to the animated right hand, and
+  its fire/hook/pull/land phases do not show rectangular atlas edges.
+- Mortar's Mine rises/arms clearly, shows distinct trigger and blast rings without
+  floor fighting, remains hidden behind solid cover where appropriate, and detonates
+  with readable knockback.
 
 Record the sizes, input devices, kits, and fallback cases actually exercised when handing
 off a change. Do not report this graphical matrix as complete based only on headless

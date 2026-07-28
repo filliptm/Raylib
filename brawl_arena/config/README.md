@@ -48,16 +48,22 @@ project defaults.
 
 The canonical format is version 3 deterministic `key value` text with stable kit
 identifiers. Main/super kinds include `projectile`, `lob`, `rain`, `dash`,
-`sound_wave`, and `returning`; secondary kinds are `none`, `dash`, or `shield`.
+`sound_wave`, and `returning`; secondary kinds are `none`, `dash`, `shield`,
+`grapple`, or `mine`.
 Global out-of-combat recovery is authored with
 `gameplay.health_regen_delay`, `gameplay.health_regen_interval`, and
 `gameplay.health_regen_max_ratio`; a zero ratio disables passive regeneration.
 Each kit declares `main.self_heal_ratio`, `main.return_speed`, a complete
-`secondary.*` block, and returning-super speed/pull/knockback fields. Behavior-specific
+`secondary.*` block, and returning-super speed/pull/knockback fields. The shared
+secondary record includes cooldown/duration/speed plus `range`, `delay`, `radius`,
+`trigger_radius`, `damage`, and `knockback`; fields unused by a behavior remain zero.
+Behavior-specific
 validation requires one disc and positive outbound/return speeds for returning attacks;
 positive cooldown/duration/speed for dash secondaries; and positive capacity, movement
 multiplier, recharge delay/rate, and break lockout plus a bounded healing ratio for
-shield secondaries.
+shield secondaries. Grapples require positive cooldown, pull duration, range, and
+non-negative launch delay. Mines require positive cooldown, arm delay, trigger/blast
+radii, damage, and non-negative knockback.
 
 One eleven-key `preview.showcase.*` record frames every non-rotating menu model:
 
@@ -78,7 +84,7 @@ The loader rejects:
 - Invalid types, enum names, NaN, or infinity.
 - Values outside the field registry's declared range.
 - Incomplete projectile or returning abilities.
-- Incomplete or internally inconsistent dash/shield secondaries.
+- Incomplete or internally inconsistent dash, shield, grapple, or mine secondaries.
 - Invalid rain or sound-wave duration/tick relationships.
 
 Loading is transactional, so a rejected local draft cannot partially alter runtime

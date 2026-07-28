@@ -111,6 +111,13 @@ static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int s
                  "Hold 360 shell // %d capacity // %.0f%% absorb healing",
                  ability->data.shield.capacity,
                  ability->data.shield.healRatio*100.0f);
+    else if (ability->behavior == ABILITY_BEHAVIOR_GRAPPLE)
+        snprintf(buffer, size, "%.0f range pull // %.1fs cooldown",
+                 ability->range, ability->cooldown);
+    else if (ability->behavior == ABILITY_BEHAVIOR_MINE)
+        snprintf(buffer, size, "%d damage // %.1f trigger // %.1fs cooldown",
+                 ability->damage, ability->data.mine.triggerRadius,
+                 ability->cooldown);
     else if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
         snprintf(buffer, size, "%d outbound + %d return // piercing disc",
                  ability->damage, ability->damage);

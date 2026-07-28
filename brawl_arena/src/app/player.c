@@ -116,7 +116,7 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
 
     w->controller.aimDist = aimLen;
 
-    if (b->dashTimer > 0.0f)
+    if (b->dashTimer > 0.0f || BrawlerIsGrappling(b))
     {
         w->controller.charging = false;
         w->controller.aimingSuper = false;
@@ -138,8 +138,8 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     const AbilityDefinition *secondary =
         ContentSecondaryAbility(&w->content, b->cls);
 
-    // Shift/LB is a typed secondary: Tank triggers immediately, while Scrapper keeps
-    // its full-body shell raised for exactly as long as the control is held.
+    // Shift/LB is a typed secondary: shields remain raised while held, while
+    // dash, grapple, and mine abilities trigger once on the press edge.
     if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD &&
         (input->secondaryReleased || !input->secondaryHeld))
         BrawlerReleaseShield(game, idx);
@@ -154,10 +154,11 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
 
     if (input->secondaryPressed || input->mobilityPressed)
     {
-        Vector3 direction =
-            secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD
-            ? (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) }
-            : input->moveIntent;
+        Vector3 direction = input->moveIntent;
+        if (secondary &&
+            (secondary->behavior == ABILITY_BEHAVIOR_SHIELD ||
+             secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE))
+            direction = toAim;
         if (Vector3Length(direction) < 0.001f)
             direction = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
 

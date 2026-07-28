@@ -98,13 +98,14 @@ Each runtime ability has:
 - `AbilityBehavior` tag.
 - Range, radius, damage, healing, cooldown/reload, and ultimate-gain fields.
 - An optional projectile self-heal ratio based on actual health removed.
-- Exactly one relevant typed payload: projectile, area, dash, returning, or shield.
+- Exactly one relevant typed payload: projectile, area, dash, returning, shield,
+  grapple, or mine.
 
 Implemented reusable behaviors are projectile, lob, rain, dash, healing burst, sound
-wave, returning disc, and shield. Game, AI, menu summaries, HUD, and aim previews resolve
+wave, returning disc, shield, grapple, and mine. Game, AI, menu summaries, HUD, and aim previews resolve
 abilities through
 `ContentMainAbility()`, `ContentSuperAbility()`, and
-`ContentSecondaryAbility()`. The current catalog has twelve active definitions in a
+`ContentSecondaryAbility()`. The current catalog has fourteen active definitions in a
 fifteen-slot fixed array.
 
 ## Global combat recovery
@@ -147,6 +148,20 @@ tracked defaults are 2.5 seconds, 0.18 seconds, and 22 world units per second. I
 solid cover and carries zero damage, knockback, and crate-breaking capability. Charge
 uses the same reusable dash executor with its own damage, knockback, duration, global
 Charge speed, and crate-breaking policy.
+
+## Longshot and Mortar secondaries
+
+Longshot's typed Grapple reads `secondary.cooldown`, `secondary.duration` (pull time),
+`secondary.range`, and `secondary.delay` (launch time). Its tracked values are 7.5,
+0.45, 10.0, and 0.15. The executor derives a body-safe endpoint with the normal arena
+circle sweep and locks main/super actions until traversal ends or external displacement
+cancels it.
+
+Mortar's typed Mine reads `secondary.cooldown`, `secondary.delay` (arm time),
+`secondary.trigger_radius`, `secondary.radius` (blast), `secondary.damage`, and
+`secondary.knockback`. Tracked values are 8.0, 0.55, 2.4, 3.2, 400, and 4.5. It is a
+persistent fixed-pool ability field with one active instance per owner; detection and
+blast both use team and arena line-of-sight rules.
 
 The compatibility authoring record is a deliberate migration seam. A future fully
 external character manifest can populate the typed catalog directly; until then, adding

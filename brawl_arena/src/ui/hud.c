@@ -3,6 +3,8 @@
 #include "command_center.h"
 #include "config.h"
 #include "content_catalog.h"
+#include "brawler.h"
+#include "weapons.h"
 #include "ui_system.h"
 #include "raymath.h"
 #include <math.h>
@@ -302,6 +304,19 @@ static void DrawAbilities(App *w, const Brawler *player)
                 Clamp(1.0f - player->mobilityCooldown/secondary->cooldown,
                       0.0f, 1.0f);
             ready = player->mobilityCooldown <= 0.0f;
+            if (secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE &&
+                BrawlerIsGrappling(player))
+                snprintf(secondaryName, sizeof(secondaryName),
+                         "%s // PULLING", secondary->name);
+            else if (secondary->behavior == ABILITY_BEHAVIOR_MINE)
+            {
+                bool armed = false;
+                if (WeaponsMineActive(AppGameContext(w),
+                                      w->session.playerIdx, &armed))
+                    snprintf(secondaryName, sizeof(secondaryName),
+                             "%s // %s", secondary->name,
+                             armed ? "ACTIVE" : "ARMING");
+            }
         }
         DrawAbilityTile(UiRefRect(920, 548, 336, 104), "SECONDARY",
                         secondaryName,

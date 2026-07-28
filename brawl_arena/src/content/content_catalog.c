@@ -53,24 +53,38 @@ const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
         .sOutboundPull = 1.25f, .sReturnKnockback = 2.25f
     },
     {
-        .name = "LONGSHOT", .flavor = "Damage grows with distance", .maxHealth = 2800,
+        .name = "LONGSHOT", .flavor = "Damage grows with distance",
+        .mobilityName = "MAG-LINE GRAPPLE", .maxHealth = 2800,
         .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
         .pellets = 1, .spreadDeg = 0.0f, .speed = 56.0f, .range = 26.0f,
         .damage = 1600, .projRadius = 0.20f, .cooldown = 0.52f,
         .reloadPerAmmo = 1.70f, .superPerHit = 0.30f,
         .rangeScaled = true,
+        .secondaryKind = SECONDARY_GRAPPLE,
+        .mobilityCooldown = 7.50f,
+        .mobilityDuration = 0.45f,
+        .secondaryRange = 10.0f,
+        .secondaryDelay = 0.15f,
         .superName = "RAILGUN", .superKind = SUPER_PROJECTILE,
         .sPellets = 1, .sSpreadDeg = 0.0f, .sSpeed = 70.0f,
         .sRange = 34.0f, .sDamage = 2400, .sProjRadius = 0.34f,
         .sPiercing = true
     },
     {
-        .name = "MORTAR", .flavor = "Lobs over walls, splash damage", .maxHealth = 3200,
+        .name = "MORTAR", .flavor = "Lobs over walls, splash damage",
+        .mobilityName = "CONCUSSION MINE", .maxHealth = 3200,
         .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_LOB,
         .pellets = 1, .spreadDeg = 0.0f, .speed = 16.0f, .range = 13.0f,
         .damage = 1000, .projRadius = 2.6f, .cooldown = 0.55f,
         .reloadPerAmmo = 1.60f, .superPerHit = 0.30f,
         .rangeScaled = false,
+        .secondaryKind = SECONDARY_MINE,
+        .mobilityCooldown = 8.0f,
+        .secondaryDelay = 0.55f,
+        .secondaryRadius = 3.2f,
+        .secondaryTriggerRadius = 2.4f,
+        .secondaryDamage = 400,
+        .secondaryKnockback = 4.5f,
         .superName = "BARRAGE", .superKind = SUPER_PROJECTILE,
         .sPellets = 3, .sSpreadDeg = 26.0f, .sSpeed = 16.0f,
         .sRange = 15.0f, .sDamage = 1100, .sProjRadius = 2.9f,
@@ -328,7 +342,7 @@ static void BuildSecondary(const WeaponDef *source, const char *characterId,
             .breaksCrates = false
         };
     }
-    else
+    else if (source->secondaryKind == SECONDARY_SHIELD)
     {
         ability->behavior = ABILITY_BEHAVIOR_SHIELD;
         ability->data.shield = (ShieldAbility){
@@ -338,6 +352,26 @@ static void BuildSecondary(const WeaponDef *source, const char *characterId,
             .rechargeDelay = source->secondaryRechargeDelay,
             .rechargeRate = source->secondaryRechargeRate,
             .breakLockout = source->secondaryBreakLockout
+        };
+    }
+    else if (source->secondaryKind == SECONDARY_GRAPPLE)
+    {
+        ability->behavior = ABILITY_BEHAVIOR_GRAPPLE;
+        ability->range = source->secondaryRange;
+        ability->data.grapple = (GrappleAbility){
+            .launchDelay = source->secondaryDelay,
+            .pullDuration = source->mobilityDuration
+        };
+    }
+    else if (source->secondaryKind == SECONDARY_MINE)
+    {
+        ability->behavior = ABILITY_BEHAVIOR_MINE;
+        ability->radius = source->secondaryRadius;
+        ability->damage = source->secondaryDamage;
+        ability->data.mine = (MineAbility){
+            .armTime = source->secondaryDelay,
+            .triggerRadius = source->secondaryTriggerRadius,
+            .knockback = source->secondaryKnockback
         };
     }
 }
@@ -367,11 +401,36 @@ void ContentCatalogRebuildTyped(ContentCatalog *catalog)
         BuildMain(source, character->id, &catalog->abilities[mainId]);
         BuildSuper(source, character->id, &catalog->abilities[superId]);
 
-        bool secondaryReady =
-            source->secondaryKind == SECONDARY_SHIELD
-            ? source->secondaryCapacity > 0
-            : source->mobilityCooldown > 0.0f &&
-              source->mobilityDuration > 0.0f;
+        bool secondaryReady = false;
+        switch (source->secondaryKind)
+        {
+            case SECONDARY_DASH:
+                secondaryReady =
+                    source->mobilityCooldown > 0.0f &&
+                    source->mobilityDuration > 0.0f &&
+                    source->mobilitySpeed > 0.0f;
+                break;
+            case SECONDARY_SHIELD:
+                secondaryReady = source->secondaryCapacity > 0;
+                break;
+            case SECONDARY_GRAPPLE:
+                secondaryReady =
+                    source->mobilityCooldown > 0.0f &&
+                    source->mobilityDuration > 0.0f &&
+                    source->secondaryRange > 0.0f &&
+                    source->secondaryDelay >= 0.0f;
+                break;
+            case SECONDARY_MINE:
+                secondaryReady =
+                    source->mobilityCooldown > 0.0f &&
+                    source->secondaryDelay > 0.0f &&
+                    source->secondaryRadius > 0.0f &&
+                    source->secondaryTriggerRadius > 0.0f &&
+                    source->secondaryDamage > 0;
+                break;
+            default:
+                break;
+        }
         if (source->secondaryKind != SECONDARY_NONE && secondaryReady &&
             catalog->abilityCount < MAX_ABILITIES)
         {

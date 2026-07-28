@@ -146,6 +146,12 @@ int main(void)
     CHECK(CharacterActionDuration(CHARACTER_ACTION_GUARD) >= 0.75f &&
           strcmp(CharacterActionName(CHARACTER_ACTION_GUARD), "GUARD") == 0,
           "guard action is not available for the held Scrapper pose");
+    CHECK(CharacterActionDuration(CHARACTER_ACTION_GRAPPLE) >= 0.75f &&
+          strcmp(CharacterActionName(CHARACTER_ACTION_GRAPPLE), "GRAPPLE") == 0 &&
+          CharacterActionDuration(CHARACTER_ACTION_MINE_DEPLOY) >= 0.80f &&
+          strcmp(CharacterActionName(CHARACTER_ACTION_MINE_DEPLOY),
+                 "MINE_DEPLOY") == 0,
+          "grapple/mine action contracts are incomplete");
     CharacterActionsUpdate(&presentation, 0.10f);
     CHECK(CharacterActionProgress(&presentation.actions[2]) > 0.0f &&
           CharacterActionBlendWeight(&presentation.actions[2]) > 0.0f,

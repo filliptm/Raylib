@@ -38,6 +38,7 @@ void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 p
     b->shotYaw = b->aimAngle;
     b->dashAbility = -1;
     b->shieldAbility = -1;
+    b->grappleAbility = -1;
     const AbilityDefinition *secondary = ContentSecondaryAbility(w.content, cls);
     if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD)
     {
@@ -177,6 +178,9 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         b->respawnTimer = b->isPlayer ? w.tuning->playerRespawn : w.tuning->enemyRespawn;
         b->dashTimer = 0.0f;
         b->dashAbility = -1;
+        b->grappleDelayTimer = 0.0f;
+        b->grappleTimer = 0.0f;
+        b->grappleAbility = -1;
         b->shieldActive = false;
         b->shieldAbility = -1;
 
@@ -337,7 +341,7 @@ bool BrawlerTryAttack(GameContext w, int idx, float aimDist)
 {
     Brawler *b = &w.session->brawlers[idx];
     if (!b->alive || b->attackCd > 0.0f || b->dashTimer > 0.0f ||
-        b->shieldActive)
+        b->shieldActive || BrawlerIsGrappling(b))
         return false;
 
     bool freeAmmo = b->isPlayer && w.tuning->infiniteAmmo;
@@ -355,7 +359,7 @@ bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
 {
     Brawler *b = &w.session->brawlers[idx];
     if (!b->alive || b->superCharge < 1.0f || b->dashTimer > 0.0f ||
-        b->shieldActive)
+        b->shieldActive || BrawlerIsGrappling(b))
         return false;
 
     if (!(b->isPlayer && w.tuning->infiniteAmmo)) b->superCharge = 0.0f;
@@ -375,6 +379,28 @@ void BrawlerReleaseShield(GameContext w, int idx)
     b->shieldRearmRequired = false;
 }
 
+static Vector3 GrappleEndpoint(const Arena *arena, Vector3 start,
+                               Vector3 direction, float range)
+{
+    float stepLength =
+        fminf(arena->tileSize*0.25f, BRAWLER_RADIUS*0.5f);
+    if (stepLength < 0.05f) stepLength = 0.05f;
+    int steps = (int)ceilf(range/stepLength);
+    if (steps < 1) steps = 1;
+
+    Vector3 endpoint = start;
+    for (int step = 1; step <= steps; step++)
+    {
+        float distance = range*step/(float)steps;
+        Vector3 candidate =
+            Vector3Add(start, Vector3Scale(direction, distance));
+        if (!ArenaCircleClear(arena, candidate, BRAWLER_RADIUS)) break;
+        endpoint = candidate;
+    }
+    endpoint.y = 0.0f;
+    return endpoint;
+}
+
 bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
 {
     if (idx < 0 || idx >= w.session->brawlerCount) return false;
@@ -384,7 +410,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
     const AbilityDefinition *ability = ContentSecondaryAbility(w.content, b->cls);
     if (!b->alive || !character || !ability ||
         b->mobilityCooldown > 0.0f || b->dashTimer > 0.0f ||
-        b->shieldActive)
+        b->shieldActive || BrawlerIsGrappling(b))
         return false;
 
     direction.y = 0.0f;
@@ -405,6 +431,53 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
             b->aimAngle, 1.35f, (Color){ 104, 226, 255, 255 },
             idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
         GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_GUARD);
+        return true;
+    }
+
+    if (ability->behavior == ABILITY_BEHAVIOR_GRAPPLE)
+    {
+        if (Vector3Length(direction) < 0.001f) return false;
+        direction = Vector3Normalize(direction);
+        Vector3 endpoint = GrappleEndpoint(
+            &w.session->arena, b->position, direction, ability->range);
+        if (Vector3Distance(b->position, endpoint) < 1.5f)
+            return false;
+
+        b->grappleDelayTimer = ability->data.grapple.launchDelay;
+        b->grappleTimer = ability->data.grapple.pullDuration;
+        b->grappleAnchor = endpoint;
+        b->grappleAbility = character->mobilityAbility;
+        b->mobilityCooldown = ability->cooldown;
+        b->velocity = (Vector3){ 0 };
+        b->aimAngle = atan2f(direction.x, direction.z);
+        b->shotYaw = b->aimAngle;
+        b->aimHold = ability->data.grapple.launchDelay +
+                     ability->data.grapple.pullDuration;
+        b->revealTimer = w.tuning->fireReveal;
+
+        Vector3 hand = { b->position.x, 1.05f, b->position.z };
+        Vector3 anchor = { endpoint.x, 0.18f, endpoint.z };
+        GameEmitVfxAttached(
+            w.session, VFX_LONGSHOT_GRAPPLE_FIRE,
+            hand, anchor, b->aimAngle, 1.0f,
+            (Color){ 72, 224, 255, 255 },
+            idx, VFX_SOCKET_RIGHT_HAND, -1, VFX_SOCKET_NONE);
+        GameEmitCharacterActionTimed(
+            w.session, idx, CHARACTER_ACTION_GRAPPLE,
+            ability->data.grapple.launchDelay +
+            ability->data.grapple.pullDuration + 0.18f);
+        return true;
+    }
+
+    if (ability->behavior == ABILITY_BEHAVIOR_MINE)
+    {
+        if (!WeaponsPlaceMine(w, idx, ability)) return false;
+        b->mobilityCooldown = ability->cooldown;
+        b->velocity = (Vector3){ 0 };
+        b->revealTimer = w.tuning->fireReveal;
+        GameEmitCharacterActionTimed(
+            w.session, idx, CHARACTER_ACTION_MINE_DEPLOY,
+            ability->data.mine.armTime + 0.27f);
         return true;
     }
 
@@ -449,6 +522,25 @@ bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
         ContentSecondaryAbility(w.content, w.session->brawlers[idx].cls);
     if (!ability || ability->behavior != ABILITY_BEHAVIOR_DASH) return false;
     return BrawlerTrySecondary(w, idx, direction);
+}
+
+bool BrawlerIsGrappling(const Brawler *b)
+{
+    return b &&
+           (b->grappleDelayTimer > 0.0f || b->grappleTimer > 0.0f);
+}
+
+void BrawlerDisplace(GameContext w, int idx, Vector3 displacement)
+{
+    if (idx < 0 || idx >= w.session->brawlerCount) return;
+    Brawler *b = &w.session->brawlers[idx];
+    if (!b->alive) return;
+    b->grappleDelayTimer = 0.0f;
+    b->grappleTimer = 0.0f;
+    b->grappleAbility = -1;
+    b->position = ArenaMoveCircle(
+        &w.session->arena, b->position,
+        displacement, BRAWLER_RADIUS).position;
 }
 
 bool BrawlerProjectileThreat(GameContext w, int idx, float horizon)
@@ -621,9 +713,7 @@ static void UpdateDash(GameContext w, int idx, float dt)
                 {
                     Vector3 push = Vector3Scale(b->dashDir,
                                                 ability->data.dash.knockback);
-                    t->position = ArenaMoveCircle(
-                        &w.session->arena, t->position, push,
-                        BRAWLER_RADIUS).position;
+                    BrawlerDisplace(w, i, push);
                 }
                 GameEmitImpact(w.session, t->position,
                                (Color){ 255, 220, 120, 255 }, 12);
@@ -677,6 +767,84 @@ static void RemoveInwardVelocity(Brawler *b, Vector3 normal)
         b->velocity = Vector3Subtract(
             b->velocity, Vector3Scale(normal, inward));
     b->velocity.y = 0.0f;
+}
+
+static void UpdateGrapple(GameContext w, int idx, float dt)
+{
+    Brawler *b = &w.session->brawlers[idx];
+    const AbilityDefinition *ability =
+        ContentAbility(w.content, b->grappleAbility);
+    if (!ability || ability->behavior != ABILITY_BEHAVIOR_GRAPPLE)
+    {
+        b->grappleDelayTimer = 0.0f;
+        b->grappleTimer = 0.0f;
+        b->grappleAbility = -1;
+        return;
+    }
+
+    b->velocity = (Vector3){ 0 };
+    Vector3 toward = Vector3Subtract(b->grappleAnchor, b->position);
+    toward.y = 0.0f;
+    if (Vector3Length(toward) > 0.001f)
+    {
+        b->aimAngle = atan2f(toward.x, toward.z);
+        b->renderYaw = AngleLerp(
+            b->renderYaw, b->aimAngle, Clamp(24.0f*dt, 0.0f, 1.0f));
+    }
+
+    if (b->grappleDelayTimer > 0.0f)
+    {
+        float before = b->grappleDelayTimer;
+        b->grappleDelayTimer =
+            fmaxf(0.0f, b->grappleDelayTimer - dt);
+        if (before > 0.0f && b->grappleDelayTimer <= 0.0f)
+        {
+            Vector3 anchor = {
+                b->grappleAnchor.x, 0.18f, b->grappleAnchor.z
+            };
+            GameEmitVfx(
+                w.session, VFX_LONGSHOT_GRAPPLE_HOOK,
+                anchor, anchor, b->aimAngle, 1.0f,
+                (Color){ 108, 238, 255, 255 });
+            GameEmitVfxAttached(
+                w.session, VFX_LONGSHOT_GRAPPLE_PULL,
+                (Vector3){ b->position.x, 1.05f, b->position.z },
+                anchor, b->aimAngle, 1.0f,
+                (Color){ 72, 224, 255, 255 },
+                idx, VFX_SOCKET_RIGHT_HAND, -1, VFX_SOCKET_NONE);
+        }
+        return;
+    }
+
+    if (b->grappleTimer <= 0.0f)
+    {
+        b->grappleAbility = -1;
+        return;
+    }
+
+    float distance = Vector3Length(toward);
+    float amount = b->grappleTimer > 0.0001f
+                 ? Clamp(dt/b->grappleTimer, 0.0f, 1.0f)
+                 : 1.0f;
+    ArenaMoveResult move = ArenaMoveCircle(
+        &w.session->arena, b->position,
+        Vector3Scale(toward, amount), BRAWLER_RADIUS);
+    b->position = move.position;
+    b->grappleTimer = fmaxf(0.0f, b->grappleTimer - dt);
+    b->bobPhase += dt*20.0f;
+
+    if (b->grappleTimer <= 0.0f || distance < 0.08f || move.collided)
+    {
+        b->grappleTimer = 0.0f;
+        b->grappleAbility = -1;
+        GameEmitVfxAttached(
+            w.session, VFX_LONGSHOT_GRAPPLE_LAND,
+            (Vector3){ b->position.x, 0.22f, b->position.z },
+            (Vector3){ b->position.x, 0.22f, b->position.z },
+            b->aimAngle, 1.0f,
+            (Color){ 108, 238, 255, 255 },
+            idx, VFX_SOCKET_LEFT_FOOT, -1, VFX_SOCKET_NONE);
+    }
 }
 
 //------------------------------------------------------------------------------------
@@ -771,6 +939,12 @@ void BrawlersUpdate(GameContext w, float dt)
         {
             b->ammo += dt/mainAbility->reloadPerAmmo;
             if (b->ammo > (float)character->maxAmmo) b->ammo = (float)character->maxAmmo;
+        }
+
+        if (BrawlerIsGrappling(b))
+        {
+            UpdateGrapple(w, i, dt);
+            continue;
         }
 
         if (b->dashTimer > 0.0f)
