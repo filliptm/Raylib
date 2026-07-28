@@ -47,9 +47,13 @@ At every size verify:
 - Controls: correct keyboard/mouse and gamepad bindings; Back restores prior focus.
 - Settings: UI scale, reduced motion, high contrast, tutorial hints, glyph mode, and
   tutorial reset all apply immediately and survive restart.
-- Match HUD: objective, vitals, ammo, secondary/super state, Scrapper Shell charge and
-  broken lockout above health, team shape cues, downed state, and action-specific
-  tutorials.
+- Match HUD: objective, secondary/super state, downed state, and action-specific
+  tutorials; no duplicate bottom-left vitals panel.
+- World bars: health values are centered inside every health bar, Scrapper charge or
+  broken lockout is centered inside its shield bar, and the player's ammo remains below
+  the body-anchored health bar.
+- Team readability: the player and allied bots remain green at every health level,
+  enemies remain red at every health level, and ally/enemy shape cues remain visible.
 - Result: explicit Continue works; timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay
   commands, provenance, Restore Project, Save All, and Preview / UI framing.
@@ -102,8 +106,8 @@ screens:
 - Imported animation selection, grass, aim previews, Scrapper saw/Shell visuals, rain,
   Resonance, and result overlays remain aligned with the world.
 - Scrapper's procedural saw is readable on both legs; the full spherical Shell cage,
-  low-charge instability, start/hit/collapse/restore recipes, world/HUD charge bars, and
-  braced pose are visible without rectangular outline artifacts.
+  low-charge instability, start/hit/collapse/restore recipes, numeric world charge bar,
+  and braced pose are visible without rectangular outline artifacts.
 
 Record the sizes, input devices, kits, and fallback cases actually exercised when handing
 off a change. Do not report this graphical matrix as complete based only on headless

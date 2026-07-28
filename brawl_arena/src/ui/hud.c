@@ -24,11 +24,15 @@ static Color CueColor(const App *w, Color base)
 {
     return UiThemeHighContrast(base, w->uiPreferences.highContrast);
 }
-static void CenteredWorldText(const char *text, int centerX, int y,
-                              UiTextRole role, Color color)
+
+static void DrawBarText(Rectangle bounds, const char *text, Color color)
 {
-    Vector2 size = UiMeasureText(role, text);
-    UiDrawTextShadow(role, text, (Vector2){ centerX - size.x*0.5f, (float)y }, color);
+    Rectangle shadow = bounds;
+    shadow.x += UiScale(1);
+    shadow.y += UiScale(1);
+    UiDrawTextFit(UI_TEXT_CAPTION, text, shadow, UI_ALIGN_CENTER,
+                  UiSystemActive()->theme->shadow);
+    UiDrawTextFit(UI_TEXT_CAPTION, text, bounds, UI_ALIGN_CENTER, color);
 }
 
 static void DrawAmmo(Rectangle bounds, float ammo, int maxAmmo, Color fill)
@@ -75,30 +79,27 @@ void HudDrawBars(App *w)
             screen.y < -80 || screen.y > GetScreenHeight() + 80) continue;
 
         bool mine = b->isPlayer;
-        float width = UiScale(mine ? 68.0f : 50.0f);
-        float height = UiScale(mine ? 8.0f : 6.0f);
+        float width = UiScale(mine ? 76.0f : 62.0f);
+        float height = UiScale(mine ? 16.0f : 14.0f);
         Rectangle bar = { screen.x - width*0.5f, screen.y, width, height };
         float health = b->maxHealth > 0 ? (float)b->health/b->maxHealth : 0.0f;
         const AbilityDefinition *shield =
             ContentSecondaryAbility(&w->content, b->cls);
         bool hasShield =
             shield && shield->behavior == ABILITY_BEHAVIOR_SHIELD;
-        Color team = b->team == TEAM_PLAYER ? CueColor(w, t->ally) : CueColor(w, t->enemy);
-        if (health < 0.30f) team = t->enemy;
-
-        char number[24];
-        snprintf(number, sizeof(number), "%d", b->health);
-        CenteredWorldText(number, (int)screen.x,
-                          (int)(screen.y - UiScale(hasShield ? 31 : 20)),
-                          UI_TEXT_CAPTION, mine ? t->paper : t->mist);
+        // Health color communicates allegiance, never remaining-health danger.
+        Color team = HudHealthBarColor(
+            t, b->team, w->uiPreferences.highContrast);
 
         if (hasShield)
         {
             float shieldRatio = shield->data.shield.capacity > 0
                               ? b->shieldCharge/
                                 shield->data.shield.capacity : 0.0f;
+            float shellHeight = UiScale(mine ? 14.0f : 12.0f);
             Rectangle shellBar = {
-                bar.x, bar.y - UiScale(10), bar.width, UiScale(5)
+                bar.x, bar.y - shellHeight - UiScale(4),
+                bar.width, shellHeight
             };
             DrawRectangleRec(
                 (Rectangle){ shellBar.x - UiScale(1),
@@ -113,16 +114,16 @@ void HudDrawBars(App *w)
                 shellFill,
                 b->shieldBrokenTimer > 0.0f
                     ? t->enemy : CueColor(w, t->ion));
+            char shieldPoints[32];
             if (b->shieldBrokenTimer > 0.0f)
             {
-                char lockout[24];
-                snprintf(lockout, sizeof(lockout), "BROKEN %.1f",
+                snprintf(shieldPoints, sizeof(shieldPoints), "0 // %.1fs",
                          b->shieldBrokenTimer);
-                CenteredWorldText(
-                    lockout, (int)screen.x,
-                    (int)(shellBar.y - UiScale(12)),
-                    UI_TEXT_CAPTION, t->enemy);
             }
+            else
+                snprintf(shieldPoints, sizeof(shieldPoints), "%.0f",
+                         b->shieldCharge);
+            DrawBarText(shellBar, shieldPoints, t->paper);
         }
 
         DrawRectangleRec((Rectangle){ bar.x - UiScale(2), bar.y - UiScale(2),
@@ -132,6 +133,9 @@ void HudDrawBars(App *w)
         Rectangle healthFill = bar;
         healthFill.width *= Clamp(health, 0.0f, 1.0f);
         DrawRectangleRec(healthFill, team);
+        char healthPoints[24];
+        snprintf(healthPoints, sizeof(healthPoints), "%d", b->health);
+        DrawBarText(bar, healthPoints, t->paper);
 
         // Shape markers make team identity readable without relying on hue.
         if (b->team == TEAM_PLAYER)
@@ -217,25 +221,6 @@ static void DrawObjective(App *w)
         UiDrawTextAligned(UI_TEXT_DATA, state, UiRefRect(468, 56, 344, 42),
                           UI_ALIGN_CENTER, t->paper);
     }
-}
-
-static void DrawVitals(App *w, const Brawler *player)
-{
-    const UiTheme *t = UiSystemActive()->theme;
-    const CharacterDefinition *character = ContentCharacter(&w->content, player->cls);
-    Rectangle panel = UiRefRect(24, 642, 360, 134);
-    UiDrawFeaturePanel(panel, t->deck, t->line, true);
-    UiDrawSignalRail(panel, CueColor(w, t->ally), false);
-    UiDrawText(UI_TEXT_CAPTION, character->displayName, UiRefPoint(48, 654), t->ally);
-    char health[64];
-    snprintf(health, sizeof(health), "%d / %d", player->health, player->maxHealth);
-    UiDrawText(UI_TEXT_HEADING, health, UiRefPoint(48, 676), t->paper);
-    UiDrawProgress(UiRefRect(48, 716, 310, 14),
-                   player->maxHealth > 0 ? (float)player->health/player->maxHealth : 0,
-                   CueColor(w, t->ally), false, 0);
-    DrawAmmo(UiRefRect(48, 744, 310, 10), player->ammo, character->maxAmmo, t->ion);
-    UiDrawText(UI_TEXT_CAPTION, "INTEGRITY", UiRefPoint(278, 682), t->muted);
-    UiDrawText(UI_TEXT_CAPTION, "AMMO", UiRefPoint(305, 758), t->muted);
 }
 
 static void DrawAbilityTile(Rectangle bounds, const char *eyebrow, const char *name,
@@ -449,7 +434,6 @@ void HudDrawPanel(App *w)
     if (w->session.brawlerCount <= 0) return;
     Brawler *player = &w->session.brawlers[w->session.playerIdx];
     DrawObjective(w);
-    DrawVitals(w, player);
     DrawAbilities(w, player);
     DrawTutorial(w, player);
 

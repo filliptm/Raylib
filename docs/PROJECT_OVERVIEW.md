@@ -910,6 +910,10 @@ The presentation layer owns:
 - Opaque nine-slice Kenney interface hardware and two transparent OpenGameArt-derived
   orbital/radar motifs, tinted through Helios tokens and independently replaceable by
   code-drawn fallbacks.
+- Body-anchored health bars with their point values centered inside: the player team
+  stays green and opponents stay red at every health level, reinforced by distinct
+  ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
+  bar, and the redundant bottom-left vitals panel is not drawn.
 - External station-map rendering aligned with runtime collision.
 - Generated fallback floor, wall, crate, bush, metal, cloth, grass, flat, and glow
   textures.

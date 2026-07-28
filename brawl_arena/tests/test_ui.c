@@ -1,5 +1,6 @@
 #include "ui_system.h"
 #include "content_catalog.h"
+#include "hud.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -10,6 +11,11 @@
 static bool Near(float a, float b)
 {
     return fabsf(a - b) < 0.001f;
+}
+
+static bool SameColor(Color a, Color b)
+{
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
 int main(void)
@@ -68,6 +74,15 @@ int main(void)
           "primary text contrast fell below WCAG AA");
     CHECK(UiThemeContrastRatio(theme->mist, theme->deck) >= 3.0f,
           "secondary text contrast fell below the approved floor");
+    CHECK(SameColor(HudHealthBarColor(theme, TEAM_PLAYER, false), theme->ally),
+          "player-team health bars lost the stable ally color");
+    CHECK(SameColor(HudHealthBarColor(theme, TEAM_ENEMY, false), theme->enemy),
+          "enemy health bars lost the stable enemy color");
+    Color contrastedAlly = HudHealthBarColor(theme, TEAM_PLAYER, true);
+    Color contrastedEnemy = HudHealthBarColor(theme, TEAM_ENEMY, true);
+    CHECK(contrastedAlly.g > contrastedAlly.r &&
+          contrastedEnemy.r > contrastedEnemy.g,
+          "high contrast mode obscured health-bar allegiance");
 
     NPatchInfo patch = UiSkinNinePatchInfo(384, 128, 24, 20, 24, 20);
     CHECK(Near(patch.source.width, 384.0f) && Near(patch.source.height, 128.0f),
@@ -110,6 +125,6 @@ int main(void)
           Near(catalog.showcase.verticalFov, 40.0f),
           "shared showcase camera changed");
 
-    puts("UI layout, skin, focus, motion, contrast, and shared showcase passed");
+    puts("UI layout, skin, focus, motion, team bars, and shared showcase passed");
     return 0;
 }

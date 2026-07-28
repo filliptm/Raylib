@@ -205,8 +205,8 @@ UI skin textures never enter deterministic or world-presentation state.
 The player-facing shell is split by responsibility:
 
 - `menu.c`: launch deck, roster candidate/commit behavior, Controls and Settings.
-- `hud.c`: objective/vitals/ability broadcast, action-retired tutorials, downed state,
-  and explicit result Continue.
+- `hud.c`: body-anchored numeric health/shield bars and player ammo, objective/ability
+  broadcast, action-retired tutorials, downed state, and explicit result Continue.
 - `menu_scene.c`: the 3D menu environment and character preview.
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
   body, provenance header, and persistent save/reset footer.

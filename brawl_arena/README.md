@@ -46,6 +46,12 @@ icons remain authoritative. Resources load once through `UiSystem`, and every te
 primitive retains the previous geometry fallback if a file is unavailable. Source,
 license, curated-runtime, and derivative records live together under `resources/ui/`.
 
+During a match, health and Scrapper shield points are centered inside the bars above
+each brawler. The player and allied bots always use green health fills; opponents always
+use red, even at low health, with ally/enemy shape icons retained as a second cue. The
+player's ammo pips remain beneath the body-anchored bar. There is no duplicate
+bottom-left health/ammo panel.
+
 `ESC` closes the nearest overlay or command center first, then steps back a screen:
 roster to menu, match to menu, and menu to quit. raylib's default escape-to-close behavior
 is disabled so this navigation remains explicit.

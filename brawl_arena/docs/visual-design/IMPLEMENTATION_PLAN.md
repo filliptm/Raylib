@@ -746,17 +746,20 @@ Layer order:
 
 1. World-adjacent health/team/gem indicators.
 2. Top-center objective broadcast.
-3. Bottom-left player vitals and ammo.
-4. Bottom-right mobility/super ability dock.
-5. Contextual tutorial chip.
-6. Downed/result/modal overlays.
-7. Command center and transition fade.
+3. Bottom-right secondary/super ability dock.
+4. Contextual tutorial chip.
+5. Downed/result/modal overlays.
+6. Command center and transition fade.
 
 Requirements:
 
 - Objective state remains stable in one top-center container.
 - Team totals use position, icon, label, and color.
-- Personal vitals do not duplicate every world-bar detail.
+- Health and shield points are centered inside their body-anchored bars.
+- Player-team health stays green and enemy health stays red at every health level;
+  shape icons preserve a non-color team cue.
+- Player ammo remains below the world bar; there is no duplicate frame-edge vitals
+  panel.
 - Ability tiles expose unavailable, cooldown, ready, aiming, and active states.
 - Super readiness uses gold plus text/border, not pulse alone.
 - HUD does not shake, scale, or translate in response to attacks.
@@ -997,7 +1000,8 @@ Estimate: 3–5 focused days
 Work:
 
 - Migrate overhead bars and team cues.
-- Implement objective broadcast, vitals, ammo, and ability dock.
+- Implement objective broadcast, numeric body-anchored health/shield bars, player ammo,
+  and ability dock.
 - Implement action-based tutorial persistence.
 - Implement downed and result compositions.
 - Consolidate motion cadence and reduced-motion variants.
@@ -1228,6 +1232,10 @@ The Helios Broadcast integration is done when all of the following are true:
 
 - Objective, survival, ability, tutorial, downed, and result states have distinct stable
   regions.
+- Numeric survival state lives inside body-anchored bars; no duplicate bottom-left
+  vitals panel remains.
+- Health-bar color communicates allegiance consistently rather than remaining-health
+  danger.
 - Team and readiness information does not rely on color alone.
 - Tutorials retire by demonstrated action.
 - Results expose Continue and retain a safe timeout.

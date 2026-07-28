@@ -1647,42 +1647,6 @@ h3 {
     font-size: clamp(5px, 0.62cqw, 9px);
 }
 
-.player-vitals {
-    position: absolute;
-    left: 3%;
-    bottom: 4%;
-    width: 24%;
-    padding: clamp(8px, 1.2cqw, 18px);
-}
-
-.vitals-head {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    font-family: var(--font-data);
-    font-size: clamp(7px, 0.82cqw, 12px);
-}
-
-.vitals-head strong {
-    color: var(--paper-100);
-    font-family: var(--font-display);
-    font-size: clamp(10px, 1.45cqw, 20px);
-    text-transform: uppercase;
-}
-
-.ammo-row {
-    display: flex;
-    gap: 4px;
-    margin-top: clamp(6px, 0.8cqw, 11px);
-}
-
-.ammo-row span {
-    flex: 1;
-    height: clamp(4px, 0.55cqw, 8px);
-    background: var(--ion-400);
-    transform: skewX(-18deg);
-}
-
 .command-shell {
     display: grid;
     grid-template-columns: 150px minmax(0, 1fr);
