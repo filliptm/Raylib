@@ -80,7 +80,7 @@ void HudDrawBars(App *w)
 
         bool mine = b->isPlayer;
         float width = UiScale(mine ? 76.0f : 62.0f);
-        float height = UiScale(mine ? 16.0f : 14.0f);
+        float height = UiScale(mine ? 12.0f : 10.5f);
         Rectangle bar = { screen.x - width*0.5f, screen.y, width, height };
         float health = b->maxHealth > 0 ? (float)b->health/b->maxHealth : 0.0f;
         const AbilityDefinition *shield =
