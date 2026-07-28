@@ -1,15 +1,27 @@
 #!/bin/sh
 set -eu
 
+# Exit code 1 from rg means "no matches" (a pass); anything else — including a
+# missing binary — must fail the build instead of silently skipping every check.
+command -v rg >/dev/null 2>&1 || {
+    printf '%s\n' 'Architecture check failed: ripgrep (rg) is required but not installed.'
+    exit 1
+}
+
 fail_if_found()
 {
     pattern=$1
     paths=$2
     message=$3
 
-    if matches=$(rg -n "$pattern" $paths); then
+    status=0
+    matches=$(rg -n "$pattern" $paths) || status=$?
+    if [ "$status" -eq 0 ]; then
         printf '%s\n' "Architecture check failed: $message"
         printf '%s\n' "$matches"
+        exit 1
+    elif [ "$status" -ne 1 ]; then
+        printf '%s\n' "Architecture check failed: rg exited with status $status."
         exit 1
     fi
 }
@@ -39,11 +51,16 @@ fail_if_found \
 # rlgl batches billboards and immediate geometry. Direct depth-mask changes do not flush
 # that batch, so transparent quads can accidentally write rectangular depth silhouettes
 # for the post-process outline. render_state.h is the single safe owner of these calls.
-if matches=$(rg -n '\brl(Enable|Disable)DepthMask\(' src/presentation \
-        -g '*.[ch]' -g '!render_state.h'); then
+status=0
+matches=$(rg -n '\brl(Enable|Disable)DepthMask\(' src/presentation \
+        -g '*.[ch]' -g '!render_state.h') || status=$?
+if [ "$status" -eq 0 ]; then
     printf '%s\n' \
         'Architecture check failed: use RenderBeginNoDepthWrite/RenderEndNoDepthWrite.'
     printf '%s\n' "$matches"
+    exit 1
+elif [ "$status" -ne 1 ]; then
+    printf '%s\n' "Architecture check failed: rg exited with status $status."
     exit 1
 fi
 

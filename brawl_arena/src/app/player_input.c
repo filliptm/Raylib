@@ -106,10 +106,10 @@ PlayerInput PlayerCaptureInput(const App *w)
     for (int classId = 0; classId < CLASS_COUNT; classId++)
         if (IsKeyPressed(KEY_ONE + classId)) input.selectedClass = classId;
 
-    input.attackPressed = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-    input.attackReleased = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
-    input.superHeld = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
-    input.autoAttackPressed = IsKeyPressed(KEY_SPACE);
+    input.attackPressed |= IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    input.attackReleased |= IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+    input.superHeld |= IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+    input.autoAttackPressed |= IsKeyPressed(KEY_SPACE);
     input.secondaryPressed |= IsKeyPressed(KEY_LEFT_SHIFT) ||
                               IsKeyPressed(KEY_RIGHT_SHIFT);
     input.secondaryHeld |= IsKeyDown(KEY_LEFT_SHIFT) ||

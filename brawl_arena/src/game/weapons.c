@@ -204,7 +204,8 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
             field->life = ability->data.area.duration;
             field->maxLife = ability->data.area.duration;
             field->tickTimer = 0.0f; // the first small pulse lands immediately
-            field->tickRate = ability->data.area.tickRate;
+            // A non-positive tick rate would never advance the catch-up pulse loop.
+            field->tickRate = fmaxf(ability->data.area.tickRate, 0.05f);
             field->damage = ability->damage;
             field->healing = ability->healing;
             field->team = b->team;
