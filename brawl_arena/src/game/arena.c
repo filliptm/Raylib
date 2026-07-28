@@ -264,6 +264,9 @@ ArenaMoveResult ArenaMoveCircle(const Arena *a, Vector3 start, Vector3 displacem
     return result;
 }
 
+// Exact DDA walk over every tile the sight line crosses. The previous fixed-interval
+// sampling produced zero samples at short range and could step across thin corner
+// clips, letting close-quarters shots see through wall corners.
 bool ArenaLineOfSight(const Arena *a, Vector3 from, Vector3 to)
 {
     float dx = to.x - from.x;
@@ -271,12 +274,34 @@ bool ArenaLineOfSight(const Arena *a, Vector3 from, Vector3 to)
     float distance = sqrtf(dx*dx + dz*dz);
     if (distance < 0.001f) return true;
 
-    float step = a->tileSize*0.25f;
-    int steps = (int)(distance/step);
-    for (int i = 1; i < steps; i++)
+    int tx = ArenaTileX(a, from.x), tz = ArenaTileZ(a, from.z);
+    int endX = ArenaTileX(a, to.x), endZ = ArenaTileZ(a, to.z);
+    if (tx == endX && tz == endZ) return true;
+
+    float dirX = dx/distance, dirZ = dz/distance;
+    int stepX = (dirX > 0.0f) ? 1 : -1;
+    int stepZ = (dirZ > 0.0f) ? 1 : -1;
+
+    // Segment distance between successive x/z tile-boundary crossings, and to the
+    // first crossing from the start point.
+    float tDeltaX = (dirX != 0.0f) ? a->tileSize/fabsf(dirX) : INFINITY;
+    float tDeltaZ = (dirZ != 0.0f) ? a->tileSize/fabsf(dirZ) : INFINITY;
+    float boundaryX = (tx + (stepX > 0 ? 1 : 0) - a->width*0.5f)*a->tileSize;
+    float boundaryZ = (tz + (stepZ > 0 ? 1 : 0) - a->height*0.5f)*a->tileSize;
+    float tMaxX = (dirX != 0.0f) ? (boundaryX - from.x)/dirX : INFINITY;
+    float tMaxZ = (dirZ != 0.0f) ? (boundaryZ - from.z)/dirZ : INFINITY;
+
+    // Neither endpoint tile blocks its own sight line; only tiles strictly between
+    // them do. The distance guard ends the walk if float error keeps the indices
+    // from landing exactly on the end tile.
+    while ((tx != endX || tz != endZ) && fminf(tMaxX, tMaxZ) <= distance)
     {
-        float amount = (float)i/(float)steps;
-        if (ArenaSolidAt(a, from.x + dx*amount, from.z + dz*amount)) return false;
+        if (tMaxX < tMaxZ) { tx += stepX; tMaxX += tDeltaX; }
+        else               { tz += stepZ; tMaxZ += tDeltaZ; }
+        if (tx == endX && tz == endZ) break;
+        if (!ArenaInBounds(a, tx, tz)) return false;
+        TileType type = a->tiles[tz][tx].type;
+        if (type == TILE_WALL || type == TILE_CRATE) return false;
     }
     return true;
 }

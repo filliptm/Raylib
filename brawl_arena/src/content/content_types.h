@@ -224,6 +224,7 @@ typedef struct Tuning {
     float healthRegenRatio;
     float playerRespawn;
     float enemyRespawn;
+    float classSwapLockout;
     float matchResultHold;
     float timeScale;
     int crateHealth;

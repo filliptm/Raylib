@@ -3,6 +3,7 @@
 #include "arena.h"
 #include "brawler.h"
 #include "gems.h"
+#include "game_events.h"
 #include "content_catalog.h"
 
 static BrawlerClass BotKitFor(const App *app, int slot)
@@ -30,6 +31,9 @@ static void SetBotCount(App *app, int count)
     }
     else
     {
+        // Despawned bots put their gems back on the floor so team totals stay honest.
+        for (int i = count + 1; i <= current; i++)
+            GemsDropFrom(game, i);
         for (int i = 0; i < MAX_PROJECTILES; i++)
             if (app->session.projectiles[i].active && app->session.projectiles[i].owner > count)
                 app->session.projectiles[i].active = false;
@@ -65,17 +69,40 @@ static bool SetPlayerClass(App *app, int classId)
 
     int index = app->session.playerIdx;
     Brawler *player = &app->session.brawlers[index];
-    Vector3 position = player->alive
-                     ? player->position
-                     : ArenaSpawnFor(&app->session.arena, TEAM_PLAYER, player->spawnSlot);
+    if (player->cls == (BrawlerClass)classId) return true;
+
+    // A dead brawler only needs the class recorded; the pending respawn rebuilds
+    // every derived stat, and swapping must not cancel the respawn timer.
+    if (!player->alive)
+    {
+        player->cls = (BrawlerClass)classId;
+        return true;
+    }
+
+    // Swapping kit is a loadout change, not a death: super and gems carry over, and
+    // health carries as a ratio so the swap can never act as an instant heal. Recent
+    // combat blocks it outside the sandbox for the same reason.
+    if (!app->session.sandbox &&
+        app->session.time - player->lastCombatTime < app->tune.classSwapLockout)
+        return false;
+
+    Vector3 position = player->position;
     float superCharge = player->superCharge;
+    float healthRatio = player->maxHealth > 0
+                      ? (float)player->health/(float)player->maxHealth : 1.0f;
     int gems = player->gems;
     int spawnSlot = player->spawnSlot;
     BrawlerSpawn(AppGameContext(app), index, TEAM_PLAYER,
                  (BrawlerClass)classId, position, true);
-    app->session.brawlers[index].superCharge = superCharge;
-    app->session.brawlers[index].gems = gems;
-    app->session.brawlers[index].spawnSlot = spawnSlot;
+    Brawler *swapped = &app->session.brawlers[index];
+    swapped->superCharge = superCharge;
+    swapped->gems = gems;
+    swapped->spawnSlot = spawnSlot;
+    swapped->health = (int)(swapped->maxHealth*healthRatio);
+    if (swapped->health < 1) swapped->health = 1;
+    GameEmitFloatText(&app->session, position,
+                      ContentCharacter(&app->content, (BrawlerClass)classId)->displayName,
+                      (Color){ 255, 255, 255, 255 });
     return true;
 }
 
@@ -117,11 +144,11 @@ bool GameCommandExecute(App *app, GameCommand command)
             RespawnBots(app);
             return true;
         case GAME_COMMAND_KILL_BOTS:
+            // A debug wipe has no attacker: it must not bank KOs or award super.
             for (int i = 1; i < app->session.brawlerCount; i++)
                 if (app->session.brawlers[i].alive)
                     BrawlerApplyDamage(game, i, app->session.brawlers[i].health,
-                                       app->session.playerIdx,
-                                       app->session.brawlers[i].position);
+                                       -1, app->session.brawlers[i].position);
             return true;
         case GAME_COMMAND_HEAL_BOTS:
             for (int i = 1; i < app->session.brawlerCount; i++)

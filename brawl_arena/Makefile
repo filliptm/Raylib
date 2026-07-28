@@ -111,9 +111,9 @@ $(ARENA_TEST_TARGET): tests/test_arena.c $(OBJ_DIR)/game/arena.o $(OBJ_DIR)/cont
 		$(OBJ_DIR)/game/arena.o $(OBJ_DIR)/content/map_content.o \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
-$(GAMEPLAY_TEST_TARGET): tests/test_gameplay.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o
+$(GAMEPLAY_TEST_TARGET): tests/test_gameplay.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o $(OBJ_DIR)/app/game_commands.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_gameplay.c \
-		$(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o \
+		$(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o $(OBJ_DIR)/app/game_commands.o \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(REGEN_TEST_TARGET): tests/test_regeneration.c $(GAME_CORE_OBJECTS)

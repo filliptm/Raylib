@@ -161,7 +161,7 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         }
 
         char buf[16];
-        snprintf(buf, sizeof(buf), "%d", damage);
+        snprintf(buf, sizeof(buf), "%d", result.healthRemoved);
         GameEmitFloatText(
             w.session, hitPos, buf,
             (attacker == w.session->playerIdx)
@@ -247,7 +247,15 @@ void BrawlerApplyPulseStatus(GameContext w, int idx, Team sourceTeam, int source
         }
         if (!status && !b->statuses[i].active) status = &b->statuses[i];
     }
-    if (!status) status = &b->statuses[0];
+    if (!status)
+    {
+        // Every slot is busy with another source: evict the effect closest to expiry
+        // instead of always clobbering slot 0.
+        status = &b->statuses[0];
+        for (int i = 1; i < MAX_STATUS_EFFECTS; i++)
+            if (b->statuses[i].remaining < status->remaining)
+                status = &b->statuses[i];
+    }
     *status = (StatusEffect){
         .remaining = duration,
         .tickTimer = tickRate,

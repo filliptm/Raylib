@@ -119,7 +119,8 @@ static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int s
     else if (ability->healing > 0)
         snprintf(buffer, size, "%d damage to hostiles // %d healing to allies",
                  ability->damage, ability->healing);
-    else if (ability->data.projectile.pellets > 1)
+    else if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE &&
+             ability->data.projectile.pellets > 1)
         snprintf(buffer, size, "%d projectiles // %.0f degree spread",
                  ability->data.projectile.pellets,
                  ability->data.projectile.spreadDegrees);

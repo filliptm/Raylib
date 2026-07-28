@@ -368,8 +368,9 @@ static void DrawTutorial(const App *w, const Brawler *player)
                   UI_ALIGN_LEFT, t->paper);
 }
 
-static void DrawDowned(const Brawler *player)
+static void DrawDowned(const Brawler *player, float respawnTotal)
 {
+    if (respawnTotal < 0.1f) respawnTotal = 0.1f;
     const UiTheme *t = UiSystemActive()->theme;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){ 30, 5, 10, 110 });
@@ -383,7 +384,7 @@ static void DrawDowned(const Brawler *player)
     UiDrawTextAligned(UI_TEXT_DATA, timer, UiRefRect(438, 396, 404, 42),
                       UI_ALIGN_CENTER, t->paper);
     UiDrawProgress(UiRefRect(474, 454, 332, 10),
-                   1.0f - Clamp(player->respawnTimer/5.0f, 0.0f, 1.0f),
+                   1.0f - Clamp(player->respawnTimer/respawnTotal, 0.0f, 1.0f),
                    t->safety, false, 0);
 }
 
@@ -437,7 +438,7 @@ void HudDrawPanel(App *w)
     DrawAbilities(w, player);
     DrawTutorial(w, player);
 
-    if (!player->alive) DrawDowned(player);
+    if (!player->alive) DrawDowned(player, w->tune.playerRespawn);
     if (w->tune.gemGrab && !w->session.sandbox &&
         w->session.match.phase == MATCH_OVER)
         DrawResult(w);

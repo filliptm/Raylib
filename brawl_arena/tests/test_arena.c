@@ -160,6 +160,27 @@ static bool CheckCircleMovement(void)
     return true;
 }
 
+static bool CheckLineOfSight(void)
+{
+    Arena arena = CollisionFixture();
+
+    CHECK(!ArenaLineOfSight(&arena, (Vector3){ 0.0f, 0.0f, -2.5f },
+                            (Vector3){ 0.0f, 0.0f, 2.5f }),
+          "straight sight line ignored the wall tile");
+    // Shorter than half a tile: the old fixed-interval sampling produced zero
+    // samples here and reported the corner as visible.
+    CHECK(!ArenaLineOfSight(&arena, (Vector3){ 1.2f, 0.0f, 0.5f },
+                            (Vector3){ 0.5f, 0.0f, 1.2f }),
+          "short diagonal saw through the wall corner");
+    CHECK(ArenaLineOfSight(&arena, (Vector3){ 1.4f, 0.0f, 0.8f },
+                           (Vector3){ 0.8f, 0.0f, 1.4f }),
+          "clear diagonal beside the corner was blocked");
+    CHECK(ArenaLineOfSight(&arena, (Vector3){ -2.5f, 0.0f, -2.5f },
+                           (Vector3){ 2.5f, 0.0f, -2.5f }),
+          "clear lane was blocked");
+    return true;
+}
+
 static bool RunTests(void)
 {
     ContentCatalog catalog = { 0 };
@@ -175,6 +196,7 @@ static bool RunTests(void)
     CHECK(CheckRuntimeMap(helios, 3, 3, true), "Helios-9 runtime validation failed");
     CHECK(CheckRuntimeMap(training, 2, 2, false), "training fixture validation failed");
     CHECK(CheckCircleMovement(), "circle movement validation failed");
+    CHECK(CheckLineOfSight(), "line-of-sight validation failed");
 
     return true;
 }

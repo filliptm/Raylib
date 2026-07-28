@@ -118,7 +118,14 @@ static void SetStatus(App *w, const char *message)
 static int AddField(Field *fields, int count, const char *key, FieldType type,
                     FieldScope scope, void *ptr, double minimum, double maximum, int kit)
 {
-    if (count >= MAX_FIELDS) return count;
+    if (count >= MAX_FIELDS)
+    {
+        // A silently dropped registration surfaces later as a baffling
+        // "unknown project key" load failure; name the real cause instead.
+        fprintf(stderr, "config: field registry overflow, %s dropped (raise MAX_FIELDS)\n",
+                key);
+        return count;
+    }
     Field *field = &fields[count++];
     *field = (Field){ 0 };
     snprintf(field->key, sizeof(field->key), "%s", key);
@@ -157,6 +164,7 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
               t->healthRegenRatio, 0.0, 1.0);
     ADD_FLOAT("gameplay.player_respawn", SCOPE_PROJECT, t->playerRespawn, 0.1, 30.0);
     ADD_FLOAT("gameplay.enemy_respawn", SCOPE_PROJECT, t->enemyRespawn, 0.1, 30.0);
+    ADD_FLOAT("gameplay.class_swap_lockout", SCOPE_PROJECT, t->classSwapLockout, 0.0, 30.0);
     ADD_FLOAT("gameplay.result_hold_duration", SCOPE_PROJECT, t->matchResultHold, 0.5, 30.0);
     ADD_FLOAT("gameplay.time_scale", SCOPE_PROJECT, t->timeScale, 0.01, 4.0);
     ADD_FLOAT("gameplay.super_gain_multiplier", SCOPE_PROJECT, t->superMult, 0.0, 10.0);
@@ -421,10 +429,11 @@ static bool ValidateValues(const Tuning *t,
     int count = BuildFields((Tuning *)t, &preferences,
                             (CharacterShowcaseDefinition *)showcase,
                             (WeaponDef *)kits, fields);
+    // Every scope is range-checked: legacy import registers profile/local members
+    // with unlimited ranges, so an out-of-range selected_kit or bot_kit would
+    // otherwise pass straight through to code that indexes catalogs with it.
     for (int i = 0; i < count; i++)
     {
-        if (fields[i].scope != SCOPE_PROJECT) continue;
-
         double value = 0.0;
         switch (fields[i].type)
         {
@@ -646,10 +655,14 @@ static bool IsV2ObsoleteShieldField(const char *key)
             strcmp(suffix, "speed") == 0);
 }
 
+// requireAllKeys keeps the explicit validate-config entry point strict about a
+// project file that lacks newly added keys, while the runtime load path treats the
+// same situation as "use the compiled default and say so" instead of dropping the
+// whole checkout to recovery defaults.
 static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preferences,
                           CharacterShowcaseDefinition *showcase, WeaponDef *kits,
                           FieldScope allowedScope, bool projectFile,
-                          char *message, int messageSize)
+                          bool requireAllKeys, char *message, int messageSize)
 {
     FILE *file = fopen(path, "r");
     if (!file)
@@ -856,14 +869,31 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
 
     if (projectFile && declaredVersion == CONFIG_FORMAT_VERSION)
     {
+        int missing = 0;
+        const char *firstMissing = NULL;
         for (int i = 0; i < count; i++)
         {
             if (fields[i].scope == SCOPE_PROJECT && !fields[i].seen)
             {
-                snprintf(message, messageSize, "%s is missing required key %s",
-                         path, fields[i].key);
-                return false;
+                if (requireAllKeys)
+                {
+                    snprintf(message, messageSize, "%s is missing required key %s",
+                             path, fields[i].key);
+                    return false;
+                }
+                missing++;
+                if (!firstMissing) firstMissing = fields[i].key;
             }
+        }
+        if (missing > 0)
+        {
+            char notice[160];
+            snprintf(notice, sizeof(notice),
+                     "%d new project key(s) defaulted (first: %s); re-save to update %s",
+                     missing, firstMissing, path);
+            if (!ValidateValues(t, showcase, kits, message, messageSize)) return false;
+            snprintf(message, messageSize, "%s", notice);
+            return true;
         }
     }
 
@@ -1200,10 +1230,15 @@ bool ConfigInitialize(App *w)
     memcpy(candidateWeapons, w->content.weapons, sizeof(candidateWeapons));
 
     char message[160];
+    message[0] = '\0';
+    char projectNotice[160];
+    projectNotice[0] = '\0';
     UiPreferences candidatePreferences = w->uiPreferences;
     bool projectOk = LoadTypedFile(ProjectPath(), &candidateTuning, &candidatePreferences,
                                    &candidateShowcase, candidateWeapons,
-                                   SCOPE_PROJECT, true, message, sizeof(message));
+                                   SCOPE_PROJECT, true, false, message, sizeof(message));
+    if (projectOk && message[0])
+        snprintf(projectNotice, sizeof(projectNotice), "%s", message);
     if (!projectOk)
     {
         w->config.projectTuning = w->tune;
@@ -1236,7 +1271,7 @@ bool ConfigInitialize(App *w)
         UiPreferences localPreferences = w->uiPreferences;
         if (LoadTypedFile(LocalPath(), &localTuning, &localPreferences,
                           &localShowcase, localWeapons,
-                          SCOPE_LOCAL, false, message, sizeof(message)))
+                          SCOPE_LOCAL, false, false, message, sizeof(message)))
         {
             w->tune = localTuning;
             w->content.showcase = localShowcase;
@@ -1263,6 +1298,18 @@ bool ConfigInitialize(App *w)
                 localLoaded = true;
                 SaveLocalDraft(w);
                 SaveProfile(w);
+
+                // The default legacy file is retired after a successful one-time
+                // import so it can never silently shadow tracked project truth
+                // again. Explicit BRAWL_LEGACY_TUNING paths (tests, tooling) are
+                // left untouched.
+                const char *explicitLegacy = getenv("BRAWL_LEGACY_TUNING");
+                if (!explicitLegacy || !explicitLegacy[0])
+                {
+                    char retired[512];
+                    snprintf(retired, sizeof(retired), "%s.imported", legacyPath);
+                    rename(legacyPath, retired);
+                }
             }
             else { SetStatus(w, message); overlayError = true; }
         }
@@ -1277,7 +1324,7 @@ bool ConfigInitialize(App *w)
         UiPreferences profilePreferences = w->uiPreferences;
         if (LoadTypedFile(ProfilePath(), &profileTuning, &profilePreferences,
                           &unchangedShowcase, unchangedWeapons,
-                          SCOPE_PROFILE, false, message, sizeof(message)))
+                          SCOPE_PROFILE, false, false, message, sizeof(message)))
         {
             w->tune = profileTuning;
             w->uiPreferences = profilePreferences;
@@ -1291,7 +1338,9 @@ bool ConfigInitialize(App *w)
         // generic "loaded" status. The rejected overlay never touched live values.
     }
     else if (w->config.legacyImported)
-        SetStatus(w, "Imported legacy tuning into the local draft; original file preserved.");
+        SetStatus(w, "Imported legacy tuning into the local draft; original retired as .imported.");
+    else if (projectNotice[0])
+        SetStatus(w, projectNotice);
     else if (localLoaded && ConfigProjectOverrideCount(w) > 0)
         SetStatus(w, "Project defaults loaded with local draft overrides.");
     else
@@ -1476,5 +1525,5 @@ bool ConfigValidateProjectFile(const char *path, char *message, int messageSize)
     UiPreferences preferences = { .scale = 1.0f };
     return LoadTypedFile(path, &tuning, &preferences,
                          &catalog.showcase, catalog.weapons,
-                         SCOPE_PROJECT, true, message, messageSize);
+                         SCOPE_PROJECT, true, true, message, messageSize);
 }

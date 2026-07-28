@@ -156,6 +156,7 @@ void TuningSetDefaults(Tuning *tuning)
         .healthRegenRatio = 0.13f,
         .playerRespawn = DEFAULT_PLAYER_RESPAWN,
         .enemyRespawn = DEFAULT_ENEMY_RESPAWN,
+        .classSwapLockout = 3.0f,
         .matchResultHold = DEFAULT_MATCH_RESULT_HOLD,
         .timeScale = 1.0f,
         .crateHealth = DEFAULT_CRATE_HEALTH,
@@ -228,7 +229,9 @@ static void BuildMain(const WeaponDef *source, const char *characterId,
     ability->damage = source->damage;
     ability->healing = source->healing;
     ability->cooldown = source->cooldown;
-    ability->reloadPerAmmo = source->reloadPerAmmo;
+    // The rebuilt catalog is the one choke point live authoring edits pass through,
+    // so values that would divide by zero or stall catch-up loops are floored here.
+    ability->reloadPerAmmo = source->reloadPerAmmo < 0.05f ? 0.05f : source->reloadPerAmmo;
     ability->superPerHit = source->superPerHit;
     ability->selfHealRatio = source->selfHealRatio;
     if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
@@ -248,8 +251,9 @@ static void BuildMain(const WeaponDef *source, const char *characterId,
     }
     else
     {
+        float tickRate = source->tickRate < 0.05f ? 0.05f : source->tickRate;
         ability->data.area = (AreaAbility){
-            source->duration, source->tickRate, source->growTime, source->spreadDeg, 0.0f
+            source->duration, tickRate, source->growTime, source->spreadDeg, 0.0f
         };
     }
 }
@@ -296,8 +300,9 @@ static void BuildSuper(const WeaponDef *source, const char *characterId,
     }
     else
     {
+        float tickRate = source->sTickRate < 0.05f ? 0.05f : source->sTickRate;
         ability->data.area = (AreaAbility){
-            source->sDuration, source->sTickRate, 0.0f,
+            source->sDuration, tickRate, 0.0f,
             source->sSpreadDeg, source->sVisualDuration
         };
     }

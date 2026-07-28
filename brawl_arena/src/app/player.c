@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "brawler.h"
 #include "weapons.h"
+#include "game_commands.h"
 #include "game_events.h"
 #include "content_catalog.h"
 #include "raymath.h"
@@ -32,21 +33,13 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     int idx = w->session.playerIdx;
     Brawler *b = &w->session.brawlers[idx];
 
-    // Class switching is instant, so the feel of each kit is easy to compare.
+    // Class switching goes through the shared command so the number keys and the
+    // command center follow identical carry-over and lockout rules.
     int c = input->selectedClass;
     if (c >= 0 && c < CLASS_COUNT)
     {
-        Vector3 pos = b->alive ? b->position
-                               : ArenaSpawnFor(&w->session.arena, TEAM_PLAYER, b->spawnSlot);
-        float keepSuper = b->superCharge;
-        int keepGems = b->gems, keepSlot = b->spawnSlot;
-        BrawlerSpawn(game, idx, TEAM_PLAYER, (BrawlerClass)c, pos, true);
-        w->session.brawlers[idx].superCharge = keepSuper;
-        w->session.brawlers[idx].gems = keepGems;      // swapping kit is not a death
-        w->session.brawlers[idx].spawnSlot = keepSlot;
-        GameEmitFloatText(&w->session, pos,
-                          ContentCharacter(&w->content, (BrawlerClass)c)->displayName,
-                          (Color){ 255, 255, 255, 255 });
+        GameCommandExecute(w, (GameCommand){
+            .type = GAME_COMMAND_SET_PLAYER_CLASS, .value = c });
         b = &w->session.brawlers[idx];
     }
 

@@ -2,6 +2,7 @@
 #include "arena.h"
 #include "brawler.h"
 #include "content_catalog.h"
+#include "game_commands.h"
 #include "game_events.h"
 #include "game_random.h"
 #include "map_content.h"
@@ -152,6 +153,49 @@ static int CheckBotNavigation(void)
     return 0;
 }
 
+static int CheckClassSwap(void)
+{
+    App app;
+    CHECK(Initialize(&app), "could not initialize class-swap session");
+
+    // Spawned as Bruiser: swap out of combat carries health ratio, super, and gems.
+    Brawler *player = &app.session.brawlers[0];
+    player->health = player->maxHealth/2;
+    player->superCharge = 0.6f;
+    player->gems = 4;
+    app.session.time = 100.0f;
+    player->lastCombatTime = 90.0f;
+
+    CHECK(GameCommandExecute(&app, (GameCommand){
+              .type = GAME_COMMAND_SET_PLAYER_CLASS, .value = CLASS_SHOTGUNNER }),
+          "out-of-combat class swap was rejected");
+    player = &app.session.brawlers[0];
+    CHECK(player->cls == CLASS_SHOTGUNNER, "class swap did not apply");
+    float ratio = (float)player->health/(float)player->maxHealth;
+    CHECK(ratio > 0.45f && ratio < 0.55f,
+          "class swap did not carry the health ratio");
+    CHECK(player->superCharge == 0.6f && player->gems == 4,
+          "class swap dropped super charge or gems");
+
+    // Recent combat blocks the swap outside the sandbox: no more instant heal.
+    player->lastCombatTime = app.session.time;
+    CHECK(!GameCommandExecute(&app, (GameCommand){
+              .type = GAME_COMMAND_SET_PLAYER_CLASS, .value = CLASS_BRUISER }),
+          "in-combat class swap was not blocked");
+    CHECK(player->cls == CLASS_SHOTGUNNER, "blocked swap still changed class");
+
+    // A dead player only records the class; the respawn timer keeps running.
+    player->alive = false;
+    player->respawnTimer = 2.5f;
+    CHECK(GameCommandExecute(&app, (GameCommand){
+              .type = GAME_COMMAND_SET_PLAYER_CLASS, .value = CLASS_BRUISER }),
+          "dead class swap failed");
+    CHECK(!player->alive && player->respawnTimer == 2.5f,
+          "dead class swap revived the player or reset the respawn timer");
+    CHECK(player->cls == CLASS_BRUISER, "dead class swap did not record the class");
+    return 0;
+}
+
 int main(void)
 {
     App first, replay;
@@ -204,6 +248,8 @@ int main(void)
           "movement regression checks failed");
     CHECK(CheckBotNavigation() == 0,
           "navigation regression checks failed");
+    CHECK(CheckClassSwap() == 0,
+          "class swap checks failed");
 
     puts("deterministic replay, sliding movement, actor pass-through, and bot routing passed");
     return 0;

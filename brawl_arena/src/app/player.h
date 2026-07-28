@@ -21,7 +21,7 @@ typedef struct PlayerInput {
     bool actionsBlocked;        // UI owns the pointer this frame
 } PlayerInput;
 
-PlayerInput PlayerCaptureInput(const App *w);
+PlayerInput PlayerCaptureInput(App *w);
 void PlayerUpdate(App *w, const PlayerInput *input, float dt);
 
 // Ground point under the mouse cursor, on the y = 0 plane.

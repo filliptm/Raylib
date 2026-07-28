@@ -363,6 +363,45 @@ int main(int argc, char **argv)
     CHECK(FileExists(importedLocal) && FileExists(importedProfile),
           "legacy import did not create split local/profile files");
 
+    // The runtime load path tolerates a project file that predates newly added
+    // keys: present keys apply, missing keys fall back to compiled defaults, and
+    // the status names the situation. The explicit validator stays strict.
+    char staleProject[512], staleLocal[512], staleProfile[512];
+    snprintf(staleProject, sizeof(staleProject), "%s/stale-project.cfg", directory);
+    snprintf(staleLocal, sizeof(staleLocal), "%s/stale.local.cfg", directory);
+    snprintf(staleProfile, sizeof(staleProfile), "%s/stale.profile.cfg", directory);
+    CHECK(WriteText(staleProject, "format_version 3\ngameplay.move_speed 11\n"),
+          "could not create stale project fixture");
+    SetPaths(staleProject, staleLocal, staleProfile, absent);
+    App tolerant = { 0 };
+    CHECK(ConfigInitialize(&tolerant),
+          "stale project file dropped runtime startup to recovery defaults");
+    CHECK(!tolerant.config.recoveryDefaults && tolerant.config.projectLoaded,
+          "tolerant load was not marked as a loaded project");
+    CHECK(tolerant.tune.moveSpeed == 11.0f,
+          "tolerant load ignored a present project key");
+    CHECK(tolerant.tune.playerRespawn > 0.0f,
+          "tolerant load left a missing key without its compiled default");
+    CHECK(strstr(ConfigStatus(&tolerant), "defaulted") != NULL,
+          "tolerant load did not surface the defaulted-keys notice");
+
+    // A legacy file with an out-of-range profile value must be rejected instead of
+    // handing the menu an unindexable selected kit.
+    char badLegacy[512], badLocal[512], badProfile[512];
+    snprintf(badLegacy, sizeof(badLegacy), "%s/bad-legacy.cfg", directory);
+    snprintf(badLocal, sizeof(badLocal), "%s/bad.local.cfg", directory);
+    snprintf(badProfile, sizeof(badProfile), "%s/bad.profile.cfg", directory);
+    CHECK(WriteText(badLegacy, "version 2\nselected_kit 7\n"),
+          "could not create out-of-range legacy fixture");
+    SetPaths(project, badLocal, badProfile, badLegacy);
+    App guarded = { 0 };
+    CHECK(ConfigInitialize(&guarded),
+          "out-of-range legacy file broke canonical startup");
+    CHECK(!guarded.config.legacyImported,
+          "out-of-range legacy file was imported anyway");
+    CHECK(guarded.tune.selectedKit >= 0 && guarded.tune.selectedKit < CLASS_COUNT,
+          "selected kit escaped its valid range");
+
     puts("configuration v3 layering, promotion, rejection, profile, and migrations passed");
     return 0;
 }

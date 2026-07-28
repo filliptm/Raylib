@@ -18,6 +18,10 @@ typedef struct PlayerController {
     bool charging;
     float chargeTime;
     bool aimingSuper;
+    // Edge-detection memory for gamepad triggers; owned here so a match reset also
+    // resets it instead of leaking state through file-scope statics.
+    bool gamepadAttackHeld;
+    bool gamepadSecondaryHeld;
 } PlayerController;
 
 typedef struct AppFlow {

@@ -5,9 +5,6 @@
 #include "raymath.h"
 #include <math.h>
 
-static bool g_gamepadAttackHeld = false;
-static bool g_gamepadSecondaryHeld = false;
-
 static int ActiveGamepad(void)
 {
     for (int gamepad = 0; gamepad < 4; gamepad++)
@@ -30,8 +27,9 @@ Vector3 PlayerMouseGroundPoint(const App *w)
     };
 }
 
-PlayerInput PlayerCaptureInput(const App *w)
+PlayerInput PlayerCaptureInput(App *w)
 {
+    PlayerController *controller = &w->controller;
     PlayerInput input = { 0 };
     input.selectedClass = -1;
     input.aimPoint = PlayerMouseGroundPoint(w);
@@ -87,20 +85,20 @@ PlayerInput PlayerCaptureInput(const App *w)
 
         bool attackHeld =
             GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_RIGHT_TRIGGER) > 0.15f;
-        input.attackPressed |= attackHeld && !g_gamepadAttackHeld;
-        input.attackReleased |= !attackHeld && g_gamepadAttackHeld;
-        g_gamepadAttackHeld = attackHeld;
+        input.attackPressed |= attackHeld && !controller->gamepadAttackHeld;
+        input.attackReleased |= !attackHeld && controller->gamepadAttackHeld;
+        controller->gamepadAttackHeld = attackHeld;
         input.superHeld |= IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
         input.autoAttackPressed |=
             IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
         bool secondaryHeld =
             IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
         input.secondaryPressed |=
-            secondaryHeld && !g_gamepadSecondaryHeld;
+            secondaryHeld && !controller->gamepadSecondaryHeld;
         input.secondaryReleased |=
-            !secondaryHeld && g_gamepadSecondaryHeld;
+            !secondaryHeld && controller->gamepadSecondaryHeld;
         input.secondaryHeld |= secondaryHeld;
-        g_gamepadSecondaryHeld = secondaryHeld;
+        controller->gamepadSecondaryHeld = secondaryHeld;
     }
 
     for (int classId = 0; classId < CLASS_COUNT; classId++)

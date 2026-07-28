@@ -377,8 +377,10 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         offset += (GameRandomInt(&w.session->random, -100, 100) / 100.0f) * spread * 0.06f;
         float angle = b->aimAngle + offset;
 
+        // A full pool drops the remaining pellets but must still run the post-loop
+        // reveal and muzzle feedback: ammo and cooldown were already paid.
         Projectile *p = AllocProjectile(w);
-        if (!p) return;
+        if (!p) break;
 
         *p = (Projectile){ 0 };
         p->position = origin;
