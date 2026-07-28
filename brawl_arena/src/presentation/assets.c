@@ -7,6 +7,7 @@
 ********************************************************************************************/
 #include "assets.h"
 #include "generated_assets.h"
+#include "vfx_catalog.h"
 
 #include "rlgl.h"
 #include "raymath.h"
@@ -24,6 +25,7 @@ static const float SCENE_CLIP_FAR = 120.0f;
 
 static const char *CHARACTER_MODEL_PATHS[CLASS_COUNT] = {
     [CLASS_SHOTGUNNER] = CHARACTER_RUNTIME_ROOT "sentinel.glb",
+    [CLASS_SNIPER] = CHARACTER_RUNTIME_ROOT "longshot.glb",
     [CLASS_BRUISER] = CHARACTER_RUNTIME_ROOT "ironclad_guardian.glb",
     [CLASS_HEALER] = CHARACTER_RUNTIME_ROOT "gaia_guardian.glb"
 };
@@ -54,6 +56,41 @@ static const char *STATION_MODEL_PATHS[STATION_MODEL_COUNT] = {
     [STATION_TABLE_DISPLAY_PLANET] = STATION_ROOT "table-display-planet.glb",
     [STATION_SKIP] = STATION_ROOT "skip.glb"
 };
+
+static void LoadVfxAtlases(Assets *assets)
+{
+    char catalogMessage[128];
+    if (!VfxCatalogValidate(catalogMessage, sizeof(catalogMessage)))
+    {
+        TraceLog(LOG_WARNING, "VFX: catalog invalid: %s", catalogMessage);
+        return;
+    }
+
+    int loaded = 0;
+    for (int atlas = 0; atlas < VFX_ATLAS_COUNT; atlas++)
+    {
+        const char *path = VfxAtlasPath((VfxAtlasId)atlas);
+        if (!path || !FileExists(path))
+        {
+            TraceLog(LOG_WARNING, "VFX: optional atlas missing: %s",
+                     path ? path : "(unknown)");
+            continue;
+        }
+
+        Texture2D texture = LoadTexture(path);
+        if (texture.id == 0)
+        {
+            TraceLog(LOG_WARNING, "VFX: atlas failed to load: %s", path);
+            continue;
+        }
+        SetTextureFilter(texture, TEXTURE_FILTER_BILINEAR);
+        SetTextureWrap(texture, TEXTURE_WRAP_CLAMP);
+        assets->vfxAtlases[atlas] = texture;
+        assets->vfxAtlasesOk[atlas] = true;
+        loaded++;
+    }
+    TraceLog(LOG_INFO, "VFX: loaded %d/%d runtime atlases", loaded, VFX_ATLAS_COUNT);
+}
 
 //------------------------------------------------------------------------------------
 // Scene shader. Half-Lambert key light, cheap Blinn specular, a rim term to lift
@@ -486,9 +523,70 @@ static int FindCharacterClip(const RiggedCharacter *character, const char *name)
     return -1;
 }
 
+static int FindCharacterBone(const RiggedCharacter *character, const char *name)
+{
+    for (int i = 0; i < character->model.boneCount; i++)
+        if (strcmp(character->model.bones[i].name, name) == 0) return i;
+    return -1;
+}
+
+// CPU-skins every vertex at one frame of one clip and returns the vertical span.
+// Meshy models encode most of their apparent size in bone matrices, so raw mesh
+// bounds are useless for sizing; this reproduces the skinned vertex shader.
+static bool MeasurePosedSpanY(RiggedCharacter *character, int clip, int frame,
+                              float *outLo, float *outHi)
+{
+    if (clip < 0 || clip >= character->animCount) return false;
+    ModelAnimation anim = character->anims[clip];
+    if (anim.frameCount <= 0) return false;
+    if (frame < 0) frame = 0;
+    if (frame >= anim.frameCount) frame = anim.frameCount - 1;
+    UpdateModelAnimationBones(character->model, anim, frame);
+
+    float lo = 1e30f, hi = -1e30f;
+    for (int i = 0; i < character->model.meshCount; i++)
+    {
+        Mesh *mesh = &character->model.meshes[i];
+        if (!mesh->vertices || !mesh->boneMatrices ||
+            !mesh->boneIds || !mesh->boneWeights) continue;
+
+        for (int k = 0; k < mesh->vertexCount; k++)
+        {
+            Vector3 v = { mesh->vertices[k*3], mesh->vertices[k*3 + 1],
+                          mesh->vertices[k*3 + 2] };
+            float y = 0.0f;
+            for (int j = 0; j < 4; j++)
+            {
+                float weight = mesh->boneWeights[k*4 + j];
+                int bone = mesh->boneIds[k*4 + j];
+                if (weight <= 0.0f || bone < 0 || bone >= mesh->boneCount) continue;
+                y += Vector3Transform(v, mesh->boneMatrices[bone]).y*weight;
+            }
+            if (y < lo) lo = y;
+            if (y > hi) hi = y;
+        }
+    }
+    if (hi <= lo) return false;
+    *outLo = lo;
+    *outHi = hi;
+    return true;
+}
+
+// Zero is a valid clip index, so every optional clip must read "absent" as -1 even
+// on the failure paths where the struct is cleared.
+static void ResetOptionalClips(RiggedCharacter *character)
+{
+    character->clipDeath = -1;
+    character->clipActionMain = -1;
+    character->clipActionSuper = -1;
+    character->clipActionCast = -1;
+    character->clipActionMobility = -1;
+}
+
 static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
                                 const char *path, const char *label)
 {
+    ResetOptionalClips(character);
     character->model = LoadModel(path);
     character->ok = IsModelValid(character->model) && character->model.meshCount > 0;
 
@@ -516,6 +614,7 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
             UnloadModelAnimations(character->anims, character->animCount);
         UnloadModel(character->model);
         *character = (RiggedCharacter){ 0 };
+        ResetOptionalClips(character);
         TraceLog(LOG_WARNING,
                  "CHARACTER %s: generated animations invalid, falling back to primitives",
                  label);
@@ -534,6 +633,31 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->clipRunBL = FindCharacterClip(character, "run_back_left");
     character->clipRunBR = FindCharacterClip(character, "run_back_right");
     character->clipDeath = FindCharacterClip(character, "death");
+    character->clipActionMain = FindCharacterClip(character, "attack_main");
+    if (character->clipActionMain < 0)
+        character->clipActionMain = FindCharacterClip(character, "shoot");
+    character->clipActionSuper = FindCharacterClip(character, "attack_super");
+    character->clipActionCast = FindCharacterClip(character, "cast");
+    character->clipActionMobility = FindCharacterClip(character, "mobility");
+
+    // Meshy's rig chains Hips -> Spine02 -> Spine01 -> Spine, with "Spine" as the
+    // CHEST joint parenting both shoulders and the neck. The whole-torso pivot is
+    // therefore Spine02 and the chest pivot is Spine, counter to what the names
+    // suggest. Getting these backwards swings the entire upper body on every shot
+    // recoil and anchors chest VFX at the belly.
+    character->boneHips = FindCharacterBone(character, "Hips");
+    character->boneSpine = FindCharacterBone(character, "Spine02");
+    character->boneChest = FindCharacterBone(character, "Spine");
+    character->boneLeftShoulder = FindCharacterBone(character, "LeftShoulder");
+    character->boneLeftArm = FindCharacterBone(character, "LeftArm");
+    character->boneLeftForeArm = FindCharacterBone(character, "LeftForeArm");
+    character->boneLeftHand = FindCharacterBone(character, "LeftHand");
+    character->boneRightShoulder = FindCharacterBone(character, "RightShoulder");
+    character->boneRightArm = FindCharacterBone(character, "RightArm");
+    character->boneRightForeArm = FindCharacterBone(character, "RightForeArm");
+    character->boneRightHand = FindCharacterBone(character, "RightHand");
+    character->boneLeftFoot = FindCharacterBone(character, "LeftFoot");
+    character->boneRightFoot = FindCharacterBone(character, "RightFoot");
 
     character->clipIdle = character->clipIdle < 0 ? 0 : character->clipIdle;
     character->clipRunF = character->clipRunF < 0 ? character->clipIdle : character->clipRunF;
@@ -544,46 +668,50 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->clipRunFR = character->clipRunFR < 0 ? character->clipRunF : character->clipRunFR;
     character->clipRunBL = character->clipRunBL < 0 ? character->clipRunB : character->clipRunBL;
     character->clipRunBR = character->clipRunBR < 0 ? character->clipRunB : character->clipRunBR;
+    // A missing death clip holds the idle pose instead of silently remapping the
+    // selector's -1 to whatever clip sits at index zero.
+    character->clipDeath = character->clipDeath < 0 ? character->clipIdle : character->clipDeath;
 
-    // Reproduce the skinned vertex shader's pose when measuring. Meshy models can
-    // encode most of their apparent size in bone matrices, making raw bounds useless.
-    float lo = 1e30f, hi = -1e30f;
+    // Height and foot line are measured across several locomotion poses, not idle
+    // alone. Some libraries author a crouched idle while overrides stand upright;
+    // measuring only idle then gives equivalently sized rigs visibly different world
+    // scales, and feet sink below the idle-derived floor as soon as a run clip
+    // drops them lower. Height takes the tallest sampled pose; the ground line
+    // takes the lowest sampled sole.
+    float lo = 1e30f;
+    float height = 0.0f;
     if (character->anims && character->animCount > 0)
     {
-        UpdateModelAnimationBones(character->model,
-                                  character->anims[character->clipIdle], 0);
-        for (int i = 0; i < character->model.meshCount; i++)
+        int clips[3] = { character->clipIdle, character->clipWalk,
+                         character->clipRunF };
+        for (int c = 0; c < 3; c++)
         {
-            Mesh *mesh = &character->model.meshes[i];
-            if (!mesh->vertices || !mesh->boneMatrices ||
-                !mesh->boneIds || !mesh->boneWeights) continue;
+            bool duplicate = false;
+            for (int p = 0; p < c; p++)
+                if (clips[p] == clips[c]) duplicate = true;
+            if (duplicate || clips[c] < 0 || clips[c] >= character->animCount)
+                continue;
 
-            for (int k = 0; k < mesh->vertexCount; k++)
+            int frameCount = character->anims[clips[c]].frameCount;
+            for (int s = 0; s < 4; s++)
             {
-                Vector3 v = { mesh->vertices[k*3], mesh->vertices[k*3 + 1],
-                              mesh->vertices[k*3 + 2] };
-                float y = 0.0f;
-                for (int j = 0; j < 4; j++)
-                {
-                    float weight = mesh->boneWeights[k*4 + j];
-                    int bone = mesh->boneIds[k*4 + j];
-                    if (weight <= 0.0f || bone < 0 || bone >= mesh->boneCount) continue;
-                    y += Vector3Transform(v, mesh->boneMatrices[bone]).y*weight;
-                }
-                if (y < lo) lo = y;
-                if (y > hi) hi = y;
+                float sampleLo, sampleHi;
+                if (!MeasurePosedSpanY(character, clips[c], (frameCount*s)/4,
+                                       &sampleLo, &sampleHi))
+                    continue;
+                if (sampleLo < lo) lo = sampleLo;
+                if (sampleHi - sampleLo > height) height = sampleHi - sampleLo;
             }
         }
     }
 
-    if (hi <= lo)
+    if (height <= 0.0f)
     {
         BoundingBox bb = GetModelBoundingBox(character->model);
         lo = bb.min.y;
-        hi = bb.max.y;
+        height = bb.max.y - bb.min.y;
     }
 
-    float height = hi - lo;
     character->scale = height > 0.000001f ? CHARACTER_TARGET_H/height : 1.0f;
     character->footOffset = -lo*character->scale;
 
@@ -591,9 +719,12 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
         for (int i = 0; i < character->model.materialCount; i++)
             character->model.materials[i].shader = a->skinned;
 
+    int vertexCount = 0;
+    for (int i = 0; i < character->model.meshCount; i++)
+        vertexCount += character->model.meshes[i].vertexCount;
     TraceLog(LOG_INFO,
              "CHARACTER %s: %d verts, %d bones, %d clips, posed height %.2f, scale %.5f",
-             label, character->model.meshes[0].vertexCount, character->model.boneCount,
+             label, vertexCount, character->model.boneCount,
              character->animCount, height, character->scale);
 }
 
@@ -880,6 +1011,7 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->cylinder = GenMeshCylinder(1.0f, 1.0f, 18);
     a->plane    = GenMeshPlane(1.0f, 1.0f, 1, 1);
     GeneratedAssetsLoad(a);
+    LoadVfxAtlases(a);
 
     //--- Material -------------------------------------------------------------
     a->mat = LoadMaterialDefault();
@@ -923,6 +1055,9 @@ void AssetsUnload(Assets *a)
     UnloadTexture(a->texFlat);
     UnloadTexture(a->texGlow);
     UnloadTexture(a->texGrass);
+    for (int atlas = 0; atlas < VFX_ATLAS_COUNT; atlas++)
+        if (a->vfxAtlasesOk[atlas] && a->vfxAtlases[atlas].id > 0)
+            UnloadTexture(a->vfxAtlases[atlas]);
 
     ReleaseSceneTarget(a);
 
@@ -1026,9 +1161,178 @@ void AssetsSetCamera(Assets *a, Vector3 viewPos)
     SetShaderValue(a->lighting, a->locViewPos, &viewPos, SHADER_UNIFORM_VEC3);
 }
 
+static int ActionClipFor(const RiggedCharacter *character, CharacterActionId action)
+{
+    switch (action)
+    {
+        case CHARACTER_ACTION_MAIN: return character->clipActionMain;
+        case CHARACTER_ACTION_SUPER: return character->clipActionSuper;
+        case CHARACTER_ACTION_CAST: return character->clipActionCast;
+        case CHARACTER_ACTION_MOBILITY: return character->clipActionMobility;
+        default: return -1;
+    }
+}
+
+static Transform BlendPoseTransform(Transform base, Transform action, float weight)
+{
+    return (Transform){
+        .translation = Vector3Lerp(base.translation, action.translation, weight),
+        .rotation = QuaternionSlerp(base.rotation, action.rotation, weight),
+        .scale = Vector3Lerp(base.scale, action.scale, weight)
+    };
+}
+
+static bool BoneDescendsFrom(const RiggedCharacter *character, int bone, int root)
+{
+    for (int guard = 0; guard < character->model.boneCount && bone >= 0; guard++)
+    {
+        if (bone == root) return true;
+        bone = character->model.bones[bone].parent;
+    }
+    return false;
+}
+
+static void RotatePoseSubtree(const RiggedCharacter *character, Transform *pose,
+                              int root, Quaternion targetDelta, float weight)
+{
+    if (root < 0 || root >= character->model.boneCount || weight <= 0.001f) return;
+    Quaternion delta = QuaternionSlerp(QuaternionIdentity(), targetDelta,
+                                       Clamp(weight, 0.0f, 1.0f));
+    Vector3 pivot = pose[root].translation;
+    for (int bone = 0; bone < character->model.boneCount; bone++)
+    {
+        if (!BoneDescendsFrom(character, bone, root)) continue;
+        Vector3 relative = Vector3Subtract(pose[bone].translation, pivot);
+        pose[bone].translation =
+            Vector3Add(pivot, Vector3RotateByQuaternion(relative, delta));
+        pose[bone].rotation =
+            QuaternionNormalize(QuaternionMultiply(delta, pose[bone].rotation));
+    }
+}
+
+static void AimPoseArm(const RiggedCharacter *character, Transform *pose,
+                       int shoulder, int hand, Vector3 targetDirection,
+                       float weight)
+{
+    if (shoulder < 0 || hand < 0 || weight <= 0.001f) return;
+    Vector3 direction =
+        Vector3Subtract(pose[hand].translation, pose[shoulder].translation);
+    if (Vector3Length(direction) <= 0.0001f) return;
+    Vector3 from = Vector3Normalize(direction);
+    Vector3 to = Vector3Normalize(targetDirection);
+
+    // Antiparallel vectors make QuaternionFromVector3ToVector3 return a zero
+    // quaternion, and slerping toward that scales the limb toward its shoulder.
+    // Pick an explicit half-turn around any axis perpendicular to the arm instead.
+    Quaternion delta;
+    if (Vector3DotProduct(from, to) < -0.9995f)
+    {
+        Vector3 axis = Vector3CrossProduct((Vector3){ 0.0f, 1.0f, 0.0f }, from);
+        if (Vector3Length(axis) <= 0.0001f)
+            axis = Vector3CrossProduct((Vector3){ 1.0f, 0.0f, 0.0f }, from);
+        delta = QuaternionFromAxisAngle(Vector3Normalize(axis), PI);
+    }
+    else delta = QuaternionFromVector3ToVector3(from, to);
+    RotatePoseSubtree(character, pose, shoulder, delta, weight);
+}
+
+static void ApplyProceduralAction(const RiggedCharacter *character, Transform *pose,
+                                  CharacterActionId action, float progress,
+                                  float weight)
+{
+    if (action <= CHARACTER_ACTION_NONE || weight <= 0.001f) return;
+    float kick = weight;
+    if (action == CHARACTER_ACTION_MAIN)
+    {
+        // A single-arm snap and small torso recoil reads as a fired shot without
+        // assuming a particular weapon mesh or modifying gameplay aim.
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand, (Vector3){ 0.12f, 0.08f, 1.0f },
+                   kick*0.92f);
+        RotatePoseSubtree(character, pose, character->boneChest,
+                          QuaternionFromEuler(-0.10f, -0.08f, 0.0f),
+                          kick*(0.65f + 0.35f*sinf(progress*PI)));
+    }
+    else if (action == CHARACTER_ACTION_SUPER)
+    {
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand, (Vector3){ -0.20f, 0.24f, 1.0f },
+                   kick*0.88f);
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand, (Vector3){ 0.20f, 0.24f, 1.0f },
+                   kick*0.88f);
+        RotatePoseSubtree(character, pose, character->boneSpine,
+                          QuaternionFromEuler(0.15f, 0.0f, 0.0f), kick*0.72f);
+    }
+    else if (action == CHARACTER_ACTION_CAST)
+    {
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand, (Vector3){ -0.38f, 0.80f, 0.62f },
+                   kick*0.90f);
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand, (Vector3){ 0.38f, 0.80f, 0.62f },
+                   kick*0.90f);
+        RotatePoseSubtree(character, pose, character->boneChest,
+                          QuaternionFromEuler(-0.08f, 0.0f, 0.0f), kick*0.55f);
+    }
+    else if (action == CHARACTER_ACTION_MOBILITY)
+    {
+        RotatePoseSubtree(character, pose, character->boneSpine,
+                          QuaternionFromEuler(0.30f, 0.0f, 0.0f), kick);
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand, (Vector3){ -0.30f, -0.18f, -1.0f },
+                   kick*0.70f);
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand, (Vector3){ 0.30f, -0.18f, -1.0f },
+                   kick*0.70f);
+    }
+}
+
+static void StoreSocket(CharacterSocketPose *sockets, VfxSocket socket,
+                        const Transform *pose, int bone, Matrix world,
+                        int boneCount)
+{
+    if (!sockets || socket <= VFX_SOCKET_NONE || socket >= VFX_SOCKET_COUNT ||
+        bone < 0 || bone >= boneCount)
+        return;
+    sockets->positions[socket] =
+        Vector3Transform(pose[bone].translation, world);
+    sockets->valid[socket] = true;
+}
+
+static void StoreCharacterSockets(const RiggedCharacter *character,
+                                  const Transform *pose, Matrix world,
+                                  CharacterSocketPose *sockets)
+{
+    if (!sockets) return;
+    // Render seeds an approximate pose before model drawing so a missing semantic
+    // bone can retain a useful fallback instead of collapsing that socket to the
+    // gameplay origin. Mapped Meshy bones replace those estimates below.
+    sockets->rigged = true;
+    StoreSocket(sockets, VFX_SOCKET_CENTER, pose, character->boneHips,
+                world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_CHEST, pose, character->boneChest,
+                world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_LEFT_HAND, pose, character->boneLeftHand,
+                world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_RIGHT_HAND, pose, character->boneRightHand,
+                world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_LEFT_SHOULDER, pose,
+                character->boneLeftShoulder, world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_RIGHT_SHOULDER, pose,
+                character->boneRightShoulder, world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_LEFT_FOOT, pose, character->boneLeftFoot,
+                world, character->model.boneCount);
+    StoreSocket(sockets, VFX_SOCKET_RIGHT_FOOT, pose, character->boneRightFoot,
+                world, character->model.boneCount);
+}
+
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop, Color tint, float dither,
-                         float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
+                         float emissive, CharacterActionId action,
+                         float actionProgress, float actionWeight,
+                         CharacterSocketPose *socketPose,
+                         const Vector3 *lightPos, const Vector3 *lightColor,
                          int lightCount, Vector3 viewPos)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return;
@@ -1049,6 +1353,13 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
         SetShaderValue(a->skinned, a->kLightCount, &lightCount, SHADER_UNIFORM_INT);
     }
 
+    float s = character->scale*scaleMul;
+    Matrix m = MatrixScale(s, s, s);
+    m = MatrixMultiply(m, MatrixRotateY(yaw));
+    m = MatrixMultiply(m, MatrixTranslate(position.x,
+                                          position.y + character->footOffset*scaleMul,
+                                          position.z));
+
     // Posing writes into the model's shared bone matrices, so it has to happen
     // immediately before this draw rather than once per frame.
     if (character->anims && character->animCount > 0)
@@ -1064,22 +1375,63 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                 if (f < 0) f += anim.frameCount;
             }
             else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
-            UpdateModelAnimationBones(character->model, anim, f);
+
+            if (anim.boneCount > 0 && anim.boneCount <= CHARACTER_BONE_LIMIT)
+            {
+                Transform pose[CHARACTER_BONE_LIMIT];
+                for (int bone = 0; bone < anim.boneCount; bone++)
+                    pose[bone] = anim.framePoses[f][bone];
+
+                bool authoredApplied = false;
+                int actionClip = ActionClipFor(character, action);
+                if (actionWeight > 0.001f && actionClip >= 0 &&
+                    actionClip < character->animCount)
+                {
+                    ModelAnimation authored = character->anims[actionClip];
+                    int actionFrame = authored.frameCount > 1
+                                    ? (int)(Clamp(actionProgress, 0.0f, 1.0f)*
+                                            (authored.frameCount - 1))
+                                    : 0;
+                    if (authored.boneCount == anim.boneCount &&
+                        authored.frameCount > 0)
+                    {
+                        for (int bone = 0; bone < anim.boneCount; bone++)
+                            pose[bone] = BlendPoseTransform(
+                                pose[bone], authored.framePoses[actionFrame][bone],
+                                Clamp(actionWeight, 0.0f, 1.0f));
+                        authoredApplied = true;
+                    }
+                }
+                // A skeleton-mismatched authored clip must not silently disable the
+                // action; the procedural overlay covers it like any missing clip.
+                if (!authoredApplied)
+                    ApplyProceduralAction(character, pose, action, actionProgress,
+                                          actionWeight);
+
+                Transform *frames[1] = { pose };
+                ModelAnimation composed = {
+                    .boneCount = anim.boneCount,
+                    .frameCount = 1,
+                    .bones = anim.bones,
+                    .framePoses = frames
+                };
+                UpdateModelAnimationBones(character->model, composed, 0);
+                StoreCharacterSockets(character, pose, m, socketPose);
+            }
+            else UpdateModelAnimationBones(character->model, anim, f);
         }
     }
 
-    float s = character->scale*scaleMul;
-    Matrix m = MatrixScale(s, s, s);
-    m = MatrixMultiply(m, MatrixRotateY(yaw));
-    m = MatrixMultiply(m, MatrixTranslate(position.x,
-                                          position.y + character->footOffset*scaleMul,
-                                          position.z));
-
     for (int i = 0; i < character->model.meshCount; i++)
     {
+        // Material.maps is a pointer, so the copy is shallow and the tint write
+        // lands in the model's shared material. Restore it after the draw so no
+        // other call site inherits this brawler's team tint.
         Material mat = character->model.materials[character->model.meshMaterial[i]];
+        Color previous = mat.maps[MATERIAL_MAP_DIFFUSE].color;
         mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
         DrawMesh(character->model.meshes[i], mat, m);
+        mat.maps[MATERIAL_MAP_DIFFUSE].color = previous;
     }
 }
 

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from character_pipeline.glb import load_glb, write_glb
-from character_pipeline.retarget import bake_character
+from character_pipeline.retarget import bake_character, validate_generated_character
 from character_pipeline.rig import RIG_ID
 
 
@@ -79,6 +79,9 @@ def main():
         document, binary, clips = bake_character(
             model_document, model_binary, libraries, entry["id"]
         )
+        # Validate before writing so a bad bake can never ship, even when the
+        # separate check-character-assets target is not run afterwards.
+        validate_generated_character(document, binary, entry["id"])
         size = write_glb(output_path, document, binary)
         outputs.append(output_path)
         print(

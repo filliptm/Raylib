@@ -19,5 +19,6 @@ brawl_arena/profile.cfg
 # Local logs
 logs/
 
-# Imported character source art (large; the repacked .glb is what the game uses)
+# Imported character source art (large; curated files under resources/ are what the game uses)
 brawl_arena/*.zip
+brawl_arena/*.glb

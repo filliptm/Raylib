@@ -90,10 +90,29 @@ None of this is corrupt — it is legal glTF. It is simply outside raylib's cont
 - Verifies numerically: TRS reconstruction error and world-vs-inverse-IBM error are
   printed and should be ~1e-5 or better.
 
-`tools/import_character.py` accepts a Meshy ZIP, directory, or individual
-`Character_output` GLB. It stages only that model through the fixer, records the original
-animation-coordinate T-pose needed for retargeting, strips all animation clips, compacts
-the GLB, and validates the mesh-only result.
+`tools/import_character.py` accepts a Meshy ZIP, directory, individual
+`Character_output` GLB, or standalone merged-animation GLB. It stages the selected model
+through the fixer, records the animation-coordinate reference pose needed for
+retargeting, strips all animation clips, compacts the GLB, and validates the mesh-only
+result. A `Character_output`/T-pose clip is preferred (recognized in any Meshy spelling,
+including the raw `Armature|clip0|baselayer` name); when a merged source omits one, the
+importer captures the original joint statics before bind repair as the reference pose.
+
+An un-retopologized export (Meshy sometimes ships 100k+ triangles) is decimated to the
+**8,000-triangle** import target by `tools/character_pipeline/decimate.py`. Raw Meshy
+meshes are triangle soup (almost no vertex sharing), so vertices are first **welded by
+position** to restore surface connectivity — collapsing a soup directly just deletes
+triangles and shreds the surface. Quadric collapse (`fast_simplification`) then reduces
+the welded surface; joints/weights transfer from the nearest original vertex, normals
+are recomputed from the decimated surface, and — because the raw export's per-triangle
+noise atlas is meaningless on any other topology — the texture is **baked into
+per-vertex colors** (the lit shaders multiply albedo by vertex color; meshes without
+colors default to white) with a plain white 1024x1024 PNG keeping the texture contract
+satisfied. Validation enforces whole-character budgets of **16,000 triangles / 32,000
+vertices** — a dense mesh can no longer slip through by being partitioned. The importer
+still splits any primitive above 65,535 vertices into u16-indexed chunks, which is the
+safe format raylib actually uploads, and byte-identical embedded textures are
+deduplicated.
 
 ## Asset ownership and build flow
 
@@ -110,7 +129,7 @@ build/assets/characters/<id>.glb
 ```
 
 The tracked model is the character library: mesh, materials, skin, repaired bind nodes,
-two 1K embedded PNGs, and animation-rest-pose metadata, with no clips. The tracked
+one or more 1K embedded PNGs, and animation-rest-pose metadata, with no clips. The tracked
 animation files are mesh-free libraries containing a donor skeleton, reference pose, and
 full-TRS clips. The generated output bakes the selected clips onto the target rig and is
 self-contained because that is the most reliable format for raylib.
@@ -120,13 +139,16 @@ Current assets:
 | Kit | Tracked model | Mesh | Rig | Generated output |
 |---|---|---:|---:|---|
 | Scrapper | `resources/characters/models/sentinel.glb` | 5,210 vertices | 24 bones | `build/assets/characters/sentinel.glb` |
+| Longshot | `resources/characters/models/longshot.glb` | 8,000 triangles, vertex-colored (welded + decimated from a 226k-vertex raw export) | 24 bones | `build/assets/characters/longshot.glb` |
 | Tank | `resources/characters/models/ironclad_guardian.glb` | 4,888 vertices | 24 bones | `build/assets/characters/ironclad_guardian.glb` |
 | Guardian | `resources/characters/models/gaia_guardian.glb` | 5,070 vertices | 24 bones | `build/assets/characters/gaia_guardian.glb` |
 
 The canonical library contains twelve clips and is about 0.37 MiB. Scrapper has a small
 override pack for idle, hit reaction, and backpedal; Guardian has one for its distinctive
-idle. Generated outputs are about 4.3–4.4 MiB and contain twelve clips. Build outputs are
-ignored and recreated after `make clean`.
+idle. Generated outputs contain twelve clips ordered exactly as `CANONICAL_CLIPS`
+regardless of how the libraries were assembled, with any optional action clips appended
+after the canonical block; texture deduplication puts every output at about 2.5–3.1 MiB.
+Build outputs are ignored and recreated after `make clean`.
 
 To author a new library or override, first use the low-level fixer to create a compatible
 combined donor GLB from the relevant Meshy animation export, then map source names to
@@ -153,7 +175,7 @@ The generated runtime contract uses exact semantic names:
 | Canonical clip | Used for |
 |---|---|
 | `idle` | standing and podium |
-| `combat_stance` | recently fired |
+| `combat_stance` | reserved for a future blended aiming state |
 | `walk_forward` | lower-speed forward movement |
 | `run_forward` | forward movement and dash fallback |
 | `run_backward` | backpedaling while aiming |
@@ -163,8 +185,9 @@ The generated runtime contract uses exact semantic names:
 | `launched_hit` | available for future knockback one-shot |
 | `death` | KO pose held until respawn |
 
-Future library versions may add `shoot`, `dash`, and `victory`. A generic jump remains
-excluded because the game has no jump mechanic.
+Optional action libraries may add `attack_main` (or the compatible alias `shoot`),
+`attack_super`, `cast`, and `mobility`. `victory` remains a future presentation seam.
+A generic jump remains excluded because the game has no jump mechanic.
 
 Rules that matter more than the list:
 
@@ -172,15 +195,31 @@ Rules that matter more than the list:
   clip that translates its root makes the feet slide.
 - **One versioned library, exact semantic output names.** Raw Meshy names are mapped once
   when authoring the library, not rediscovered for every character.
-- Locomotion and idle loop; shoot, death and emote are one-shots.
+- Locomotion and idle loop; action, death, and future emote clips are one-shots.
 
 Engine-side status: implemented. The clip is chosen from the movement direction
 relative to facing (forward, backward and four diagonals - a pure strafe picks the
 nearest diagonal), playback rate follows actual speed so feet track the ground, death
-plays as a one-shot that holds its final pose until just before respawn, and a
-recently-fired brawler holds the combat stance instead of relaxing to idle. Runtime clips
-are resolved by exact canonical name with compatible movement fallbacks. Still open:
-shoot/emote one-shots and crossfade blending.
+plays as a one-shot that holds its final pose until just before respawn, and stationary
+casts retain idle as their locomotion base. Successful gameplay actions emit a separate
+presentation-only `MAIN`, `SUPER`, `CAST`, or `MOBILITY` event. The renderer applies a
+short blend envelope over the locomotion pose, using an optional semantic action clip
+when one exists and a restrained upper-body procedural fallback otherwise. Repeated
+actions restart that envelope. The current twelve-clip shared and override libraries do
+not contain semantic action clips, so Scrapper, Longshot, Tank, and Guardian currently
+use the procedural overlays. Those overlays use the shared Meshy shoulder, arm, hand,
+spine, and chest names rather than being authored per character.
+
+The same final composed pose supplies semantic `CENTER`, `CHEST`, hand, shoulder, and
+foot sockets to ability VFX. Missing mappings retain the approximate socket pose seeded
+by the renderer, so an incomplete rig does not collapse an effect to the actor origin.
+
+Concealment's `revealTimer` is deliberately not animation state and cannot control
+either the base clip or the action duration. The generic combat stance remains in the
+runtime contract but is not selected until the presentation layer has a continuous
+blended aiming state. Runtime clips are resolved by exact canonical name with compatible
+movement fallbacks. Still open: authored per-character action/emote clips and locomotion
+crossfade blending.
 
 The tool accepts both Meshy export styles: one GLB per animation (clip named from the
 filename) and the newer single merged-animations GLB (each clip keeps its own name,
@@ -190,20 +229,28 @@ lowercased). The file carrying the most clips becomes the base.
 
 Implemented build-time reuse maps joints by name and requires an identical name/parent
 topology fingerprint. It does **not** assume that equal bone count means equal pose. The
-three current Meshy rigs share the same topology, but measured local bind differences
+four current Meshy rigs share the same topology, but measured local bind differences
 reach about 26 source units and 170 degrees.
 
 Each model and animation library therefore stores the animation-coordinate reference
-pose that existed before raylib's bind repair. For every key:
+pose that existed before raylib's bind repair. Every clip is resampled onto a shared
+per-clip time grid, the donor hierarchy is composed per frame, and rotation deltas are
+transferred in **world space**:
 
 ```text
-motion delta = inverse(donor animation rest) × donor animated pose
-target pose  = target animation rest × motion delta
+world delta       = donor animated world rotation × inverse(donor rest world rotation)
+target world pose = world delta × target rest world rotation
+target local pose = inverse(target parent world pose) × target world pose
 ```
 
-Rotations and relative scales use that bind-relative delta. Translation keeps the
-target's bone lengths, maps motion through the donor/target parent reference axes, and
-scales motion by rig-height ratio. Horizontal root drift is removed while preserving
+Applying deltas in local joint frames instead (the previous approach) silently assumes
+the donor and target rest poses use similar joint axes; a character whose export has no
+T-pose - its rest is an action stance - came out visually shredded because every delta
+rotated around the wrong axis. The world-space transfer reduces to replaying the donor
+clip exactly when the rest poses coincide. Translation keeps the target's bone lengths,
+maps motion through the donor/target parent reference axes, and scales motion by
+rig-height ratio; the root follows the donor's scaled world trajectory so a rest-stance
+hip offset does not shift every frame. Horizontal root drift is removed while preserving
 in-place sway. The output keys every joint's translation, rotation, and scale.
 
 `tools/check_character_assets.py` rejects mismatched topology, incomplete channels,
@@ -213,9 +260,12 @@ against the loaded model again before accepting the character.
 
 ## Checklist for adding a new character
 
-1. In Meshy, download the rigged **GLB** `Character_output` model, or the ZIP containing
-   it. FBX/USDZ are not supported. Re-exporting the standard animation set is unnecessary.
-2. Keep polycount modest (~4–8k tris), then import:
+1. In Meshy, download the rigged **GLB** `Character_output` model, the ZIP containing it,
+   or a compatible standalone merged-animation GLB. FBX/USDZ are not supported.
+   Re-exporting the standard animation set is unnecessary.
+2. Prefer a retopologized export (~4–8k tris). A raw high-poly export is accepted but
+   is decimated to the 8,000-triangle import target, which costs surface detail the
+   retopologized export would have kept. Then import:
 
    ```bash
    python3 tools/import_character.py /path/to/export.zip \
@@ -227,8 +277,10 @@ against the loaded model again before accepting the character.
 4. Register the generated `build/assets/characters/<name>.glb` for its kit in
    `CHARACTER_MODEL_PATHS` in `src/presentation/assets.c`.
 5. Run `make character-assets` and `make check-character-assets`. Import errors should
-   report reconstruction error around 1e-5, 24 compatible joints, and two 1024×1024
-   textures. A topology mismatch is a hard failure, not an invitation to force the file.
+   report reconstruction error around 1e-5, 24 compatible joints, and one or more
+   1024×1024 textures. A topology mismatch is a hard failure, not an invitation to force
+   the file. Dense triangle input is decimated to the import target and validated against
+   the 16,000-triangle / 32,000-vertex whole-character budget.
 6. Run the Python pipeline test and normal C suite, then inspect every movement direction,
    idle, combat stance, and death pose:
 
@@ -244,7 +296,13 @@ against the loaded model again before accepting the character.
    idle-animating. If it's a spike-ball or invisible, re-read this document.
 
 Hard limits: ≤128 bones (`MAX_BONE_NUM` in the skinned shader), one skin per file,
-LINEAR/STEP keyframes, embedded PNG textures at exactly 1024×1024.
+LINEAR/STEP keyframes, embedded PNG textures at exactly 1024×1024, ≤65,535 vertices
+per runtime primitive with unsigned 8/16-bit indices, and ≤16,000 triangles /
+≤32,000 vertices per whole character. The importer decimates and partitions dense
+triangle primitives automatically and rejects unsupported dense morph/non-triangle data
+instead of allowing raylib to truncate 32-bit indices. Decimation requires
+`fast_simplification` (`python3 -m pip install fast_simplification`); imports that are
+already inside the budget do not need it.
 
 ## The debugging playbook that cracked it
 

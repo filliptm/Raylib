@@ -15,7 +15,9 @@ typedef struct MenuScene {
 void MenuSceneInit(MenuScene *scene, Assets *assets);
 void MenuSceneUpdate(MenuScene *scene, const App *app, BrawlerClass candidate,
                      AppScreen screen, float dt);
-void MenuSceneDraw(MenuScene *scene, const App *app, BrawlerClass candidate,
-                   AppScreen screen);
+void MenuSceneDrawStage(MenuScene *scene, const App *app, BrawlerClass candidate,
+                        AppScreen screen);
+void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candidate,
+                          AppScreen screen);
 
 #endif

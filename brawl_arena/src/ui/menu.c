@@ -64,7 +64,7 @@ static void DrawStationHeader(const App *w, const char *section)
 {
     const UiTheme *t = g_ui->theme;
     Rectangle rail = UiRefRect(24, 20, 1232, 64);
-    UiDrawPanel(rail, t->deck, t->line, false);
+    UiDrawFeaturePanel(rail, t->deck, t->line, false);
     UiDrawSignalRail(rail, t->ion, false);
 
     UiDrawText(UI_TEXT_HEADING, "HELIOS-9", UiRefPoint(50, 29), t->paper);
@@ -185,7 +185,7 @@ static void DrawHome(App *w)
     if (quit.activated) w->flow.quitRequested = true;
 
     Rectangle launch = UiRefRect(24, 646, 1232, 130);
-    UiDrawPanel(launch, t->deck, t->line, true);
+    UiDrawFeaturePanel(launch, t->deck, t->line, true);
     UiDrawSignalRail(launch, t->safety, false);
 
     UiDrawText(UI_TEXT_CAPTION, "ACTIVE BRAWLER // CHANGE", UiRefPoint(48, 658), accent);
@@ -259,7 +259,7 @@ static void DrawRoster(App *w)
     // The former launch-deck readout belongs here: this is the moment where
     // comparative character information helps the player make a decision.
     Rectangle identity = UiRefRect(24, 166, 300, 454);
-    UiDrawPanel(identity, t->deck, t->line, true);
+    UiDrawFeaturePanel(identity, t->deck, t->line, true);
     UiDrawSignalRail(identity, accent, false);
     UiDrawText(UI_TEXT_CAPTION, ROLE_NAMES[candidate->role],
                UiRefPoint(48, 184), accent);
@@ -275,7 +275,7 @@ static void DrawRoster(App *w)
                      "ULTIMATE", super, t->reactor);
 
     Rectangle telemetry = UiRefRect(956, 166, 300, 454);
-    UiDrawPanel(telemetry, t->deck, t->line, true);
+    UiDrawFeaturePanel(telemetry, t->deck, t->line, true);
     UiDrawSignalRail(telemetry, t->safety, true);
     UiDrawText(UI_TEXT_CAPTION, "FIELD TELEMETRY", UiRefPoint(980, 186), t->safety);
     UiDrawText(UI_TEXT_HEADING, "KIT READOUT", UiRefPoint(980, 208), t->paper);
@@ -340,7 +340,7 @@ static void DrawControlsOverlay(App *w)
     const UiTheme *t = g_ui->theme;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
     Rectangle panel = UiRefRect(190, 76, 900, 648);
-    UiDrawPanel(panel, t->deckRaised, t->ion, true);
+    UiDrawFeaturePanel(panel, t->deckRaised, t->ion, true);
     UiDrawSignalRail(panel, t->ion, false);
     UiDrawText(UI_TEXT_TITLE, "CONTROLS", UiRefPoint(230, 100), t->paper);
     UiDrawText(UI_TEXT_CAPTION, "ACTIVE INPUT GLYPHS FOLLOW THE LAST USED DEVICE",
@@ -381,7 +381,7 @@ static void DrawSettingsOverlay(App *w)
     const UiTheme *t = g_ui->theme;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
     Rectangle panel = UiRefRect(330, 78, 620, 644);
-    UiDrawPanel(panel, t->deckRaised, t->ion, true);
+    UiDrawFeaturePanel(panel, t->deckRaised, t->ion, true);
     UiDrawSignalRail(panel, t->safety, false);
     UiDrawText(UI_TEXT_TITLE, "SETTINGS", UiRefPoint(372, 102), t->paper);
     UiDrawText(UI_TEXT_CAPTION, "PROFILE-SCOPED // SAVED AUTOMATICALLY",
@@ -498,7 +498,15 @@ void MenuDraw(App *w)
     DrawBackdrop();
     BrawlerClass preview = w->flow.screen == SCREEN_BRAWLERS
         ? g_candidate : (BrawlerClass)w->tune.selectedKit;
-    MenuSceneDraw(&g_scene, w, preview, w->flow.screen);
+    MenuSceneDrawStage(&g_scene, w, preview, w->flow.screen);
+    Color accent = CharacterAccent(preview);
+    if (w->flow.screen == SCREEN_BRAWLERS)
+        UiDrawDecoration(UI_DECORATION_RADAR_DISC, UiRefRect(356, 112, 568, 568),
+                         accent, 0.13f);
+    else
+        UiDrawDecoration(UI_DECORATION_ORBITAL_RING, UiRefRect(356, 104, 568, 568),
+                         accent, 0.11f);
+    MenuSceneDrawBrawler(&g_scene, w, preview, w->flow.screen);
 
     UiSetInteractionsEnabled(g_overlay == MENU_OVERLAY_NONE);
     if (w->flow.screen == SCREEN_BRAWLERS) DrawRoster(w);

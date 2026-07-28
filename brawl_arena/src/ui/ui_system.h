@@ -4,6 +4,7 @@
 #include "ui_types.h"
 #include "ui_theme.h"
 #include "ui_icons.h"
+#include "ui_skin.h"
 #include "app_types.h"
 
 typedef struct UiResources {
@@ -20,6 +21,7 @@ typedef struct UiResources {
 typedef struct UiSystem {
     const UiTheme *theme;
     UiResources resources;
+    UiSkin skin;
     UiFrameLayout layout;
     UiInputModality modality;
     int glyphMode;
@@ -75,9 +77,12 @@ void UiDrawTextFit(UiTextRole role, const char *text, Rectangle bounds,
 void UiDrawTextShadow(UiTextRole role, const char *text, Vector2 position, Color color);
 
 void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised);
+void UiDrawFeaturePanel(Rectangle bounds, Color fill, Color edge, bool raised);
+void UiDrawControlSurface(Rectangle bounds, Color fill, Color edge, bool raised);
 void UiDrawSignalRail(Rectangle bounds, Color color, bool rightSide);
 void UiDrawKeycap(Rectangle bounds, const char *label, bool active);
 void UiDrawProgress(Rectangle bounds, float value, Color fill, bool segmented, int segments);
+void UiDrawDecoration(UiDecoration decoration, Rectangle bounds, Color tint, float opacity);
 UiResponse UiInteract(UiId id, Rectangle bounds, bool enabled);
 UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
                     UiButtonStyle style, UiIcon icon);

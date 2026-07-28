@@ -15,6 +15,9 @@
 #include "render.h"
 #include "gems.h"
 #include "effects.h"
+#include "vfx.h"
+#include "vfx_catalog.h"
+#include "character_animation.h"
 #include "config.h"
 #include "map_content.h"
 #include "game_commands.h"
@@ -46,12 +49,15 @@ typedef struct CommandCenterState {
     PanelTab tab;
     float scroll[TAB_COUNT];
     float contentHeight[TAB_COUNT];
+    int vfxPreview;
+    int actionPreview;
 } CommandCenterState;
 
 // Explicit long-lived editor state. Match resets cannot erase navigation or scroll.
 static CommandCenterState g_command = {
     .open = true,
-    .tab = TAB_MATCH
+    .tab = TAB_MATCH,
+    .vfxPreview = VFX_SCRAPPER_CAST
 };
 
 #define g_open (g_command.open)
@@ -413,6 +419,87 @@ static void TabWorld(CommandUi *ui)
     for (int i = 0; i < MAX_PARTICLES; i++) if (w->presentation.particles[i].active) particles++;
 
     CommandUiText(ui, TextFormat("%d FPS   %d shots   %d particles", GetFPS(), projectiles, particles), COMMAND_TEXT_DIM);
+    CommandUiText(
+        ui,
+        TextFormat("VFX atlases %d/%d   layers %d/%d   dropped %d",
+                   RenderLoadedVfxAtlasCount(), VFX_ATLAS_COUNT,
+                   VfxActiveCount(&w->presentation), MAX_VFX_INSTANCES,
+                   w->presentation.droppedVfx),
+        RenderLoadedVfxAtlasCount() == VFX_ATLAS_COUNT
+            ? COMMAND_TEXT_DIM : COMMAND_WARN);
+    const VfxRecipeDefinition *last =
+        VfxCatalogGet(w->presentation.lastVfxEffect);
+    CommandUiText(
+        ui,
+        TextFormat("Consumed %d events / spawned %d layers / last: %s",
+                   w->presentation.vfxEventsConsumed,
+                   w->presentation.vfxLayersSpawned,
+                   last ? last->name : "none"),
+        COMMAND_TEXT_DIM);
+
+    CommandUiSection(ui, "VFX PREVIEW");
+    if (g_command.vfxPreview <= VFX_NONE ||
+        g_command.vfxPreview >= VFX_EFFECT_COUNT)
+        g_command.vfxPreview = VFX_SCRAPPER_CAST;
+    const VfxRecipeDefinition *preview =
+        VfxCatalogGet((VfxEffectId)g_command.vfxPreview);
+    CommandUiText(ui, preview ? preview->name : "invalid recipe",
+                  COMMAND_TEXT_MAIN);
+    if (CommandUiButton(ui, "Previous VFX"))
+    {
+        g_command.vfxPreview--;
+        if (g_command.vfxPreview <= VFX_NONE)
+            g_command.vfxPreview = VFX_EFFECT_COUNT - 1;
+    }
+    if (CommandUiButton(ui, "Next VFX"))
+    {
+        g_command.vfxPreview++;
+        if (g_command.vfxPreview >= VFX_EFFECT_COUNT)
+            g_command.vfxPreview = VFX_NONE + 1;
+    }
+    if (CommandUiButton(ui, "Spawn selected VFX"))
+    {
+        Brawler *player = &w->session.brawlers[w->session.playerIdx];
+        Vector3 direction = { sinf(player->renderYaw), 0.0f,
+                              cosf(player->renderYaw) };
+        Vector3 at = Vector3Add(player->position,
+                                Vector3Scale(direction, 3.0f));
+        at.y = 0.85f;
+        Vector3 end = Vector3Add(at, Vector3Scale(direction, 4.0f));
+        const VfxRecipeDefinition *recipe =
+            VfxCatalogGet((VfxEffectId)g_command.vfxPreview);
+        int spawned = VfxSpawnPreview(
+            &w->presentation, (VfxEffectId)g_command.vfxPreview,
+            at, end, player->renderYaw,
+            recipe ? recipe->defaultSize : 1.0f,
+            (Color){ 96, 224, 255, 255 });
+        w->presentation.vfxLayersSpawned += spawned;
+        w->presentation.lastVfxEffect =
+            (VfxEffectId)g_command.vfxPreview;
+    }
+
+    static const char *ACTION_NAMES[] = {
+        "MAIN", "SUPER", "CAST", "MOBILITY"
+    };
+    CommandUiCycler(ui, "Character action", &g_command.actionPreview,
+                    4, ACTION_NAMES);
+    if (CommandUiButton(ui, "Play selected action"))
+        CharacterActionStart(
+            &w->presentation, w->session.playerIdx,
+            (CharacterActionId)(g_command.actionPreview + CHARACTER_ACTION_MAIN));
+    if (w->session.playerIdx >= 0 &&
+        w->session.playerIdx < w->session.brawlerCount)
+    {
+        const CharacterActionState *active =
+            &w->presentation.actions[w->session.playerIdx];
+        CommandUiText(
+            ui,
+            TextFormat("Active: %s   %.0f%%   blend %.0f%%",
+                       CharacterActionName(active->action),
+                       CharacterActionProgress(active)*100.0f,
+                       CharacterActionBlendWeight(active)*100.0f),
+            active->active ? COMMAND_TEXT_MAIN : COMMAND_TEXT_DIM);
+    }
 
     CommandUiSection(ui, "ACTIONS");
     const MapDefinition *selectedMap = MapCatalogSelected(&w->content);
@@ -538,7 +625,7 @@ void CommandCenterDraw(App *w)
     }
 
     Rectangle panel = CommandPanelRect();
-    UiDrawPanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
+    UiDrawFeaturePanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
     UiDrawSignalRail(panel, COMMAND_WARN, false);
 
     float inset = UiScale(16);

@@ -1,6 +1,7 @@
 #include "environment.h"
 
 #include "arena.h"
+#include "render_state.h"
 #include "raymath.h"
 #include "rlgl.h"
 #include <math.h>
@@ -74,12 +75,12 @@ static bool IsWall(const Arena *arena, int tx, int tz)
 
 static void DrawGroundGlow(Assets *assets, Vector3 position, float radius, Color tint)
 {
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
     Matrix m = EnvTRS((Vector3){ radius*2.0f, 1.0f, radius*2.0f }, 0.0f,
                       (Vector3){ position.x, ARENA_DECAL_Y, position.z });
     DrawLit(assets, assets->plane, m, assets->texGlow, tint,
             (Vector2){ 1.0f, 1.0f }, 1.0f);
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
 }
 
 static void DrawDeck(const Arena *arena, Assets *assets)

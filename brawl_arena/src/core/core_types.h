@@ -21,6 +21,7 @@
 #define MAX_BRAWLERS 8
 #define MAX_PROJECTILES 512
 #define MAX_PARTICLES 1024
+#define MAX_VFX_INSTANCES 192
 #define MAX_FLOATTEXTS 64
 #define CHARACTER_TARGET_H 3.1f
 #define MAX_GEMS 40
@@ -91,6 +92,68 @@ typedef enum {
     PARTICLE_SMOKE,
     PARTICLE_DEBRIS
 } ParticleType;
+
+// Stable simulation-to-presentation identifiers. Gameplay emits these IDs without
+// knowing which textures, layers, blend modes, or fallback geometry render them.
+typedef enum {
+    VFX_NONE = 0,
+    VFX_SCRAPPER_CAST,
+    VFX_SCRAPPER_IMPACT,
+    VFX_SCRAPPER_SUPER_CAST,
+    VFX_SCRAPPER_SUPER_IMPACT,
+    VFX_LONGSHOT_CAST,
+    VFX_LONGSHOT_IMPACT,
+    VFX_LONGSHOT_SUPER_CAST,
+    VFX_LONGSHOT_SUPER_IMPACT,
+    VFX_MORTAR_CAST,
+    VFX_MORTAR_IMPACT,
+    VFX_MORTAR_SUPER_CAST,
+    VFX_MORTAR_SUPER_IMPACT,
+    VFX_TANK_CAST,
+    VFX_TANK_IMPACT,
+    VFX_TANK_RECLAIM,
+    VFX_TANK_JETS_START,
+    VFX_TANK_JETS_TRAIL,
+    VFX_TANK_CHARGE_START,
+    VFX_TANK_CHARGE_TRAIL,
+    VFX_TANK_CHARGE_IMPACT,
+    VFX_GUARDIAN_RAIN_CAST,
+    VFX_GUARDIAN_RAIN_PULSE,
+    VFX_GUARDIAN_RAIN_HEAL,
+    VFX_GUARDIAN_RAIN_DAMAGE,
+    VFX_GUARDIAN_RESONANCE_CAST,
+    VFX_GUARDIAN_RESONANCE_HEAL,
+    VFX_GUARDIAN_RESONANCE_DAMAGE,
+    VFX_GENERIC_HEAL,
+    VFX_EFFECT_COUNT
+} VfxEffectId;
+
+// Stable attachment points shared by simulation events and presentation. Gameplay
+// supplies the semantic socket; the renderer resolves it against the current rig pose
+// and falls back to a kit-independent approximate pose when a model is unavailable.
+typedef enum {
+    VFX_SOCKET_NONE = 0,
+    VFX_SOCKET_CENTER,
+    VFX_SOCKET_CHEST,
+    VFX_SOCKET_LEFT_HAND,
+    VFX_SOCKET_RIGHT_HAND,
+    VFX_SOCKET_LEFT_SHOULDER,
+    VFX_SOCKET_RIGHT_SHOULDER,
+    VFX_SOCKET_LEFT_FOOT,
+    VFX_SOCKET_RIGHT_FOOT,
+    VFX_SOCKET_COUNT
+} VfxSocket;
+
+// Presentation-only one-shot actions. These IDs are emitted by deterministic
+// gameplay but do not alter hit timing, cooldowns, movement, or any other rule.
+typedef enum {
+    CHARACTER_ACTION_NONE = 0,
+    CHARACTER_ACTION_MAIN,
+    CHARACTER_ACTION_SUPER,
+    CHARACTER_ACTION_CAST,
+    CHARACTER_ACTION_MOBILITY,
+    CHARACTER_ACTION_COUNT
+} CharacterActionId;
 
 extern const char *CLASS_NAMES[CLASS_COUNT];
 extern const char *BOT_MODE_NAMES[BOT_MODE_COUNT];

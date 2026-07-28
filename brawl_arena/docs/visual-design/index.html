@@ -48,7 +48,7 @@
                 </div>
                 <div class="hero-stat">
                     <dt>Signature</dt>
-                    <dd>Signal rail + hull cuts</dd>
+                    <dd>Signal rail + orbital hardware</dd>
                 </div>
                 <div class="hero-stat">
                     <dt>Rule</dt>
@@ -82,8 +82,8 @@
                     <span class="panel-kicker">Material</span>
                     <h3>Cut hull, not glass</h3>
                     <p>
-                        Chamfered panels, inset rails, thin structural lines, and safety
-                        markings replace the current collection of interchangeable rounded cards.
+                        Opaque bolted panels, inset rails, thin structural lines, and safety
+                        markings make every surface feel like station hardware rather than glass.
                     </p>
                 </article>
                 <article class="panel" data-accent="violet">
@@ -264,8 +264,8 @@
                     <h2>Build the system first</h2>
                 </div>
                 <p>
-                    Repainting the existing calls one by one would preserve the inconsistency.
-                    Establish shared presentation primitives, then move screens onto them.
+                    The runtime now routes screen drawing through shared presentation primitives:
+                    one theme/text/input system and one independently fallible texture skin.
                 </p>
             </div>
             <div class="table-scroll">
@@ -284,24 +284,14 @@
                             <td>Screen flow or gameplay values</td>
                         </tr>
                         <tr>
-                            <td><code>ui/ui_text.[ch]</code></td>
-                            <td>Font lifetime, measurement, alignment, shadow/outline helpers</td>
+                            <td><code>ui/ui_system.[ch]</code></td>
+                            <td>Font lifetime, measurement, layout, focus, and controls</td>
                             <td>Character or world assets</td>
                         </tr>
                         <tr>
-                            <td><code>ui/ui_layout.[ch]</code></td>
-                            <td>Reference-canvas scale, safe frame, anchors, text fitting</td>
-                            <td>Specific menu content</td>
-                        </tr>
-                        <tr>
-                            <td><code>ui/ui_components.[ch]</code></td>
-                            <td>Buttons, panels, keycaps, bars, stat rows, segmented controls</td>
-                            <td>Command-center mutations</td>
-                        </tr>
-                        <tr>
-                            <td><code>ui/ui_input.[ch]</code></td>
-                            <td>Focus, navigation, pointer/controller activation, focus memory</td>
-                            <td>Player movement or combat input</td>
+                            <td><code>ui/ui_skin.[ch]</code></td>
+                            <td>Curated texture lifetime, nine-slice hardware, orbital/radar motifs, fallbacks</td>
+                            <td>Fonts, gameplay values, or world textures</td>
                         </tr>
                         <tr>
                             <td><code>devtools/command_widgets.[ch]</code></td>
@@ -317,8 +307,8 @@
             <div>
                 <strong>Next: screen compositions</strong>
                 <p>
-                    See the menu, character-select, HUD, and command-center concepts before
-                    implementation. They are direction-setting layouts, not pixel-locked production art.
+                    See the implemented menu, character-select, HUD, and command-center
+                    compositions. They remain direction-setting references rather than screenshots.
                 </p>
             </div>
             <div class="footer-meta">

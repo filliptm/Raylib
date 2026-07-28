@@ -38,6 +38,14 @@ high-contrast combat cues, tutorial visibility, and keyboard/gamepad glyph prefe
 the ignored player profile. Menu, roster, overlays, result screen, and tuning controls
 support pointer and keyboard focus; player-facing screens also support gamepad focus.
 
+The shell and HUD use the **Helios Broadcast** skin. Neutral CC0 hardware from Kenney's
+UI Pack - Sci-Fi supplies scalable bolted panels, buttons, keycaps, and progress frames;
+two cropped CC0 OpenGameArt motifs supply the orbital/radar stage linework. Both are
+tinted through the existing Helios palette, while Barlow/IBM Plex text and code-drawn
+icons remain authoritative. Resources load once through `UiSystem`, and every textured
+primitive retains the previous geometry fallback if a file is unavailable. Source,
+license, curated-runtime, and derivative records live together under `resources/ui/`.
+
 `ESC` closes the nearest overlay or command center first, then steps back a screen:
 roster to menu, match to menu, and menu to quit. raylib's default escape-to-close behavior
 is disabled so this navigation remains explicit.
@@ -177,7 +185,7 @@ independently when its controls are taller than the window.
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
 | **KIT** | Live edit of the active kit, including ammo capacity and main-shot self-healing. Tank exposes Shoulder Jets cooldown/duration/speed; Guardian exposes rain duration/pulse/growth and Resonance duration/tick/wave controls, plus reset/save-as-project actions |
 | **VISUAL** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
-| **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
+| **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, live VFX diagnostics, direct effect/action previews, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
 | **PREVIEW / UI** | Per-character home/select framing plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
 
 Editing a kit's max health updates living brawlers of that class immediately, keeping
@@ -265,6 +273,45 @@ object rather than as a light.
 
 Shadows are soft radial ground decals rather than hard cylinders.
 
+**Helios control hardware.** Player and developer UI surfaces are opaque physical
+controls rather than glass. Nine-slice Kenney textures scale without stretching their
+corners or screws, progress fills preserve their framed edges, and sparse
+OpenGameArt-derived rings sit behind menu characters and real result/objective data.
+`make ui-assets` deterministically rebuilds the two tintable motifs from their retained
+source sheets; `make check-ui` verifies dimensions, hashes, provenance files, ownership,
+and the absence of downloaded archives.
+
+**Ability VFX** are a reusable presentation library rather than art embedded in a
+character model. Stable gameplay events select one of 28 recipes, and each recipe layers
+CC0 flipbooks or particle shapes over the existing procedural particles, lights, rings,
+and authoritative telegraphs. Scrapper uses compact industrial sparks, Longshot uses
+clean cyan rail energy, Mortar adds animated explosions/smoke/scorch, Tank distinguishes
+blue non-damaging Shoulder Jets from gold destructive Charge and draws teal reclaim
+energy back from successful hits, and Guardian layers restorative rain and resonance
+marks over its real field geometry. Imported recipe layers render at a shared `2.0×`
+readability scale; gameplay ranges, hitboxes, field radii, and authoritative telegraphs
+retain their simulation-authored dimensions.
+
+Source and target metadata let short-lived effects follow the final animated hand,
+shoulder, chest, foot, or center pose instead of remaining at the gameplay actor origin.
+The renderer resolves the current Meshy bone pose every frame and retains approximate
+sockets for primitive characters or an unmapped bone. The WORLD tab reports loaded
+atlases, active layers, pool pressure, dropped effects, consumed events, spawned layers,
+the last recipe, and the selected action's progress/blend; its recipe/action preview
+controls allow direct visual checks without waiting for a combat outcome.
+
+Seven generated atlases live under `build/assets/vfx/`; their curated sources, notices,
+and manifest live under `resources/vfx/` and `data/vfx/`. Alpha smoke is depth-tested and
+sorted, additive energy keeps depth testing without writing depth, and ground layers use
+separate offsets below the targeting plane to avoid floor fighting. Missing imported
+atlases skip only those layers—the procedural feedback and gameplay boundaries remain.
+Generated cells bleed color beneath zero alpha and use transparent guards plus
+half-texel-inset runtime UVs, preventing black mattes and neighboring-frame edges under
+bilinear filtering. No-depth-write presentation passes flush raylib's immediate batch
+before changing and restoring the depth mask, so transparent billboard quads cannot
+become rectangular silhouettes in the depth-based ink outline.
+See [the VFX pipeline](docs/VFX_PIPELINE.md).
+
 **Post-processing** adds thresholded bloom, a vignette, a gentle contrast S-curve, and
 FXAA-style edge smoothing. Toggle the pass and dial bloom strength on the WORLD tab.
 The depth-based effects use the same 0.5-to-120 clip range as the 3D cameras rather than
@@ -323,9 +370,9 @@ invisible.
 
 ## Imported characters
 
-SCRAPPER, TANK, and GUARDIAN are played as rigged, animated character models - on the
-menu podium, in character select, and in the arena. Longshot and Mortar keep their
-primitive brawlers in their accent colours. Menu and character-select previews hold a
+SCRAPPER, LONGSHOT, TANK, and GUARDIAN are played as rigged, animated character models -
+on the menu podium, in character select, and in the arena. Mortar keeps its primitive
+brawler in its accent colour. Menu and character-select previews hold a
 fixed direction while their idle animation continues. Every character has independently
 authorable home/select yaw, scale, offset, camera height, and distance. Tank's tracked
 profile uses a 25-degree right-facing home offset, then returns to a smaller direct-front
@@ -339,24 +386,36 @@ is missing.
 In a match the clip is picked from the movement direction relative to facing -
 forward, backward and four diagonals - so backpedaling and circle-strafing animate
 correctly instead of moonwalking, with playback rate following actual speed. Going
-down plays a death clip that holds until just before the respawn, and a brawler that
-just fired holds a combat stance. Tracked mesh-only models live under
+down plays a death clip that holds until just before the respawn. A stationary attack
+keeps the authored idle as its base while a short, explicitly emitted action overlay,
+facing, muzzle light, projectiles, and ability VFX sell the cast. That overlay blends
+back out and repeated attacks restart it; it never borrows timing from concealment.
+When an optional semantic action clip is unavailable, the renderer applies a restrained
+upper-body procedural pose. The bush-reveal timer never selects an animation. The
+generic `combat_stance` clip is retained in the asset contract for a future continuous
+blended aiming state rather than being played as an unsynchronized firing loop. Tracked
+mesh-only models live under
 `resources/characters/models/`; the shared twelve-clip `meshy_humanoid_v1` library and
 small character-specific overrides live under `resources/characters/animations/`.
 `make character-assets` validates the common 24-bone topology, retargets motion relative
 to each model's animation rest pose, and writes self-contained raylib assets under
 `build/assets/characters/`. Every embedded character texture is exactly 1024×1024 (1K);
 `make check-character-assets` validates the model, animation, generated-output, root
-motion, and texture contracts.
-raylib has no animation crossfade, so clip changes restart the cycle - a known small pop.
+motion, mesh-index, and texture contracts. Dense imports are split into raylib-safe
+16-bit indexed primitives automatically; Longshot is the current high-detail example.
+The current twelve-clip libraries do not contain authored attack clips, so all current
+rigged characters use those shared procedural `MAIN`, `SUPER`, `CAST`, and `MOBILITY`
+overlays. Optional future clips may replace an overlay by using `attack_main` (or
+`shoot`), `attack_super`, `cast`, or `mobility`. raylib has no locomotion crossfade, so
+base clip changes restart the cycle - a known small pop.
 
 Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
 check and then render as a collapsed spike-ball. The full story of why (raylib's
 glTF loader implements a much narrower contract than the spec), the converter that
 fixes it, the checklist for importing the next character, and the debugging traps to
 avoid are in **[docs/CHARACTER_PIPELINE.md](docs/CHARACTER_PIPELINE.md)**. Short
-version (a compatible Meshy `Character_output` model is sufficient; repeated animation
-exports are not required):
+version (a compatible Meshy `Character_output` model or standalone merged-animation GLB
+is sufficient; repeated animation exports are not required):
 
     python3 tools/import_character.py <meshy-zip-dir-or-glb> \
       resources/characters/models/<name>.glb --id <name>
@@ -389,6 +448,10 @@ src/
 └── devtools/      # command center and widgets
 ```
 
+Reusable asset libraries live outside `src/`: character models/animations under
+`resources/characters/`, interface art under `resources/ui/`, ability art under
+`resources/vfx/`, and generated runtime outputs under `build/assets/`.
+
 `App` separately owns match simulation, local controller state, presentation state,
 screen flow, effective tuning, typed content, and configuration provenance. Match reset
 clears only the match/controller/presentation regions.
@@ -410,6 +473,7 @@ See:
 - [Content and tuning](docs/CONTENT_AND_TUNING.md)
 - [Map packages](docs/MAPS.md)
 - [Development guide](docs/DEVELOPMENT.md)
+- [Ability VFX pipeline](docs/VFX_PIPELINE.md)
 - [Visual design field guide](docs/visual-design/index.html) — implemented Helios
   Broadcast styling and screen references, plus the historical pre-implementation audit
 - [Helios Broadcast implementation plan](docs/visual-design/IMPLEMENTATION_PLAN.md) —
@@ -461,10 +525,11 @@ sandbox it started as, with the static training bots.
 
 - No sound. Raylib's audio module is available but nothing is wired up.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
-- Character animation clips switch without crossfading.
-- Longshot and Mortar still use the primitive fallback characters.
+- Locomotion clips switch without crossfading; explicit action overlays blend in and out.
+- Mortar still uses the primitive fallback character.
 - Headless tests cover configuration, Guardian behavior, Tank sustain/mobility/Charge,
   out-of-combat regeneration timing and interruption, all-kit camera isolation, external
   maps, deterministic replay, events, presentation isolation, and deterministic
-  character retargeting/asset contracts. Graphical and interaction paths still require
-  runtime checks.
+  character retargeting/asset contracts and stationary-fire animation isolation, plus
+  deterministic VFX atlases, all-kit VFX mappings, recipe coverage, animation timing,
+  and pool pressure. Graphical and interaction paths still require runtime checks.

@@ -73,10 +73,9 @@ bool CommandUiButton(CommandUi *ui, const char *label)
     bool hover = response.hovered && CommandUiMouseIn(ui->clip);
     bool clicked = response.activated;
 
-    DrawRectangleRounded(bounds, 0.28f, 6,
-                         hover ? COMMAND_ACCENT_DIM : (Color){ 34, 42, 56, 255 });
-    DrawRectangleRoundedLines(bounds, 0.28f, 6,
-                              hover ? COMMAND_ACCENT : COMMAND_PANEL_EDGE);
+    UiDrawControlSurface(bounds,
+                         hover ? COMMAND_ACCENT_DIM : (Color){ 34, 42, 56, 255 },
+                         hover ? COMMAND_ACCENT : COMMAND_PANEL_EDGE, false);
 
     if (response.focused && UiSystemActive()->focusVisible)
         DrawRectangleLinesEx(bounds, UiScale(2), COMMAND_TEXT_MAIN);
@@ -168,8 +167,10 @@ static bool SliderTrack(CommandUi *ui, const void *id, const char *label,
 
     UiDrawText(UI_TEXT_CAPTION, label, (Vector2){ ui->x, ui->y + 4 },
                hover ? COMMAND_TEXT_MAIN : COMMAND_TEXT_DIM);
+    // The command body already owns a scissor rectangle. Keep this compact
+    // inspector track code-drawn because raylib scissor state is not nestable;
+    // player-facing progress bars use the textured shared primitive.
     DrawRectangleRounded(track, 0.9f, 6, COMMAND_TRACK_BG);
-
     Rectangle fill = track;
     fill.width = track.width*(*normalized);
     if (fill.width > 2)
@@ -241,10 +242,12 @@ bool CommandUiCycler(CommandUi *ui, const char *label, int *value,
     bool leftHover = CommandUiMouseIn(left) && CommandUiMouseIn(ui->clip);
     bool rightHover = CommandUiMouseIn(right) && CommandUiMouseIn(ui->clip);
 
-    DrawRectangleRounded(left, 0.3f, 5,
-                         leftHover ? COMMAND_ACCENT_DIM : COMMAND_TRACK_BG);
-    DrawRectangleRounded(right, 0.3f, 5,
-                         rightHover ? COMMAND_ACCENT_DIM : COMMAND_TRACK_BG);
+    UiDrawControlSurface(left,
+                         leftHover ? COMMAND_ACCENT_DIM : COMMAND_TRACK_BG,
+                         leftHover ? COMMAND_ACCENT : COMMAND_PANEL_EDGE, false);
+    UiDrawControlSurface(right,
+                         rightHover ? COMMAND_ACCENT_DIM : COMMAND_TRACK_BG,
+                         rightHover ? COMMAND_ACCENT : COMMAND_PANEL_EDGE, false);
     UiIconDraw(UI_ICON_PREVIOUS,
                (Vector2){ left.x + left.width/2, left.y + left.height/2 },
                UiScale(10), COMMAND_TEXT_MAIN);

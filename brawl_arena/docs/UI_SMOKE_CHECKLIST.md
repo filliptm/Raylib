@@ -39,8 +39,9 @@ At every size verify:
 
 ## Screen pass
 
-- Launch deck: selected identity, stats, abilities, mode arrows, Practice, Controls,
-  Settings, Deploy, and Quit.
+- Launch deck: title, open character stage, active-brawler switcher, mode arrows,
+  Practice, Controls, Settings, Deploy, and Quit; combat stats remain exclusive to the
+  roster bay.
 - Roster bay: all five candidates, candidate preview, explicit Select, cancel without
   committing, and selected state after returning home.
 - Controls: correct keyboard/mouse and gamepad bindings; Back restores prior focus.
@@ -87,9 +88,15 @@ screens:
 ## Rendering and fallback
 
 - Local Barlow/IBM Plex fonts load; temporarily missing fonts fall back without crashing.
+- Kenney panels/buttons/bars stay opaque and preserve corners, screws, borders, focus
+  rings, and pointer bounds at every viewport.
+- Orbital/radar motifs remain restrained behind characters/data and never obscure text
+  or silhouettes.
 - Helios-9 and Training Court render with and without post effects.
 - Resize repeatedly during a match and menu transition; render targets recreate cleanly.
 - Temporarily missing station/character assets use coherent procedural fallbacks.
+- Temporarily missing individual UI skin textures fall back independently to the
+  code-drawn Helios geometry without changing layout or preventing startup.
 - Imported animation selection, grass, aim previews, rain, Resonance, and result overlays
   remain aligned with the world.
 

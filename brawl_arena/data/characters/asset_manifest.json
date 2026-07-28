@@ -13,6 +13,13 @@
       "output": "build/assets/characters/sentinel.glb"
     },
     {
+      "id": "longshot",
+      "class": "CLASS_SNIPER",
+      "model": "resources/characters/models/longshot.glb",
+      "overrides": [],
+      "output": "build/assets/characters/longshot.glb"
+    },
+    {
       "id": "ironclad_guardian",
       "class": "CLASS_BRUISER",
       "model": "resources/characters/models/ironclad_guardian.glb",

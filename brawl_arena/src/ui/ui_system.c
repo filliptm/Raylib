@@ -34,6 +34,8 @@ bool UiSystemLoad(UiSystem *ui)
                                         &ui->resources.emphasisOwned, &ui->fontFallback);
     ui->resources.data = LoadUiFont("resources/fonts/IBMPlexMono-Medium.ttf", 64,
                                     &ui->resources.dataOwned, &ui->fontFallback);
+    if (!UiSkinLoad(&ui->skin))
+        TraceLog(LOG_WARNING, "UI: one or more skin resources are using safe fallbacks");
     ui->modality = UI_INPUT_POINTER;
     ui->interactionsEnabled = true;
     ui->previousMouse = GetMousePosition();
@@ -43,6 +45,7 @@ bool UiSystemLoad(UiSystem *ui)
 
 void UiSystemUnload(UiSystem *ui)
 {
+    UiSkinUnload(&ui->skin);
     if (ui->resources.displayOwned) UnloadFont(ui->resources.display);
     if (ui->resources.bodyOwned) UnloadFont(ui->resources.body);
     if (ui->resources.emphasisOwned) UnloadFont(ui->resources.emphasis);
@@ -353,13 +356,8 @@ static void ChamferPoints(Rectangle r, float cut, Vector2 points[6])
     points[5] = (Vector2){ r.x + r.width, r.y };
 }
 
-void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised)
+static void DrawPanelGeometry(Rectangle bounds, Color fill, Color edge, bool raised)
 {
-    // Panels are physical Helios-9 control surfaces, not glass. Keep explicit
-    // zero-alpha fills for outline-only focus rings, but make every real surface
-    // opaque even if a caller passes a legacy translucent color.
-    if (fill.a > 0) fill.a = 255;
-
     float cut = fminf(UiScale(12), fminf(bounds.width, bounds.height)*0.18f);
     Vector2 points[6];
     if (raised)
@@ -374,6 +372,39 @@ void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised)
     DrawTriangleFan(points, 6, fill);
     for (int i = 0; i < 6; i++)
         DrawLineEx(points[i], points[(i + 1)%6], UiScale(1.25f), edge);
+}
+
+static Color OpaqueSurface(Color fill)
+{
+    // Panels are physical Helios-9 control surfaces, not glass. Keep explicit
+    // zero-alpha fills for outline-only focus rings, but make every real surface
+    // opaque even if a caller passes a legacy translucent color.
+    if (fill.a > 0) fill.a = 255;
+    return fill;
+}
+
+void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised)
+{
+    fill = OpaqueSurface(fill);
+    if (g_ui && UiSkinDrawPanel(&g_ui->skin, bounds, fill, edge, raised, false))
+        return;
+    DrawPanelGeometry(bounds, fill, edge, raised);
+}
+
+void UiDrawFeaturePanel(Rectangle bounds, Color fill, Color edge, bool raised)
+{
+    fill = OpaqueSurface(fill);
+    if (g_ui && UiSkinDrawPanel(&g_ui->skin, bounds, fill, edge, raised, true))
+        return;
+    DrawPanelGeometry(bounds, fill, edge, raised);
+}
+
+void UiDrawControlSurface(Rectangle bounds, Color fill, Color edge, bool raised)
+{
+    fill = OpaqueSurface(fill);
+    if (g_ui && UiSkinDrawButton(&g_ui->skin, bounds, fill, edge, raised))
+        return;
+    DrawPanelGeometry(bounds, fill, edge, raised);
 }
 
 void UiDrawSignalRail(Rectangle bounds, Color color, bool rightSide)
@@ -392,8 +423,8 @@ void UiDrawSignalRail(Rectangle bounds, Color color, bool rightSide)
 void UiDrawKeycap(Rectangle bounds, const char *label, bool active)
 {
     const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    UiDrawPanel(bounds, active ? t->hullBright : t->hull,
-                active ? t->ion : t->line, false);
+    UiDrawControlSurface(bounds, active ? t->hullBright : t->hull,
+                         active ? t->ion : t->line, false);
     UiDrawTextFit(UI_TEXT_CAPTION, label, bounds, UI_ALIGN_CENTER,
                   active ? t->paper : t->mist);
 }
@@ -402,6 +433,9 @@ void UiDrawProgress(Rectangle bounds, float value, Color fill, bool segmented, i
 {
     const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
     value = Clamp(value, 0.0f, 1.0f);
+    if (g_ui && UiSkinDrawProgress(&g_ui->skin, bounds, value, t->hull, fill,
+                                   segmented, segments, UiScale(3)))
+        return;
     DrawRectangleRec(bounds, t->hull);
     if (!segmented || segments <= 1)
     {
@@ -418,6 +452,23 @@ void UiDrawProgress(Rectangle bounds, float value, Color fill, bool segmented, i
         DrawRectangleRec((Rectangle){ bounds.x + i*(part + gap), bounds.y,
                                       part*amount, bounds.height }, fill);
     }
+}
+
+void UiDrawDecoration(UiDecoration decoration, Rectangle bounds, Color tint, float opacity)
+{
+    tint.a = (unsigned char)roundf(255.0f*Clamp(opacity, 0.0f, 1.0f));
+    if (g_ui && UiSkinDrawDecoration(&g_ui->skin, decoration, bounds, tint))
+        return;
+
+    // Decorative resources are optional. A restrained geometric fallback keeps
+    // the composition intentional when assets are missing without blocking play.
+    Vector2 center = {
+        bounds.x + bounds.width*0.5f, bounds.y + bounds.height*0.5f
+    };
+    float radius = fminf(bounds.width, bounds.height)*0.48f;
+    DrawCircleLines((int)center.x, (int)center.y, radius, tint);
+    DrawCircleLines((int)center.x, (int)center.y, radius*0.68f, tint);
+    DrawCircleLines((int)center.x, (int)center.y, radius*0.34f, tint);
 }
 
 static bool MouseIn(Rectangle bounds)
@@ -476,7 +527,7 @@ UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
     if (r.hovered || (r.focused && g_ui && g_ui->focusVisible))
         edge = style == UI_BUTTON_PRIMARY ? t->paper : t->ion;
 
-    UiDrawPanel(bounds, fill, edge, style == UI_BUTTON_PRIMARY);
+    UiDrawControlSurface(bounds, fill, edge, style == UI_BUTTON_PRIMARY);
     if (r.focused && g_ui && g_ui->focusVisible)
     {
         Rectangle ring = { bounds.x - UiScale(3), bounds.y - UiScale(3),
@@ -504,9 +555,9 @@ UiResponse UiIconButton(UiId id, Rectangle bounds, UiIcon icon, const char *acce
     (void)accessibleLabel;
     UiResponse r = Register(id, bounds, true);
     const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    UiDrawPanel(bounds, r.hovered ? t->hull : t->deck,
-                (r.focused && g_ui && g_ui->focusVisible) ? t->paper :
-                (r.hovered ? t->ion : t->line), false);
+    UiDrawControlSurface(bounds, r.hovered ? t->hull : t->deck,
+                         (r.focused && g_ui && g_ui->focusVisible) ? t->paper :
+                         (r.hovered ? t->ion : t->line), false);
     UiIconDraw(icon, (Vector2){ bounds.x + bounds.width*0.5f,
                                bounds.y + bounds.height*0.5f },
                fminf(bounds.width, bounds.height)*0.42f, t->paper);

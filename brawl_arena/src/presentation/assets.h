@@ -2,6 +2,9 @@
 #define ASSETS_H
 
 #include "content_types.h"
+#include "presentation_types.h"
+
+#define CHARACTER_BONE_LIMIT 128
 
 typedef struct RiggedCharacter {
     Model model;
@@ -14,6 +17,13 @@ typedef struct RiggedCharacter {
     int clipIdle, clipCombat, clipWalk;
     int clipRunF, clipRunB, clipRunFL, clipRunFR, clipRunBL, clipRunBR;
     int clipDeath;
+    // Optional library clips. Current generated characters use the shared
+    // procedural action overlay when these tracks are absent.
+    int clipActionMain, clipActionSuper, clipActionCast, clipActionMobility;
+    int boneHips, boneSpine, boneChest;
+    int boneLeftShoulder, boneLeftArm, boneLeftForeArm, boneLeftHand;
+    int boneRightShoulder, boneRightArm, boneRightForeArm, boneRightHand;
+    int boneLeftFoot, boneRightFoot;
     float scale;            // normalises source units to CHARACTER_TARGET_H
     float footOffset;       // lifts the model so its feet land on y = 0
 } RiggedCharacter;
@@ -56,6 +66,17 @@ typedef struct StationModel {
     Model model;
     bool ok;
 } StationModel;
+
+typedef enum VfxAtlasId {
+    VFX_ATLAS_SHAPES = 0,
+    VFX_ATLAS_EXPLOSION,
+    VFX_ATLAS_WATER,
+    VFX_ATLAS_ENERGY_LOOP,
+    VFX_ATLAS_AIR_BURST,
+    VFX_ATLAS_DIVINE_IMPACT,
+    VFX_ATLAS_SMOKE_LOOP,
+    VFX_ATLAS_COUNT
+} VfxAtlasId;
 
 // Everything the renderer needs that is built once at startup: generated textures,
 // unit meshes, shaders, optional per-kit characters, and static station models.
@@ -132,6 +153,11 @@ typedef struct Assets {
     Texture2D texFlat;      // 1x1 white
     Texture2D texGlow;      // soft radial falloff, used for glows and shadows
 
+    // Optional presentation-only ability flipbooks. If an atlas is missing, the
+    // event still produces the existing procedural particles/lights/telegraphs.
+    Texture2D vfxAtlases[VFX_ATLAS_COUNT];
+    bool vfxAtlasesOk[VFX_ATLAS_COUNT];
+
     RenderTexture2D sceneTarget;
 } Assets;
 
@@ -168,9 +194,15 @@ void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrengt
 // caller can advance it at whatever rate suits. `dither` is the screen-door amount for
 // bush concealment and `emissive` lifts the surface out of lighting (used for hit flash).
 // `loop` wraps the frame; one-shot clips (death) clamp on their last frame instead.
+// A current action is crossfaded over locomotion. When its optional authored clip is
+// missing, a shared Meshy-biped procedural pose is used. `socketPose` receives the
+// final posed joint locations in world space and may be NULL.
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop, Color tint, float dither,
-                         float emissive, const Vector3 *lightPos, const Vector3 *lightColor,
+                         float emissive, CharacterActionId action,
+                         float actionProgress, float actionWeight,
+                         CharacterSocketPose *socketPose,
+                         const Vector3 *lightPos, const Vector3 *lightColor,
                          int lightCount, Vector3 viewPos);
 
 // Per-frame grass uniforms. Actors are the brawlers that push blades aside.

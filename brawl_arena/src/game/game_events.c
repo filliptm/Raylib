@@ -13,6 +13,8 @@ static GameEvent *Push(GameSession *session, GameEventType type)
     GameEvent *event = &queue->items[queue->count++];
     *event = (GameEvent){ 0 };
     event->type = type;
+    event->sourceBrawler = -1;
+    event->targetBrawler = -1;
     return event;
 }
 
@@ -103,6 +105,45 @@ void GameEmitParticle(GameSession *session, Vector3 position, Vector3 velocity, 
     event->life = life;
     event->size = size;
     event->particleType = type;
+}
+
+void GameEmitVfx(GameSession *session, VfxEffectId id, Vector3 position,
+                 Vector3 endPosition, float angle, float size, Color color)
+{
+    GameEmitVfxAttached(session, id, position, endPosition, angle, size, color,
+                        -1, VFX_SOCKET_NONE, -1, VFX_SOCKET_NONE);
+}
+
+void GameEmitVfxAttached(GameSession *session, VfxEffectId id, Vector3 position,
+                         Vector3 endPosition, float angle, float size, Color color,
+                         int sourceBrawler, VfxSocket startSocket,
+                         int targetBrawler, VfxSocket endSocket)
+{
+    if (id <= VFX_NONE || id >= VFX_EFFECT_COUNT) return;
+    GameEvent *event = Push(session, GAME_EVENT_VFX);
+    if (!event) return;
+    event->vfxId = id;
+    event->position = position;
+    event->endPosition = endPosition;
+    event->angle = angle;
+    event->size = size;
+    event->color = color;
+    event->sourceBrawler = sourceBrawler;
+    event->targetBrawler = targetBrawler;
+    event->startSocket = startSocket;
+    event->endSocket = endSocket;
+}
+
+void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
+                             CharacterActionId action)
+{
+    if (brawlerIndex < 0 || brawlerIndex >= session->brawlerCount ||
+        action <= CHARACTER_ACTION_NONE || action >= CHARACTER_ACTION_COUNT)
+        return;
+    GameEvent *event = Push(session, GAME_EVENT_CHARACTER_ACTION);
+    if (!event) return;
+    event->sourceBrawler = brawlerIndex;
+    event->characterAction = action;
 }
 
 void GameEmitMatchShake(GameSession *session, float amount)

@@ -3,6 +3,7 @@
 #include "arena.h"
 #include "content_catalog.h"
 #include "environment.h"
+#include "render_state.h"
 #include "weapons.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -147,7 +148,7 @@ static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge)
 static void DrawActiveFields(App *world, Assets *assets)
 {
     BeginBlendMode(BLEND_ADDITIVE);
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
 
     for (int i = 0; i < MAX_ABILITY_FIELDS; i++)
     {
@@ -253,13 +254,13 @@ static void DrawActiveFields(App *world, Assets *assets)
         DrawGroundGlow(assets, brawler->position, 1.15f*pulse, aura);
     }
 
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
     EndBlendMode();
 }
 
 static void FinishAimPass(void)
 {
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
     EndBlendMode();
 }
 
@@ -306,7 +307,7 @@ static void DrawAimPreview(App *world, Assets *assets)
     }
 
     BeginBlendMode(BLEND_ADDITIVE);
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
 
     if (!super && ability->behavior == ABILITY_BEHAVIOR_RAIN)
     {

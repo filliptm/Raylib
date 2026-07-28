@@ -22,6 +22,71 @@ static AbilityField *AllocAbilityField(GameContext w)
     return NULL;
 }
 
+static VfxEffectId CastVfxFor(BrawlerClass cls, bool super)
+{
+    switch (cls)
+    {
+        case CLASS_SHOTGUNNER:
+            return super ? VFX_SCRAPPER_SUPER_CAST : VFX_SCRAPPER_CAST;
+        case CLASS_SNIPER:
+            return super ? VFX_LONGSHOT_SUPER_CAST : VFX_LONGSHOT_CAST;
+        case CLASS_LOBBER:
+            return super ? VFX_MORTAR_SUPER_CAST : VFX_MORTAR_CAST;
+        case CLASS_BRUISER:
+            return super ? VFX_TANK_CHARGE_START : VFX_TANK_CAST;
+        case CLASS_HEALER:
+            return super ? VFX_GUARDIAN_RESONANCE_CAST
+                         : VFX_GUARDIAN_RAIN_CAST;
+        default:
+            return VFX_NONE;
+    }
+}
+
+static VfxEffectId ImpactVfxFor(GameContext w, const Projectile *projectile)
+{
+    if (projectile->owner < 0 ||
+        projectile->owner >= w.session->brawlerCount)
+        return VFX_NONE;
+    switch (w.session->brawlers[projectile->owner].cls)
+    {
+        case CLASS_SHOTGUNNER:
+            return projectile->isSuper ? VFX_SCRAPPER_SUPER_IMPACT
+                                       : VFX_SCRAPPER_IMPACT;
+        case CLASS_SNIPER:
+            return projectile->isSuper ? VFX_LONGSHOT_SUPER_IMPACT
+                                       : VFX_LONGSHOT_IMPACT;
+        case CLASS_LOBBER:
+            return projectile->isSuper ? VFX_MORTAR_SUPER_IMPACT
+                                       : VFX_MORTAR_IMPACT;
+        case CLASS_BRUISER:
+            return VFX_TANK_IMPACT;
+        default:
+            return VFX_NONE;
+    }
+}
+
+static Vector3 AimEndpoint(Vector3 position, float angle, float distance)
+{
+    return (Vector3){
+        position.x + sinf(angle)*distance,
+        position.y,
+        position.z + cosf(angle)*distance
+    };
+}
+
+static Color AbilityVfxColor(BrawlerClass cls, Team team, bool super)
+{
+    if (super) return (Color){ 255, 218, 104, 255 };
+    switch (cls)
+    {
+        case CLASS_SNIPER: return (Color){ 118, 232, 255, 255 };
+        case CLASS_LOBBER: return (Color){ 255, 174, 92, 255 };
+        case CLASS_BRUISER: return (Color){ 255, 188, 96, 255 };
+        case CLASS_HEALER: return (Color){ 70, 244, 166, 255 };
+        default: return TEAM_COLORS[team];
+    }
+}
+
 static float SuperGainFor(GameContext w, int owner)
 {
     if (owner < 0 || owner >= w.session->brawlerCount) return 0.0f;
@@ -44,8 +109,14 @@ static int ApplyProjectileDamage(GameContext w, Projectile *projectile,
     {
         Brawler *owner = &w.session->brawlers[projectile->owner];
         Vector3 healPosition = { owner->position.x, 1.0f, owner->position.z };
-        BrawlerApplyHealing(w, projectile->owner, healing,
-                            projectile->owner, healPosition);
+        int restored = BrawlerApplyHealing(w, projectile->owner, healing,
+                                           projectile->owner, healPosition);
+        if (restored > 0)
+            GameEmitVfxAttached(w.session, VFX_TANK_RECLAIM, hitPosition,
+                                healPosition, 0.0f, 1.15f,
+                                (Color){ 70, 244, 166, 255 },
+                                -1, VFX_SOCKET_NONE,
+                                projectile->owner, VFX_SOCKET_CHEST);
     }
     return removed;
 }
@@ -90,11 +161,12 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
 
     if (!super && ability->behavior == ABILITY_BEHAVIOR_RAIN)
     {
+        Vector3 landing = WeaponsArcLanding(w, b, aimDist);
         AbilityField *field = AllocAbilityField(w);
         if (field)
         {
             *field = (AbilityField){ 0 };
-            field->position = WeaponsArcLanding(w, b, aimDist);
+            field->position = landing;
             field->position.y = 0.035f;
             field->radius = ability->radius;
             field->growTime = ability->data.area.growTime;
@@ -115,6 +187,13 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
                       b->aimAngle, healColor);
         GameEmitLight(w.session, (Vector3){ b->position.x, 1.0f, b->position.z },
                      healColor, 2.4f, 0.22f);
+        GameEmitVfxAttached(w.session, VFX_GUARDIAN_RAIN_CAST,
+                            (Vector3){ b->position.x, 0.85f, b->position.z },
+                            (Vector3){ landing.x, 0.0f, landing.z },
+                            b->aimAngle, 1.65f, healColor,
+                            idx, VFX_SOCKET_RIGHT_HAND,
+                            -1, VFX_SOCKET_NONE);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_CAST);
         return;
     }
 
@@ -155,6 +234,13 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
             Color markColor = (t->team == b->team)
                             ? healColor : (Color){ 255, 116, 154, 255 };
             GameEmitImpact(w.session, (Vector3){ t->position.x, 0.8f, t->position.z }, markColor, 9);
+            GameEmitVfxAttached(
+                w.session,
+                t->team == b->team
+                    ? VFX_GUARDIAN_RESONANCE_HEAL
+                    : VFX_GUARDIAN_RESONANCE_DAMAGE,
+                t->position, t->position, 0.0f, 1.25f, markColor,
+                i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
         }
 
         b->revealTimer = w.tuning->fireReveal;
@@ -162,6 +248,13 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
                       b->aimAngle, (Color){ 134, 244, 255, 255 });
         GameEmitLight(w.session, (Vector3){ b->position.x, 1.1f, b->position.z },
                      (Color){ 122, 239, 255, 255 }, ability->range*0.55f, 0.55f);
+        Vector3 castStart = { b->position.x, 0.85f, b->position.z };
+        GameEmitVfxAttached(
+            w.session, VFX_GUARDIAN_RESONANCE_CAST,
+            castStart, AimEndpoint(castStart, b->aimAngle, ability->range),
+            b->aimAngle, 1.85f, (Color){ 122, 239, 255, 255 },
+            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_SUPER);
         return;
     }
 
@@ -193,6 +286,11 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
                             0.55f, 0.14f, PARTICLE_SPARK);
         }
         b->revealTimer = w.tuning->fireReveal;
+        GameEmitVfxAttached(w.session, VFX_GENERIC_HEAL,
+                            b->position, b->position,
+                            0.0f, ability->range*0.48f, healColor,
+                            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_CAST);
         return;
     }
 
@@ -203,9 +301,18 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         b->dashDir = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
         b->dashAbility = ContentCharacter(w.content, b->cls)->superAbility;
         b->dashHitMask = 0;
+        b->dashVfxTimer = 0.0f;
         b->velocity = (Vector3){ 0 };
         b->revealTimer = w.tuning->fireReveal;
         GameEmitMuzzle(w.session, b->position, b->aimAngle, muzzle);
+        Vector3 castStart = { b->position.x, 0.75f, b->position.z };
+        GameEmitVfxAttached(
+            w.session, CastVfxFor(b->cls, true), castStart,
+            AimEndpoint(castStart, b->aimAngle, 1.8f),
+            b->aimAngle, 1.75f,
+            AbilityVfxColor(b->cls, b->team, true),
+            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_MOBILITY);
         return;
     }
 
@@ -218,6 +325,9 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
     bool piercing = ability->data.projectile.piercing;
 
     if (pellets <= 0) return;
+    GameEmitCharacterAction(w.session, idx,
+                            super ? CHARACTER_ACTION_SUPER
+                                  : CHARACTER_ACTION_MAIN);
 
     Vector3 origin = b->position;
     origin.y = 0.75f;
@@ -250,7 +360,9 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         p->breaksWalls = super;
         p->rangeScaled = ability->data.projectile.rangeScaled;
         p->color = super ? (Color){ 255, 214, 92, 255 }
-                         : (p->healing > 0 ? healColor : TEAM_COLORS[b->team]);
+                         : (p->healing > 0
+                                ? healColor
+                                : AbilityVfxColor(b->cls, b->team, false));
         p->active = true;
 
         if (ability->behavior == ABILITY_BEHAVIOR_LOB)
@@ -281,6 +393,18 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
     b->revealTimer = w.tuning->fireReveal;
     GameEmitMuzzle(w.session, (Vector3){ origin.x + sinf(b->aimAngle) * 0.6f, origin.y, origin.z + cosf(b->aimAngle) * 0.6f },
                   b->aimAngle, muzzle);
+    Vector3 castPosition = {
+        origin.x + sinf(b->aimAngle)*0.6f,
+        origin.y,
+        origin.z + cosf(b->aimAngle)*0.6f
+    };
+    GameEmitVfxAttached(
+        w.session, CastVfxFor(b->cls, super), castPosition,
+        AimEndpoint(castPosition, b->aimAngle,
+                    b->cls == CLASS_SNIPER ? 4.2f : 2.2f),
+        b->aimAngle, super ? 1.75f : 1.35f,
+        AbilityVfxColor(b->cls, b->team, super),
+        idx, VFX_SOCKET_RIGHT_HAND, -1, VFX_SOCKET_NONE);
 }
 
 static void UpdateRainField(GameContext w, AbilityField *field, float dt)
@@ -310,12 +434,22 @@ static void UpdateRainField(GameContext w, AbilityField *field, float dt)
                 if (restored > 0)
                 {
                     affected = true;
+                    GameEmitVfxAttached(
+                        w.session, VFX_GUARDIAN_RAIN_HEAL,
+                        t->position, t->position, 0.0f, 1.08f,
+                        (Color){ 70, 244, 166, 255 },
+                        i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
                     BrawlerAwardSuper(w, field->owner, SuperGainFor(w, field->owner));
                 }
             }
             else
             {
                 BrawlerApplyDamage(w, i, field->damage, field->owner, t->position);
+                GameEmitVfxAttached(
+                    w.session, VFX_GUARDIAN_RAIN_DAMAGE,
+                    t->position, t->position, 0.0f, 1.12f,
+                    (Color){ 255, 100, 164, 255 },
+                    i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
                 affected = true;
                 BrawlerAwardSuper(w, field->owner, SuperGainFor(w, field->owner));
             }
@@ -324,6 +458,8 @@ static void UpdateRainField(GameContext w, AbilityField *field, float dt)
         Color pulse = affected ? (Color){ 104, 255, 190, 255 }
                                : (Color){ 89, 207, 217, 220 };
         GameEmitShockwave(w.session, field->position, radius, 0.19f, pulse);
+        GameEmitVfx(w.session, VFX_GUARDIAN_RAIN_PULSE,
+                    field->position, field->position, 0.0f, radius, pulse);
         field->tickTimer += field->tickRate;
     }
 }
@@ -346,6 +482,8 @@ static void AbilityFieldsUpdate(GameContext w, float dt)
 //------------------------------------------------------------------------------------
 static void Detonate(GameContext w, Projectile *p, Vector3 at)
 {
+    GameEmitVfx(w.session, ImpactVfxFor(w, p), at, at, 0.0f,
+                p->radius, p->color);
     GameEmitExplosion(w.session, at, p->radius, p->color);
 
     for (int i = 0; i < w.session->brawlerCount; i++)
@@ -386,6 +524,8 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             if (ArenaTypeAt(&w.session->arena, p->position.x, p->position.z) != TILE_WALL) return false;
         }
         GameEmitImpact(w.session, p->position, p->color, 6);
+        GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                    p->position, 0.0f, 1.0f, p->color);
         return true;
     }
 
@@ -426,6 +566,9 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             BrawlerAwardSuper(w, p->owner, SuperGainFor(w, p->owner));
 
         GameEmitImpact(w.session, p->position, p->color, 8);
+        GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                    p->position, 0.0f, p->isSuper ? 1.25f : 0.9f,
+                    p->color);
         p->hitMask |= (1 << i);
 
         if (!p->piercing) return true;

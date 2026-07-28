@@ -16,6 +16,7 @@ from .glb import (
     png_dimensions,
     read_float_accessor,
     repack_document,
+    validate_raylib_mesh_primitives,
 )
 
 
@@ -36,6 +37,16 @@ CANONICAL_CLIPS = (
     "launched_hit",
     "death",
 )
+# Per-character action clips an override library may add. The runtime looks these
+# up by name and crossfades them over locomotion; when absent it falls back to the
+# shared procedural action overlay. Generated outputs order them after the
+# canonical block.
+OPTIONAL_CLIPS = (
+    "attack_main",
+    "attack_super",
+    "cast",
+    "mobility",
+)
 CHARACTER_METADATA_KEY = "brawlArenaCharacter"
 LIBRARY_METADATA_KEY = "brawlArenaAnimationLibrary"
 
@@ -54,6 +65,24 @@ def normalize_clip_name(name):
     if not normalized:
         raise ValueError("animation clip has an empty name")
     return normalized
+
+
+def is_reference_clip_name(name):
+    """True for any spelling of the Meshy bind/T-pose reference clip.
+
+    Raw Character_output exports name it ``Armature|clip0|baselayer``; the
+    low-level fixer renames it ``tpose``; other tooling embeds
+    ``character_output``. Ordinary motion clips (``Armature|running|baselayer``,
+    ``Idle_11``) must not match.
+    """
+    raw = (name or "").strip().lower()
+    if "|" in raw:
+        parts = raw.split("|")
+        raw = parts[1] if len(parts) > 1 else parts[0]
+    if raw in ("clip0", "clip", "baselayer"):
+        return True
+    normalized = re.sub(r"[^a-z0-9]+", "_", raw).strip("_")
+    return normalized == "tpose" or "character_output" in normalized
 
 
 def node_trs(node):
@@ -153,11 +182,10 @@ def _metadata_pose(document):
 
 
 def _reference_animation(document):
-    candidates = []
-    for animation in document.get("animations", []):
-        name = normalize_clip_name(animation.get("name", "clip"))
-        if "character_output" in name or name == "tpose":
-            candidates.append(animation)
+    candidates = [
+        animation for animation in document.get("animations", [])
+        if is_reference_clip_name(animation.get("name", "clip"))
+    ]
     if len(candidates) != 1:
         raise ValueError(
             "character asset must contain exactly one T-pose/Character_output"
@@ -237,9 +265,17 @@ def _set_metadata(document, key, rig, pose, extra=None):
     document.setdefault("extras", {})[key] = metadata
 
 
-def extract_model_only(document, binary, character_id):
+def extract_model_only(document, binary, character_id, reference_pose=None):
     rig = extract_rig(document)
-    pose = extract_animation_reference_pose(document, binary)
+    if reference_pose is None:
+        pose = extract_animation_reference_pose(document, binary)
+    else:
+        if set(reference_pose) != set(rig.joint_names):
+            raise ValueError("source animation rest pose does not match the character rig")
+        pose = {
+            name: node_trs(reference_pose[name])
+            for name in rig.joint_names
+        }
     result = clone_document(document)
     result.pop("animations", None)
     _set_metadata(
@@ -296,6 +332,7 @@ def validate_character_model(document, binary, required_rig=None):
     rig = extract_rig(document)
     if document.get("animations"):
         raise ValueError("normalized character model must not contain animation clips")
+    validate_raylib_mesh_primitives(document, binary)
 
     metadata = document.get("extras", {}).get(CHARACTER_METADATA_KEY)
     if not metadata:

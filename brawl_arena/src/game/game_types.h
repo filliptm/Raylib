@@ -66,6 +66,7 @@ typedef struct Brawler {
     float spawnScale;
     float mobilityCooldown;
     float dashTimer;
+    float dashVfxTimer;
     Vector3 dashDir;
     int dashAbility;
     int dashHitMask;
@@ -175,12 +176,15 @@ typedef enum {
     GAME_EVENT_LIGHT,
     GAME_EVENT_SHOCKWAVE,
     GAME_EVENT_PARTICLE,
+    GAME_EVENT_VFX,
+    GAME_EVENT_CHARACTER_ACTION,
     GAME_EVENT_MATCH_SHAKE
 } GameEventType;
 
 typedef struct GameEvent {
     GameEventType type;
     Vector3 position;
+    Vector3 endPosition;
     Vector3 velocity;
     Color color;
     float angle;
@@ -189,6 +193,12 @@ typedef struct GameEvent {
     float size;
     int count;
     ParticleType particleType;
+    VfxEffectId vfxId;
+    VfxSocket startSocket;
+    VfxSocket endSocket;
+    CharacterActionId characterAction;
+    int sourceBrawler;
+    int targetBrawler;
     char text[16];
 } GameEvent;
 

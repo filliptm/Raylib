@@ -69,6 +69,29 @@ int main(void)
     CHECK(UiThemeContrastRatio(theme->mist, theme->deck) >= 3.0f,
           "secondary text contrast fell below the approved floor");
 
+    NPatchInfo patch = UiSkinNinePatchInfo(384, 128, 24, 20, 24, 20);
+    CHECK(Near(patch.source.width, 384.0f) && Near(patch.source.height, 128.0f),
+          "UI skin patch lost its source dimensions");
+    CHECK(patch.left == 24 && patch.top == 20 &&
+          patch.right == 24 && patch.bottom == 20,
+          "UI skin patch margins changed");
+    CHECK(patch.layout == NPATCH_NINE_PATCH,
+          "UI skin patch no longer scales from nine slices");
+
+    UiSkin missingSkin = { 0 };
+    Rectangle skinBounds = { 0, 0, 240, 80 };
+    CHECK(!UiSkinDrawPanel(&missingSkin, skinBounds, theme->deck, theme->line,
+                           true, false),
+          "missing panel texture did not request the geometry fallback");
+    CHECK(!UiSkinDrawButton(&missingSkin, skinBounds, theme->deck, theme->line, false),
+          "missing button texture did not request the geometry fallback");
+    CHECK(!UiSkinDrawProgress(&missingSkin, skinBounds, 0.5f, theme->hull,
+                              theme->ion, false, 0, 3.0f),
+          "missing progress texture did not request the geometry fallback");
+    CHECK(!UiSkinDrawDecoration(&missingSkin, UI_DECORATION_ORBITAL_RING,
+                                skinBounds, theme->ion),
+          "missing decoration texture did not request the geometry fallback");
+
     ContentCatalog catalog = { 0 };
     ContentCatalogResetAll(&catalog);
     for (int i = 0; i < CLASS_COUNT; i++)
@@ -82,6 +105,6 @@ int main(void)
           catalog.presentation[CLASS_BRUISER].homeScale,
           "Tank roster profile does not compensate for its broad silhouette");
 
-    puts("UI layout, focus, motion, contrast, and presentation profiles passed");
+    puts("UI layout, skin, focus, motion, contrast, and presentation profiles passed");
     return 0;
 }

@@ -9,11 +9,12 @@ make                    # architecture check + optimized game
 make run                # build and launch
 make debug              # clean debug build
 make check-architecture # dependency-policy check
-make check-ui           # Helios UI ownership/font policy check
+make check-ui           # Helios UI ownership/font/asset policy check
+make ui-assets          # rebuild tracked tintable UI motifs from retained sources
 make character-assets   # bake mesh library + shared animations into runtime GLBs
 make check-character-assets # validate rigs, clips, outputs, and 1K textures
 make validate-config    # validate tracked canonical project values
-make test               # Python character-pipeline tests + eight C test executables
+make test               # Python asset-pipeline tests + eleven C test executables
 make sanitize           # clean sanitizer headless run
 make clean
 ```
@@ -40,6 +41,7 @@ require adding its object to that target.
 | Main loop, local controller/input, authoring commands | `src/app` |
 | Camera, assets, shaders, effects, visuals, environment | `src/presentation` |
 | Menu or HUD | `src/ui` |
+| Shared UI textures, slicing, and decorative motifs | `src/ui/ui_skin.[ch]`, `resources/ui` |
 | Menu hangar/podium/preview scene | `src/presentation/menu_scene.[ch]` |
 | Command-center UI | `src/devtools` |
 | Map packages | `data/maps` |
@@ -75,10 +77,12 @@ Current character slots are fixed:
 3. Add compiled recovery authoring values and complete canonical keys.
 4. Prefer existing ability behaviors; add a new behavior only when the rule is genuinely
    different.
-5. Import the rigged Meshy `Character_output` ZIP, directory, or GLB using
+5. Import the rigged Meshy `Character_output` ZIP/directory/GLB or a compatible
+   standalone merged-animation GLB using
    [CHARACTER_PIPELINE.md](CHARACTER_PIPELINE.md). The standard workflow needs only the
    rigged model; `import_character.py` repairs raylib's bind representation, records its
-   animation rest pose, strips clips, and enforces 1K textures.
+   animation rest pose, strips clips, enforces 1K textures, and partitions dense triangle
+   meshes into raylib-safe 16-bit indexed primitives.
 6. Add the model and generated output to `data/characters/asset_manifest.json`, then
    point `CHARACTER_MODEL_PATHS` at the generated `build/assets/characters/` file.
 7. Run `make character-assets`. The build retargets the shared animation library by bone
@@ -94,6 +98,22 @@ retarget and emits self-contained runtime GLBs before the game starts.
 Follow [MAPS.md](MAPS.md). Keep collision (`terrain.layer`), match markers
 (`gameplay.layer`), visual hints (`visual.layer`), and free props (`props.cfg`) separate.
 Every catalog entry is loaded at startup, so one invalid map rejects the catalog.
+
+## Adding or changing UI art
+
+Keep world and UI resource ownership separate:
+
+1. Put curated, runtime-loaded interface art under `resources/ui/<pack>/runtime/`.
+2. Retain only the source files needed to reproduce it under the adjacent `source/`.
+3. Add `LICENSE.txt` and `SOURCE.md` with the upstream URL, version/author, license,
+   archive hash, included subset, and intentional exclusions.
+4. Generate derivatives through `tools/build_ui_assets.py`; do not hand-edit tracked
+   runtime crops.
+5. Load/unload textures only in `ui_skin.c`. Screen code calls shared panel, control,
+   progress, or decoration APIs and must preserve a geometry fallback.
+6. Do not import pack fonts, fake telemetry, or decorative charts into player data
+   surfaces. Barlow/IBM Plex and live catalog values remain authoritative.
+7. Update `tools/check_ui_assets.py`, run `make ui-assets`, then `make check-ui`.
 
 ## Event and command discipline
 
@@ -129,8 +149,12 @@ test exist to keep simulation usable without a window.
 | `test_gameplay` | identical input replay and simulation event/presentation isolation |
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
-| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, and presentation profiles |
-| `test_character_pipeline.py` | rig rejection, bind-relative math, deterministic baking, canonical clips, and 1K model/output validation |
+| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and presentation profiles |
+| `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit action blend timing |
+| `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
+| `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Tank reclaim/jets, and Guardian rain feedback |
+| `test_character_pipeline.py` | rig rejection, merged-source rest-pose fallback, bind-relative math, deterministic baking, canonical clips, raylib-safe mesh indices, and 1K model/output validation |
+| `test_vfx_pipeline.py` | deterministic atlas generation, source provenance, and manifest validation |
 
 Tests use path overrides and temporary fixtures. They must not touch the developer's
 ignored local tuning/profile files.
@@ -149,6 +173,7 @@ matrix. At minimum, after changes to runtime/presentation:
 - Gem spawn, pickup, death drop, countdown, win/result return.
 - Command-center sliders, reset, project promotion, scrolling, and pointer capture.
 - Keyboard/gamepad menu focus, modal close/restore, and glyph switching.
+- Kenney control surfaces, orbital/radar staging, and forced UI-texture fallbacks.
 - Resize at 960×600, 1280×800, 1920×1080, and 2560×1440.
 - Helios-9 and Training Court selection/rebuild.
 - Imported models, animation direction, grass, station props, shaders, post effects.

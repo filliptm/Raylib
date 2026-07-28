@@ -36,4 +36,15 @@ fail_if_found \
     'src/game src/core' \
     'simulation directly performs presentation work instead of emitting an event.'
 
-printf '%s\n' 'architecture dependency checks passed'
+# rlgl batches billboards and immediate geometry. Direct depth-mask changes do not flush
+# that batch, so transparent quads can accidentally write rectangular depth silhouettes
+# for the post-process outline. render_state.h is the single safe owner of these calls.
+if matches=$(rg -n '\brl(Enable|Disable)DepthMask\(' src/presentation \
+        -g '*.[ch]' -g '!render_state.h'); then
+    printf '%s\n' \
+        'Architecture check failed: use RenderBeginNoDepthWrite/RenderEndNoDepthWrite.'
+    printf '%s\n' "$matches"
+    exit 1
+fi
+
+printf '%s\n' 'architecture and render-state checks passed'

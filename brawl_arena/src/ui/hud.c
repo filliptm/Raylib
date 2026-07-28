@@ -131,7 +131,9 @@ static void DrawObjective(App *w)
 {
     const UiTheme *t = UiSystemActive()->theme;
     Rectangle bounds = UiRefRect(434, 20, 412, 94);
-    UiDrawPanel(bounds, t->deck, t->line, true);
+    UiDrawFeaturePanel(bounds, t->deck, t->line, true);
+    UiDrawDecoration(UI_DECORATION_RADAR_DISC, UiRefRect(594, 25, 84, 84),
+                     t->reactor, 0.055f);
     UiDrawSignalRail(bounds, t->reactor, false);
     UiDrawTextAligned(UI_TEXT_CAPTION,
                       w->session.sandbox ? "PRACTICE TELEMETRY" :
@@ -183,7 +185,7 @@ static void DrawVitals(App *w, const Brawler *player)
     const UiTheme *t = UiSystemActive()->theme;
     const CharacterDefinition *character = ContentCharacter(&w->content, player->cls);
     Rectangle panel = UiRefRect(24, 642, 360, 134);
-    UiDrawPanel(panel, t->deck, t->line, true);
+    UiDrawFeaturePanel(panel, t->deck, t->line, true);
     UiDrawSignalRail(panel, CueColor(w, t->ally), false);
     UiDrawText(UI_TEXT_CAPTION, character->displayName, UiRefPoint(48, 654), t->ally);
     char health[64];
@@ -309,7 +311,7 @@ static void DrawDowned(const Brawler *player)
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){ 30, 5, 10, 110 });
     Rectangle panel = UiRefRect(410, 296, 460, 190);
-    UiDrawPanel(panel, t->deckRaised, t->enemy, true);
+    UiDrawFeaturePanel(panel, t->deckRaised, t->enemy, true);
     UiDrawSignalRail(panel, t->enemy, false);
     UiDrawTextAligned(UI_TEXT_TITLE, "BRAWLER DOWN", UiRefRect(438, 320, 404, 60),
                       UI_ALIGN_CENTER, t->enemy);
@@ -330,7 +332,9 @@ static void DrawResult(App *w)
                   (Color){ 2, 6, 12, 225 });
     Rectangle panel = UiRefRect(330, 142, 620, 516);
     Color outcome = won ? t->ally : t->enemy;
-    UiDrawPanel(panel, t->deckRaised, outcome, true);
+    UiDrawFeaturePanel(panel, t->deckRaised, outcome, true);
+    UiDrawDecoration(UI_DECORATION_ORBITAL_RING, UiRefRect(442, 188, 396, 396),
+                     outcome, 0.045f);
     UiDrawSignalRail(panel, outcome, false);
     UiDrawTextAligned(UI_TEXT_RESULT, won ? "VICTORY" : "DEFEAT",
                       UiRefRect(372, 174, 536, 108), UI_ALIGN_CENTER, outcome);

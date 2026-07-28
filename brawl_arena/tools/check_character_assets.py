@@ -111,7 +111,9 @@ def main():
                     f" do not match manifest {expected_libraries}"
                 )
             assert_compatible_rigs(model_rig, output_rig)
-            if dimensions != output_dimensions:
+            # Baking dedupes byte-identical embedded textures, so compare the
+            # distinct sizes rather than the raw image counts.
+            if set(dimensions) != set(output_dimensions):
                 raise ValueError(
                     f"{output_path}: generated texture set differs from its model source"
                 )

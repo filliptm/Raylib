@@ -17,6 +17,9 @@ requires multiple real viewport, GPU, fallback-asset, and input-device combinati
 
 - Shared Helios theme, locally shipped fonts, semantic text roles, code-drawn icons,
   reference-canvas layout, controls, modality, and focus graph.
+- Curated CC0 Kenney control hardware plus two OpenGameArt-derived orbital/radar motifs,
+  owned by `UiSystem`, rendered with nine-slice scaling, and protected by per-resource
+  code-drawn fallbacks and static asset validation.
 - Opaque physical control surfaces; alpha is reserved for shadows, modal dimming, fades,
   and emissive effects rather than panel/card backgrounds.
 - Resizable scene rendering with a 960×600 minimum and resize-safe render-target
@@ -30,7 +33,7 @@ requires multiple real viewport, GPU, fallback-asset, and input-device combinati
 - Pointer, keyboard, and player-facing gamepad paths; keyboard fine adjustment for
   command-center sliders.
 - Headless layout/focus/theme/profile tests, configuration round trips, and static UI
-  ownership/font policy checks.
+  ownership/font/asset policy checks.
 
 The illustrative module tree below was consolidated where ownership stayed cohesive:
 font resources, text, layout, focus, and common controls live together in
@@ -68,7 +71,7 @@ The finished game should have:
 | Display type | Barlow Condensed Bold |
 | Body type | Barlow Regular/Semibold |
 | Data type | IBM Plex Mono Medium |
-| Signature | Signal rail, chamfered hull panels, and safety hardware marks |
+| Signature | Signal rail, bolted hull controls, orbital/radar linework, and safety marks |
 | Player UI navigation | Mouse, keyboard, and controller |
 | Developer tool navigation | Mouse and keyboard required; controller optional |
 | Runtime allocation | No per-frame heap allocation in UI |
@@ -141,7 +144,8 @@ Assets
 
 UiSystem
 ├── UiTheme
-├── UiResources (fonts and generated UI textures)
+├── UiResources (local font handles)
+├── UiSkin (curated textures, slicing metadata, and per-resource fallback state)
 ├── UiInputState
 ├── UiFrameLayout
 ├── MenuState
@@ -164,6 +168,7 @@ CommandCenterState
 | State | Lifetime | Reset |
 |---|---|---|
 | `UiTheme` and fonts | Process | On shutdown only |
+| `UiSkin` textures | Process | On shutdown only; missing files fall back independently |
 | `UiInputState` | Process with per-frame snapshot | Begin each frame |
 | `MenuState` | Process; screen-specific portions reset on entry | Screen transition |
 | `HudState` | Match presentation | `ResetMatch()` or match entry |
@@ -198,6 +203,7 @@ src/
 │   ├── ui_layout.[ch]              scale, safe frame, anchors, layout helpers
 │   ├── ui_input.[ch]               modality, focus, keyboard/controller navigation
 │   ├── ui_icons.[ch]               consistent code-drawn station glyphs
+│   ├── ui_skin.[ch]                curated texture lifetime, slicing, and motifs
 │   ├── ui_components.[ch]          buttons, panels, rows, bars, keycaps, modals
 │   ├── ui_system.[ch]              process lifecycle and begin/end frame
 │   ├── menu.[ch]                   menu flow and shared orchestration
@@ -1131,8 +1137,8 @@ Screens:
 Content:
 
 - All five brawlers.
-- Rigged Scrapper, Tank, Guardian.
-- Primitive Longshot and Mortar.
+- Rigged Scrapper, Longshot, Tank, Guardian.
+- Primitive Mortar.
 - Forced primitive fallback for each imported slot.
 - Both maps.
 
@@ -1202,6 +1208,8 @@ The Helios Broadcast integration is done when all of the following are true:
 - Every player-facing screen uses the shared theme, text, layout, component, and icon
   services.
 - Barlow/IBM Plex fonts are shipped locally with license/source records.
+- Curated UI art is shipped with license/source records, reproducible motif generation,
+  hash/dimension checks, and no downloaded archives.
 - No default raylib font is used during normal startup.
 - No superseded menu/HUD palette or card helper remains.
 - The station signature is visible without decorative clutter.

@@ -364,7 +364,11 @@ def main(src_dir, out_path, tex_size=CHARACTER_TEXTURE_SIZE):
 
     for img in j.get('images', []):
         iv = img['bufferView']
-        pic = Image.open(io.BytesIO(bytes(data[iv]))).convert('RGB')
+        pic = Image.open(io.BytesIO(bytes(data[iv])))
+        # Keep a real alpha channel (cutouts/decals); flatten everything else to
+        # RGB so an opaque texture never pays for a dead fourth channel.
+        pic = pic.convert('RGBA' if 'A' in pic.getbands() and
+                          pic.convert('RGBA').getextrema()[3][0] < 255 else 'RGB')
         if pic.size != (tex_size, tex_size):
             buf = io.BytesIO()
             pic.resize((tex_size, tex_size), Image.LANCZOS).save(buf, 'PNG', optimize=True)

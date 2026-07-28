@@ -14,6 +14,14 @@ void GameEmitLight(GameSession *session, Vector3 position, Color color, float ra
 void GameEmitShockwave(GameSession *session, Vector3 position, float radius, float life, Color color);
 void GameEmitParticle(GameSession *session, Vector3 position, Vector3 velocity, Color color,
                       float life, float size, ParticleType type);
+void GameEmitVfx(GameSession *session, VfxEffectId id, Vector3 position,
+                 Vector3 endPosition, float angle, float size, Color color);
+void GameEmitVfxAttached(GameSession *session, VfxEffectId id, Vector3 position,
+                         Vector3 endPosition, float angle, float size, Color color,
+                         int sourceBrawler, VfxSocket startSocket,
+                         int targetBrawler, VfxSocket endSocket);
+void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
+                             CharacterActionId action);
 void GameEmitMatchShake(GameSession *session, float amount);
 
 #endif

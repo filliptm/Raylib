@@ -5,6 +5,7 @@
 #include "assets.h"
 
 void RenderSetAssets(Assets *a);
+int RenderLoadedVfxAtlasCount(void);
 
 // Draws one brawler from its own fields, inside an active BeginMode3D. Used by the
 // match and by the menu podium alike.

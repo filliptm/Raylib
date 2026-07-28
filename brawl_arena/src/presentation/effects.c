@@ -1,4 +1,6 @@
 #include "effects.h"
+#include "vfx.h"
+#include "character_animation.h"
 #include "raymath.h"
 #include <stdio.h>
 #include <math.h>
@@ -237,6 +239,16 @@ void FxConsumeGameEvents(App *w)
                 FxSpawnParticle(w, event->position, event->velocity, event->color,
                                 event->life, event->size, event->particleType);
                 break;
+            case GAME_EVENT_VFX:
+                w->presentation.vfxEventsConsumed++;
+                w->presentation.lastVfxEffect = event->vfxId;
+                w->presentation.vfxLayersSpawned +=
+                    VfxSpawnEvent(&w->presentation, event);
+                break;
+            case GAME_EVENT_CHARACTER_ACTION:
+                CharacterActionStart(&w->presentation, event->sourceBrawler,
+                                     event->characterAction);
+                break;
             case GAME_EVENT_MATCH_SHAKE:
                 FxMatchShake(w, event->size);
                 break;
@@ -303,6 +315,9 @@ void FxUpdate(App *w, float dt)
         s->life -= dt;
         if (s->life <= 0.0f) s->active = false;
     }
+
+    VfxUpdate(&w->presentation, dt);
+    CharacterActionsUpdate(&w->presentation, dt);
 
     if (w->presentation.shake > 0.0f)
     {

@@ -5,8 +5,11 @@
 #include "effects.h"
 #include "gems.h"
 #include "assets.h"
+#include "character_animation.h"
 #include "environment.h"
 #include "ability_visuals.h"
+#include "render_state.h"
+#include "vfx.h"
 #include "content_catalog.h"
 #include "rlgl.h"
 #include <stddef.h>
@@ -22,6 +25,7 @@ static const Color SKIN_TINT   = { 232, 190, 158, 255 };
 static Assets *g_assets = NULL;
 
 void RenderSetAssets(Assets *a) { g_assets = a; }
+int RenderLoadedVfxAtlasCount(void) { return VfxLoadedAtlasCount(g_assets); }
 
 // Grass instances are static geometry: positions are baked once per arena and all the
 // motion happens in the vertex shader.
@@ -193,9 +197,9 @@ static void DrawGroundGlowRaw(Assets *a, Vector3 pos, float radius, Color tint)
 
 static void DrawGroundGlow(Assets *a, Vector3 pos, float radius, Color tint)
 {
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
     DrawGroundGlowRaw(a, pos, radius, tint);
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
 }
 
 static void DrawShadow(Assets *a, Vector3 pos, float radius)
@@ -450,7 +454,7 @@ static void DrawGems(App *w, Assets *a)
 static void DrawShockwaves(App *w)
 {
     BeginBlendMode(BLEND_ADDITIVE);
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
 
     for (int i = 0; i < MAX_SHOCKWAVES; i++)
     {
@@ -479,14 +483,14 @@ static void DrawShockwaves(App *w)
         }
     }
 
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
     EndBlendMode();
 }
 
 static void DrawProjectiles(App *w, Assets *a)
 {
     BeginBlendMode(BLEND_ADDITIVE);
-    rlDisableDepthMask();
+    RenderBeginNoDepthWrite();
 
     for (int i = 0; i < MAX_PROJECTILES; i++)
     {
@@ -504,6 +508,35 @@ static void DrawProjectiles(App *w, Assets *a)
             Vector3 dir = Vector3Normalize(p->velocity);
             int steps = p->isSuper ? 7 : 5;
             float spacing = p->isSuper ? 0.42f : 0.3f;
+            float trailScale = 1.0f;
+            BrawlerClass ownerClass = CLASS_SHOTGUNNER;
+            if (p->owner >= 0 && p->owner < w->session.brawlerCount)
+                ownerClass = w->session.brawlers[p->owner].cls;
+            if (!p->isSuper)
+            {
+                if (ownerClass == CLASS_SNIPER)
+                {
+                    steps = 8;
+                    spacing = 0.52f;
+                    trailScale = 0.68f;
+                    Vector3 lineEnd =
+                        Vector3Subtract(p->position, Vector3Scale(dir, 3.4f));
+                    DrawLine3D(p->position, lineEnd,
+                               (Color){ glow.r, glow.g, glow.b, 160 });
+                }
+                else if (ownerClass == CLASS_BRUISER)
+                {
+                    steps = 6;
+                    spacing = 0.36f;
+                    trailScale = 1.32f;
+                }
+                else if (ownerClass == CLASS_SHOTGUNNER)
+                {
+                    steps = 4;
+                    spacing = 0.24f;
+                    trailScale = 0.92f;
+                }
+            }
 
             for (int s = steps; s >= 1; s--)
             {
@@ -511,7 +544,8 @@ static void DrawProjectiles(App *w, Assets *a)
                 Vector3 tp = Vector3Subtract(p->position, Vector3Scale(dir, spacing*s));
                 Color c = glow;
                 c.a = (unsigned char)(78*(1.0f - t));
-                DrawBillboard(w->presentation.camera, a->texGlow, tp, coreSize*(1.0f - t*0.55f), c);
+                DrawBillboard(w->presentation.camera, a->texGlow, tp,
+                              coreSize*trailScale*(1.0f - t*0.55f), c);
             }
         }
 
@@ -570,10 +604,11 @@ static void DrawProjectiles(App *w, Assets *a)
         DrawBillboard(w->presentation.camera, a->texGlow, pa->position, size, c);
     }
 
-    rlEnableDepthMask();
+    RenderEndNoDepthWrite();
     EndBlendMode();
 
     // Smoke, alpha blended
+    RenderBeginNoDepthWrite();
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         Particle *pa = &w->presentation.particles[i];
@@ -583,10 +618,9 @@ static void DrawProjectiles(App *w, Assets *a)
         Color c = pa->color;
         c.a = (unsigned char)(c.a*t*0.7f);
 
-        rlDisableDepthMask();
         DrawBillboard(w->presentation.camera, a->texGlow, pa->position, pa->size*(2.2f - t)*3.0f, c);
-        rlEnableDepthMask();
     }
+    RenderEndNoDepthWrite();
 
     // Landing markers for lobbed shots, drawn flat on the ground.
     for (int i = 0; i < MAX_PROJECTILES; i++)
@@ -610,64 +644,57 @@ static void DrawProjectiles(App *w, Assets *a)
 //
 // There is no crossfade in raylib, so a clip change restarts its cycle - starting at
 // frame zero pops less than landing mid-stride.
+static void StoreFallbackSockets(PresentationState *presentation, int index,
+                                 const Brawler *brawler)
+{
+    if (!presentation || !brawler || index < 0 || index >= MAX_BRAWLERS) return;
+    CharacterSocketPose *pose = &presentation->sockets[index];
+    *pose = (CharacterSocketPose){ 0 };
+
+    Vector3 forward = { sinf(brawler->renderYaw), 0.0f,
+                        cosf(brawler->renderYaw) };
+    Vector3 right = { forward.z, 0.0f, -forward.x };
+    Vector3 center = Vector3Add(brawler->position, (Vector3){ 0, 0.92f, 0 });
+    Vector3 chest = Vector3Add(brawler->position, (Vector3){ 0, 1.48f, 0 });
+    Vector3 shoulderBase =
+        Vector3Add(Vector3Add(chest, Vector3Scale(forward, 0.03f)),
+                   (Vector3){ 0, 0.24f, 0 });
+    Vector3 handBase =
+        Vector3Add(Vector3Add(chest, Vector3Scale(forward, 0.52f)),
+                   (Vector3){ 0, -0.16f, 0 });
+
+    pose->positions[VFX_SOCKET_CENTER] = center;
+    pose->positions[VFX_SOCKET_CHEST] = chest;
+    pose->positions[VFX_SOCKET_LEFT_SHOULDER] =
+        Vector3Subtract(shoulderBase, Vector3Scale(right, 0.42f));
+    pose->positions[VFX_SOCKET_RIGHT_SHOULDER] =
+        Vector3Add(shoulderBase, Vector3Scale(right, 0.42f));
+    pose->positions[VFX_SOCKET_LEFT_HAND] =
+        Vector3Subtract(handBase, Vector3Scale(right, 0.30f));
+    pose->positions[VFX_SOCKET_RIGHT_HAND] =
+        Vector3Add(handBase, Vector3Scale(right, 0.30f));
+    pose->positions[VFX_SOCKET_LEFT_FOOT] =
+        Vector3Subtract(Vector3Add(brawler->position, (Vector3){ 0, 0.10f, 0 }),
+                        Vector3Scale(right, 0.22f));
+    pose->positions[VFX_SOCKET_RIGHT_FOOT] =
+        Vector3Add(Vector3Add(brawler->position, (Vector3){ 0, 0.10f, 0 }),
+                   Vector3Scale(right, 0.22f));
+    for (int socket = VFX_SOCKET_CENTER; socket < VFX_SOCKET_COUNT; socket++)
+        pose->valid[socket] = true;
+}
+
 static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
 {
-    static float animTime[MAX_BRAWLERS];
-    static int animClip[MAX_BRAWLERS];
-    static BrawlerClass animClass[MAX_BRAWLERS];
-
     int idx = (int)(b - w->session.brawlers);
+    if (idx < 0 || idx >= MAX_BRAWLERS) return;
     RiggedCharacter *character = &a->characters[b->cls];
 
-    int clip;
-    float rate = 1.0f;
-    bool loop = true;
-
-    if (!b->alive)
-    {
-        clip = character->clipDeath;        // gated by the caller; plays once and holds
-        loop = false;
-    }
-    else if (b->dashTimer > 0.0f)
-    {
-        clip = character->clipRunF;
-        rate = 1.35f;
-    }
-    else
-    {
-        float speed = sqrtf(b->velocity.x*b->velocity.x + b->velocity.z*b->velocity.z);
-
-        if (speed > 0.6f)
-        {
-            float rel = atan2f(b->velocity.x, b->velocity.z) - b->renderYaw;
-            while (rel > PI) rel -= 2.0f*PI;
-            while (rel < -PI) rel += 2.0f*PI;
-            float deg = rel*RAD2DEG;
-
-            if (fabsf(deg) <= 35.0f)       clip = (speed <= 6.5f) ? character->clipWalk : character->clipRunF;
-            else if (deg >  35.0f && deg <=  105.0f) clip = character->clipRunFL;
-            else if (deg < -35.0f && deg >= -105.0f) clip = character->clipRunFR;
-            else if (deg >  105.0f && deg <  155.0f) clip = character->clipRunBL;
-            else if (deg < -105.0f && deg > -155.0f) clip = character->clipRunBR;
-            else { clip = character->clipRunB; rate = 1.30f; }   // walk-paced clip, run-paced feet
-
-            // Feet track the ground better when playback follows actual speed.
-            rate *= Clamp(speed/w->tune.moveSpeed, 0.6f, 1.3f);
-        }
-        else
-        {
-            // Recently fired: hold the combat stance instead of relaxing to idle.
-            clip = (b->revealTimer > 0.0f) ? character->clipCombat : character->clipIdle;
-        }
-    }
-
-    if (clip != animClip[idx] || animClass[idx] != b->cls)
-    {
-        animClip[idx] = clip;
-        animClass[idx] = b->cls;
-        animTime[idx] = 0.0f;
-    }
-    animTime[idx] += GetFrameTime()*w->tune.timeScale*rate;
+    // Clip choice and time are advanced by CharacterAnimationsUpdate on the clamped
+    // gameplay clock, for drawn and concealed brawlers alike. Drawing only reads.
+    const CharacterAnimState *anim = &w->presentation.anim[idx];
+    int clip = anim->valid ? anim->clip : character->clipIdle;
+    float time = anim->valid ? anim->time : 0.0f;
+    bool loop = anim->valid ? anim->loop : true;
 
     DrawShadow(a, b->position, 0.52f*b->spawnScale);
 
@@ -697,7 +724,12 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
     }
 
     AssetsDrawCharacter(a, b->cls, b->position, b->renderYaw, b->spawnScale,
-                        clip, animTime[idx]*60.0f, loop, tint, dither, emissive,
+                        clip, time*CHARACTER_CLIP_FPS, loop,
+                        tint, dither, emissive,
+                        w->presentation.actions[idx].action,
+                        CharacterActionProgress(&w->presentation.actions[idx]),
+                        CharacterActionBlendWeight(&w->presentation.actions[idx]),
+                        &w->presentation.sockets[idx],
                         g_lightPos, g_lightCol, g_lightCount, w->presentation.camera.position);
 
     if (b->alive && b->superCharge >= 1.0f)
@@ -823,6 +855,9 @@ void RenderWorld(App *w)
         DrawArenaGeometry(w, a);
 
         for (int i = 0; i < w->session.brawlerCount; i++)
+            StoreFallbackSockets(&w->presentation, i, &w->session.brawlers[i]);
+
+        for (int i = 0; i < w->session.brawlerCount; i++)
             DrawBrawler(w, a, &w->session.brawlers[i]);
 
         // Grass goes down after the brawlers so it can cover them, and before the
@@ -849,6 +884,8 @@ void RenderWorld(App *w)
         DrawSolidEffects(w, a);
         AbilityVisualsDraw(w, a);
         DrawShockwaves(w);
+        VfxDraw(&w->presentation, a, w->presentation.camera,
+                w->uiPreferences.reducedMotion);
         DrawProjectiles(w, a);
 
         if (w->tune.showDebug) DrawDebugOverlay(w);

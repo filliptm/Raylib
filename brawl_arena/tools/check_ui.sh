@@ -19,6 +19,18 @@ if matches=$(rg -n 'LoadFont(Ex)?\(' src --glob '!ui_system.c'); then
     exit 1
 fi
 
+if matches=$(rg -n 'LoadTexture(Ex)?\(' src/ui --glob '!ui_skin.c'); then
+    printf '%s\n' 'UI policy failed: texture lifetime escaped ui_skin.c.'
+    printf '%s\n' "$matches"
+    exit 1
+fi
+
+if matches=$(rg -n 'DrawTexture(Pro|Rec|NPatch)?\(' src/ui/menu.c src/ui/hud.c); then
+    printf '%s\n' 'UI policy failed: player screens bypass the shared UI skin.'
+    printf '%s\n' "$matches"
+    exit 1
+fi
+
 for required in \
     resources/fonts/BarlowCondensed-Bold.ttf \
     resources/fonts/Barlow-Regular.ttf \
@@ -34,5 +46,6 @@ do
     fi
 done
 
-printf '%s\n' 'Helios UI policy checks passed'
+python3 tools/check_ui_assets.py
 
+printf '%s\n' 'Helios UI policy checks passed'

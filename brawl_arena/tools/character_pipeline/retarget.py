@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import bisect
 import copy
 import math
 
@@ -11,10 +12,13 @@ from .glb import (
     finite_values,
     png_dimensions,
     read_float_accessor,
+    repack_document,
+    validate_raylib_mesh_primitives,
 )
 from .rig import (
     CANONICAL_CLIPS,
     LIBRARY_METADATA_KEY,
+    OPTIONAL_CLIPS,
     REQUIRED_TEXTURE_SIZE,
     RIG_ID,
     assert_compatible_rigs,
@@ -203,10 +207,60 @@ def validate_animation_library(document, binary, required_clips=()):
     return rig, names
 
 
-def _retarget_channel_values(
-    path,
-    joint_name,
-    values,
+def _sample_channel(channel, time, rotation):
+    """Sample one animation channel at `time` (clamped, LINEAR/STEP aware)."""
+    times, values, interpolation = channel
+    if time <= times[0]:
+        return values[0]
+    if time >= times[-1]:
+        return values[-1]
+    high = bisect.bisect_right(times, time)
+    low = high - 1
+    if interpolation == "STEP" or times[high] - times[low] <= 1e-9:
+        return values[low]
+    fraction = (time - times[low]) / (times[high] - times[low])
+    before, after = values[low], values[high]
+    if rotation:
+        if sum(a * b for a, b in zip(before, after)) < 0:
+            after = tuple(-component for component in after)
+        blended = tuple(a + (b - a) * fraction for a, b in zip(before, after))
+        return quat_normalize(blended)
+    return tuple(a + (b - a) * fraction for a, b in zip(before, after))
+
+
+def _animated_world_pose(rig, locals_):
+    """Joints-only world rotations/positions for one frame of local TRS values."""
+    rotations = {}
+    positions = {}
+
+    def resolve(name):
+        if name in rotations:
+            return
+        local = locals_[name]
+        local_rotation = quat_normalize(local["rotation"])
+        parent = rig.parent_by_name[name]
+        if parent is None:
+            rotations[name] = local_rotation
+            positions[name] = tuple(local["translation"])
+        else:
+            resolve(parent)
+            rotations[name] = quat_normalize(
+                quat_multiply(rotations[parent], local_rotation)
+            )
+            positions[name] = _add(
+                positions[parent],
+                quat_rotate(rotations[parent], local["translation"]),
+            )
+
+    for joint_name in rig.joint_names:
+        resolve(joint_name)
+    return rotations, positions
+
+
+def _retarget_clip(
+    source_document,
+    source_binary,
+    animation,
     source_rig,
     target_rig,
     source_pose,
@@ -215,45 +269,107 @@ def _retarget_channel_values(
     target_world,
     scale_ratio,
 ):
-    source_reference = source_pose[joint_name][path]
-    target_reference = target_pose[joint_name][path]
-    output = []
+    """World-space hierarchical retarget of one clip onto the target rig.
 
-    if path == "rotation":
-        previous = None
-        for value in values:
-            transformed = retarget_rotation(source_reference, target_reference, value)
-            if previous is not None and sum(a * b for a, b in zip(previous, transformed)) < 0:
-                transformed = tuple(-component for component in transformed)
-            output.append(transformed)
-            previous = transformed
-    elif path == "translation":
-        parent_name = source_rig.parent_by_name[joint_name]
-        source_parent_rotation = (
-            source_world[parent_name][1] if parent_name is not None else None
-        )
-        target_parent_rotation = (
-            target_world[parent_name][1] if parent_name is not None else None
-        )
-        output = [
-            retarget_translation(
-                source_reference,
-                target_reference,
-                value,
-                source_parent_rotation,
-                target_parent_rotation,
-                scale_ratio,
+    Rotation deltas are transferred in WORLD space - Wt = (Ws_anim * inv(Ws_ref))
+    * Wt_ref - then converted back to target locals through the animated parent
+    chain. Applying local deltas directly (the previous approach) silently
+    assumes the two rest poses use similar joint frames; a character whose rest
+    is an action stance (no T-pose in the export) came out scrambled because
+    every delta was applied around the wrong axis. When the rest poses coincide
+    this reduces exactly to replaying the source clip.
+    """
+    nodes = source_document["nodes"]
+    channels = {}
+    for channel in animation["channels"]:
+        sampler = animation["samplers"][channel["sampler"]]
+        joint_name = nodes[channel["target"]["node"]]["name"]
+        path = channel["target"]["path"]
+        times = [
+            value[0]
+            for value in read_float_accessor(
+                source_document, source_binary, sampler["input"]
             )
-            for value in values
         ]
-    elif path == "scale":
-        output = [
-            retarget_scale(source_reference, target_reference, value)
-            for value in values
-        ]
-    else:
-        raise ValueError(f"unsupported animation path {path}")
-    return output
+        values = read_float_accessor(source_document, source_binary, sampler["output"])
+        channels[(joint_name, path)] = (
+            times,
+            values,
+            sampler.get("interpolation", "LINEAR"),
+        )
+
+    grid = sorted({
+        round(time, 6)
+        for times, _, _ in channels.values()
+        for time in times
+    })
+
+    source_ref_rot = {name: source_world[name][1] for name in source_rig.joint_names}
+    target_ref_rot = {name: target_world[name][1] for name in target_rig.joint_names}
+
+    tracks = {}
+    previous_rotation = {}
+    for time in grid:
+        locals_ = {
+            name: {
+                "translation": _sample_channel(channels[(name, "translation")], time, False),
+                "rotation": _sample_channel(channels[(name, "rotation")], time, True),
+                "scale": _sample_channel(channels[(name, "scale")], time, False),
+            }
+            for name in source_rig.joint_names
+        }
+        anim_rot, anim_pos = _animated_world_pose(source_rig, locals_)
+
+        world_rotation = {
+            name: quat_normalize(
+                quat_multiply(
+                    quat_multiply(anim_rot[name], quat_inverse(source_ref_rot[name])),
+                    target_ref_rot[name],
+                )
+            )
+            for name in target_rig.joint_names
+        }
+
+        for name in target_rig.joint_names:
+            parent = target_rig.parent_by_name[name]
+            if parent is None:
+                local_rotation = world_rotation[name]
+                # The root follows the donor's world trajectory (scaled), so a
+                # character whose rest stance offsets its hips does not carry
+                # that offset into every animation frame.
+                local_translation = _mul(anim_pos[name], scale_ratio)
+            else:
+                local_rotation = quat_normalize(
+                    quat_multiply(
+                        quat_inverse(world_rotation[parent]), world_rotation[name]
+                    )
+                )
+                local_translation = retarget_translation(
+                    source_pose[name]["translation"],
+                    target_pose[name]["translation"],
+                    locals_[name]["translation"],
+                    source_world[parent][1],
+                    target_world[parent][1],
+                    scale_ratio,
+                )
+            local_scale = retarget_scale(
+                source_pose[name]["scale"],
+                target_pose[name]["scale"],
+                locals_[name]["scale"],
+            )
+
+            previous = previous_rotation.get(name)
+            if previous is not None and sum(
+                a * b for a, b in zip(previous, local_rotation)
+            ) < 0:
+                local_rotation = tuple(-component for component in local_rotation)
+            previous_rotation[name] = local_rotation
+
+            tracks.setdefault((name, "translation"), []).append(local_translation)
+            tracks.setdefault((name, "rotation"), []).append(local_rotation)
+            tracks.setdefault((name, "scale"), []).append(local_scale)
+
+    return grid, tracks
 
 
 def _remove_root_drift(values, times):
@@ -285,7 +401,6 @@ def bake_character(model_document, model_binary, libraries, character_id):
     target_height = _rig_height(target_rig, target_pose)
 
     selected = {}
-    order = []
     library_reports = []
     for document, binary, label in libraries:
         source_rig, names = validate_animation_library(document, binary)
@@ -293,19 +408,30 @@ def bake_character(model_document, model_binary, libraries, character_id):
         source_pose = extract_animation_reference_pose(document, binary)
         for animation in document.get("animations", []):
             name = animation["name"]
-            if name not in selected:
-                order.append(name)
             selected[name] = (document, binary, animation, source_rig, source_pose, label)
         library_reports.append((label, names))
 
     missing = sorted(set(CANONICAL_CLIPS) - set(selected))
     if missing:
         raise ValueError(f"character {character_id} is missing canonical clips {missing}")
+    unknown = sorted(set(selected) - set(CANONICAL_CLIPS) - set(OPTIONAL_CLIPS))
+    if unknown:
+        raise ValueError(
+            f"character {character_id} libraries supply unknown clips {unknown};"
+            f" allowed extras are {sorted(OPTIONAL_CLIPS)}"
+        )
+
+    # The runtime resolves clips by name, but the on-disk order is still part of
+    # the asset contract. Deriving it from the canonical tuple - never from
+    # library iteration or CLI argument order - keeps every generated character
+    # identical no matter how the libraries were assembled.
+    order = [
+        name for name in (*CANONICAL_CLIPS, *OPTIONAL_CLIPS) if name in selected
+    ]
 
     result = copy.deepcopy(model_document)
     result["animations"] = []
     result_binary = bytearray(model_binary)
-    input_cache = {}
 
     for clip_name in order:
         source_document, source_binary, animation, source_rig, source_pose, label = selected[
@@ -313,63 +439,51 @@ def bake_character(model_document, model_binary, libraries, character_id):
         ]
         source_world = _reference_world_transforms(source_rig, source_pose)
         scale_ratio = target_height / _rig_height(source_rig, source_pose)
+
+        grid, tracks = _retarget_clip(
+            source_document,
+            source_binary,
+            animation,
+            source_rig,
+            target_rig,
+            source_pose,
+            target_pose,
+            source_world,
+            target_world,
+            scale_ratio,
+        )
+        grid_times = [(time,) for time in grid]
+        root_key = (target_rig.root_name, "translation")
+        tracks[root_key] = _remove_root_drift(tracks[root_key], grid_times)
+
+        input_accessor = append_float_accessor(
+            result, result_binary, grid_times, "SCALAR", include_bounds=True
+        )
         output_animation = {"name": clip_name, "samplers": [], "channels": []}
-
-        for channel in animation["channels"]:
-            sampler = animation["samplers"][channel["sampler"]]
-            target = channel["target"]
-            source_node = target["node"]
-            joint_name = source_document["nodes"][source_node]["name"]
-            path = target["path"]
-            target_node = target_rig.node_by_name[joint_name]
-
-            input_key = (id(source_document), sampler["input"])
-            if input_key not in input_cache:
-                times = read_float_accessor(source_document, source_binary, sampler["input"])
-                input_cache[input_key] = append_float_accessor(
-                    result, result_binary, times, "SCALAR", include_bounds=True
+        for joint_name in target_rig.joint_names:
+            for path in ("translation", "rotation", "scale"):
+                output_accessor = append_float_accessor(
+                    result,
+                    result_binary,
+                    tracks[(joint_name, path)],
+                    "VEC4" if path == "rotation" else "VEC3",
                 )
-            else:
-                times = read_float_accessor(source_document, source_binary, sampler["input"])
-            input_accessor = input_cache[input_key]
-
-            source_values = read_float_accessor(
-                source_document, source_binary, sampler["output"]
-            )
-            target_values = _retarget_channel_values(
-                path,
-                joint_name,
-                source_values,
-                source_rig,
-                target_rig,
-                source_pose,
-                target_pose,
-                source_world,
-                target_world,
-                scale_ratio,
-            )
-            if path == "translation" and joint_name == target_rig.root_name:
-                target_values = _remove_root_drift(target_values, times)
-
-            output_accessor = append_float_accessor(
-                result,
-                result_binary,
-                target_values,
-                "VEC4" if path == "rotation" else "VEC3",
-            )
-            output_animation["samplers"].append(
-                {
-                    "input": input_accessor,
-                    "output": output_accessor,
-                    "interpolation": sampler.get("interpolation", "LINEAR"),
-                }
-            )
-            output_animation["channels"].append(
-                {
-                    "sampler": len(output_animation["samplers"]) - 1,
-                    "target": {"node": target_node, "path": path},
-                }
-            )
+                output_animation["samplers"].append(
+                    {
+                        "input": input_accessor,
+                        "output": output_accessor,
+                        "interpolation": "LINEAR",
+                    }
+                )
+                output_animation["channels"].append(
+                    {
+                        "sampler": len(output_animation["samplers"]) - 1,
+                        "target": {
+                            "node": target_rig.node_by_name[joint_name],
+                            "path": path,
+                        },
+                    }
+                )
         result["animations"].append(output_animation)
 
     result.setdefault("extras", {})["brawlArenaGeneratedCharacter"] = {
@@ -384,7 +498,10 @@ def bake_character(model_document, model_binary, libraries, character_id):
         ],
     }
     result["buffers"] = [{"byteLength": len(result_binary)}]
-    return result, bytes(result_binary), order
+    # The repack garbage-collects accessors orphaned by retargeting and collapses
+    # byte-identical embedded textures the source model may carry.
+    result, result_binary = repack_document(result, bytes(result_binary))
+    return result, result_binary, order
 
 
 def validate_generated_character(document, binary, expected_id=None):
@@ -400,6 +517,7 @@ def validate_generated_character(document, binary, expected_id=None):
         raise ValueError("generated character rig metadata does not match its skeleton")
     if not document.get("meshes"):
         raise ValueError("generated character contains no mesh")
+    validate_raylib_mesh_primitives(document, binary)
 
     images = document.get("images", [])
     if not images:
@@ -416,9 +534,12 @@ def validate_generated_character(document, binary, expected_id=None):
 
     animations = document.get("animations", [])
     names = [animation.get("name") for animation in animations]
-    if names != list(CANONICAL_CLIPS):
+    expected = list(CANONICAL_CLIPS) + [
+        name for name in OPTIONAL_CLIPS if name in names
+    ]
+    if names != expected:
         raise ValueError(
-            f"generated character clips are {names}; expected {list(CANONICAL_CLIPS)}"
+            f"generated character clips are {names}; expected {expected}"
         )
     if metadata.get("clips") != names:
         raise ValueError("generated character clip metadata is stale")

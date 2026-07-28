@@ -1,5 +1,6 @@
 #include "menu_scene.h"
 
+#include "character_animation.h"
 #include "content_catalog.h"
 #include "render.h"
 #include "raymath.h"
@@ -25,6 +26,9 @@ static void RebuildPreview(MenuScene *scene, const App *app, BrawlerClass kit)
     scene->preview.maxHealth = ContentCharacter(&app->content, kit)->maxHealth;
     scene->preview.health = scene->preview.maxHealth;
     scene->previewKit = kit;
+    // The idle preview restarts from frame zero, matching the match renderer's
+    // policy that a fresh clip never lands mid-stride.
+    scene->time = 0.0f;
 }
 
 void MenuSceneInit(MenuScene *scene, Assets *assets)
@@ -94,22 +98,29 @@ static void DrawHangar(MenuScene *scene)
     }
 }
 
-void MenuSceneDraw(MenuScene *scene, const App *app, BrawlerClass candidate,
-                   AppScreen screen)
+static bool PrepareScene(MenuScene *scene, const App *app, BrawlerClass candidate,
+                         Vector3 lightPos[2], Vector3 lightCol[2])
 {
     Assets *a = scene->assets;
-    if (!a || candidate < 0 || candidate >= CLASS_COUNT) return;
-    const CharacterPresentationDefinition *profile =
-        ContentCharacterPresentation(&app->content, candidate);
-    bool select = screen == SCREEN_BRAWLERS;
-    float scale = select ? profile->selectScale : profile->homeScale;
-    float yaw = (select ? profile->selectYawDegrees : profile->homeYawDegrees)*DEG2RAD;
-
-    Vector3 lightPos[2] = { { -2.6f, 3.0f, -2.4f }, { 2.8f, 2.4f, 1.6f } };
-    Vector3 lightCol[2] = { { 0.85f, 0.72f, 0.45f }, { 0.32f, 0.48f, 0.80f } };
+    if (!a || candidate < 0 || candidate >= CLASS_COUNT) return false;
+    lightPos[0] = (Vector3){ -2.6f, 3.0f, -2.4f };
+    lightPos[1] = (Vector3){ 2.8f, 2.4f, 1.6f };
+    lightCol[0] = (Vector3){ 0.85f, 0.72f, 0.45f };
+    lightCol[1] = (Vector3){ 0.32f, 0.48f, 0.80f };
     AssetsSetCamera(a, scene->camera.position);
     AssetsSetToon(a, app->tune.toon, app->tune.toonBands);
     AssetsSetLights(a, lightPos, lightCol, 2);
+    return true;
+}
+
+void MenuSceneDrawStage(MenuScene *scene, const App *app, BrawlerClass candidate,
+                        AppScreen screen)
+{
+    (void)screen;
+    Vector3 lightPos[2];
+    Vector3 lightCol[2];
+    if (!PrepareScene(scene, app, candidate, lightPos, lightCol)) return;
+    Assets *a = scene->assets;
 
     BeginMode3D(scene->camera);
         DrawHangar(scene);
@@ -128,13 +139,31 @@ void MenuSceneDraw(MenuScene *scene, const App *app, BrawlerClass candidate,
         Color teamGlow = TEAM_COLORS[TEAM_PLAYER];
         teamGlow.a = (unsigned char)(75 + (0.5f + 0.5f*sinf(scene->time*1.6f))*45);
         DrawLit(a, a->cylinder, glow, a->texGlow, teamGlow, (Vector2){ 1, 1 }, 1.0f);
+    EndMode3D();
+}
 
+void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candidate,
+                          AppScreen screen)
+{
+    Vector3 lightPos[2];
+    Vector3 lightCol[2];
+    if (!PrepareScene(scene, app, candidate, lightPos, lightCol)) return;
+    Assets *a = scene->assets;
+    const CharacterPresentationDefinition *profile =
+        ContentCharacterPresentation(&app->content, candidate);
+    bool select = screen == SCREEN_BRAWLERS;
+    float scale = select ? profile->selectScale : profile->homeScale;
+    float yaw = (select ? profile->selectYawDegrees : profile->homeYawDegrees)*DEG2RAD;
+
+    BeginMode3D(scene->camera);
         RiggedCharacter *character = &a->characters[candidate];
         if (character->ok && app->tune.modelCharacter)
         {
             AssetsDrawCharacter(a, candidate, scene->preview.position, yaw, scale,
-                                character->clipIdle, scene->time*60.0f, true, WHITE,
-                                0.0f, 0.0f, lightPos, lightCol, 2, scene->camera.position);
+                                character->clipIdle, scene->time*CHARACTER_CLIP_FPS,
+                                true, WHITE,
+                                0.0f, 0.0f, CHARACTER_ACTION_NONE, 0.0f, 0.0f,
+                                0, lightPos, lightCol, 2, scene->camera.position);
         }
         else
         {

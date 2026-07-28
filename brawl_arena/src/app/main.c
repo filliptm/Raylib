@@ -21,6 +21,7 @@
 #include "hud.h"
 #include "command_center.h"
 #include "assets.h"
+#include "character_animation.h"
 #include "config.h"
 #include "gems.h"
 #include "menu.h"
@@ -262,6 +263,10 @@ int main(void)
             MatchUpdate(game, dt);
             FxConsumeGameEvents(&world);
             FxUpdate(&world, dt);
+            CharacterAnimationsUpdate(&world.presentation, &assets,
+                                      world.session.brawlers,
+                                      world.session.brawlerCount,
+                                      world.tune.moveSpeed, dt);
             CameraUpdate(&world, dt);
 
             BankResult(&world);

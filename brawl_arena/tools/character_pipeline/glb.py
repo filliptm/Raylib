@@ -14,12 +14,35 @@ GLB_VERSION = 2
 JSON_CHUNK = b"JSON"
 BIN_CHUNK = b"BIN\0"
 FLOAT_COMPONENT = 5126
+UNSIGNED_BYTE_COMPONENT = 5121
+UNSIGNED_SHORT_COMPONENT = 5123
+UNSIGNED_INT_COMPONENT = 5125
+RAYLIB_MAX_INDEXED_VERTICES = 65535
+# Whole-character budgets. The art contract is ~4-8k triangles per character
+# (docs/CHARACTER_PIPELINE.md); these caps leave headroom above it while rejecting
+# un-retopologized Meshy exports, which arrive at 100k+ triangles and would
+# otherwise pass the per-primitive checks by being partitioned into u16 chunks.
+MAX_TOTAL_TRIANGLES = 16000
+MAX_TOTAL_VERTICES = 32000
 COMPONENTS = {
     "SCALAR": 1,
     "VEC2": 2,
     "VEC3": 3,
     "VEC4": 4,
     "MAT4": 16,
+}
+COMPONENT_BYTES = {
+    5120: 1,
+    UNSIGNED_BYTE_COMPONENT: 1,
+    5122: 2,
+    UNSIGNED_SHORT_COMPONENT: 2,
+    UNSIGNED_INT_COMPONENT: 4,
+    FLOAT_COMPONENT: 4,
+}
+UNSIGNED_FORMATS = {
+    UNSIGNED_BYTE_COMPONENT: "B",
+    UNSIGNED_SHORT_COMPONENT: "H",
+    UNSIGNED_INT_COMPONENT: "I",
 }
 
 
@@ -134,6 +157,292 @@ def read_float_accessor(document, binary, accessor_index):
     return values
 
 
+def _accessor_layout(document, binary, accessor_index):
+    accessors = document.get("accessors", [])
+    if not 0 <= accessor_index < len(accessors):
+        raise ValueError(f"invalid accessor index {accessor_index}")
+    accessor = accessors[accessor_index]
+    if accessor.get("sparse"):
+        raise ValueError("sparse mesh accessors are not supported")
+
+    value_type = accessor.get("type")
+    component_type = accessor.get("componentType")
+    if value_type not in COMPONENTS or component_type not in COMPONENT_BYTES:
+        raise ValueError(
+            f"accessor {accessor_index} has unsupported mesh layout"
+        )
+    record_size = COMPONENTS[value_type] * COMPONENT_BYTES[component_type]
+
+    views = document.get("bufferViews", [])
+    view_index = accessor.get("bufferView")
+    if not isinstance(view_index, int) or not 0 <= view_index < len(views):
+        raise ValueError(f"accessor {accessor_index} has an invalid bufferView")
+    view = views[view_index]
+    if view.get("buffer", 0) != 0:
+        raise ValueError("character accessor does not use the embedded GLB buffer")
+
+    start = view.get("byteOffset", 0) + accessor.get("byteOffset", 0)
+    stride = view.get("byteStride", record_size)
+    count = accessor.get("count", 0)
+    if start < 0 or stride < record_size or count < 0:
+        raise ValueError(f"accessor {accessor_index} has an invalid layout")
+    if count and start + (count - 1) * stride + record_size > len(binary):
+        raise ValueError(f"accessor {accessor_index} extends beyond the binary buffer")
+    return accessor, start, stride, record_size
+
+
+def _read_unsigned_scalar_accessor(document, binary, accessor_index):
+    accessor, start, stride, record_size = _accessor_layout(
+        document, binary, accessor_index
+    )
+    component_type = accessor.get("componentType")
+    if accessor.get("type") != "SCALAR" or component_type not in UNSIGNED_FORMATS:
+        raise ValueError("mesh indices must use an unsigned SCALAR accessor")
+    value_format = "<" + UNSIGNED_FORMATS[component_type]
+    return [
+        struct.unpack_from(value_format, binary, start + item * stride)[0]
+        for item in range(accessor["count"])
+    ]
+
+
+def _append_accessor_subset(
+    document,
+    output_binary,
+    source_document,
+    source_binary,
+    accessor_index,
+    source_items,
+    include_bounds=False,
+):
+    template, start, stride, record_size = _accessor_layout(
+        source_document, source_binary, accessor_index
+    )
+    while len(output_binary) % 4:
+        output_binary.append(0)
+    output_start = len(output_binary)
+
+    minimum = None
+    maximum = None
+    if include_bounds and template.get("componentType") != FLOAT_COMPONENT:
+        raise ValueError("mesh POSITION bounds require FLOAT components")
+    value_format = "<" + "f" * COMPONENTS[template["type"]]
+    for source_item in source_items:
+        if not 0 <= source_item < template["count"]:
+            raise ValueError("mesh index references a vertex outside its attributes")
+        source_start = start + source_item * stride
+        record = source_binary[source_start:source_start + record_size]
+        output_binary += record
+        if include_bounds:
+            values = struct.unpack(value_format, record)
+            if minimum is None:
+                minimum = list(values)
+                maximum = list(values)
+            else:
+                minimum = [min(left, right) for left, right in zip(minimum, values)]
+                maximum = [max(left, right) for left, right in zip(maximum, values)]
+
+    document.setdefault("bufferViews", []).append(
+        {
+            "buffer": 0,
+            "byteOffset": output_start,
+            "byteLength": len(output_binary) - output_start,
+        }
+    )
+    accessor = {
+        key: copy.deepcopy(value)
+        for key, value in template.items()
+        if key not in ("bufferView", "byteOffset", "count", "min", "max", "sparse")
+    }
+    accessor["bufferView"] = len(document["bufferViews"]) - 1
+    accessor["count"] = len(source_items)
+    if minimum is not None:
+        accessor["min"] = minimum
+        accessor["max"] = maximum
+    document.setdefault("accessors", []).append(accessor)
+    return len(document["accessors"]) - 1
+
+
+def _append_unsigned_short_indices(document, output_binary, indices):
+    while len(output_binary) % 4:
+        output_binary.append(0)
+    output_start = len(output_binary)
+    for index in indices:
+        if not 0 <= index < RAYLIB_MAX_INDEXED_VERTICES:
+            raise ValueError("partitioned mesh index exceeds raylib's u16-safe range")
+        output_binary += struct.pack("<H", index)
+
+    document.setdefault("bufferViews", []).append(
+        {
+            "buffer": 0,
+            "byteOffset": output_start,
+            "byteLength": len(output_binary) - output_start,
+        }
+    )
+    document.setdefault("accessors", []).append(
+        {
+            "bufferView": len(document["bufferViews"]) - 1,
+            "componentType": UNSIGNED_SHORT_COMPONENT,
+            "count": len(indices),
+            "type": "SCALAR",
+            "min": [min(indices)] if indices else [0],
+            "max": [max(indices)] if indices else [0],
+        }
+    )
+    return len(document["accessors"]) - 1
+
+
+def partition_raylib_mesh_primitives(document, binary):
+    """Split dense triangle primitives into u16-indexed raylib-safe chunks."""
+    source_document = document
+    source_binary = bytes(binary)
+    result = clone_document(document)
+    output_binary = bytearray(binary)
+    partitions = 0
+
+    for mesh_index, mesh in enumerate(source_document.get("meshes", [])):
+        safe_primitives = []
+        for primitive in mesh.get("primitives", []):
+            attributes = primitive.get("attributes", {})
+            if "POSITION" not in attributes:
+                raise ValueError(f"mesh {mesh_index} primitive has no POSITION")
+            position = source_document["accessors"][attributes["POSITION"]]
+            vertex_count = position.get("count", 0)
+            if any(
+                source_document["accessors"][index].get("count") != vertex_count
+                for index in attributes.values()
+            ):
+                raise ValueError("mesh primitive attributes have different vertex counts")
+
+            index_component = None
+            if "indices" in primitive:
+                index_accessor = source_document["accessors"][primitive["indices"]]
+                index_component = index_accessor.get("componentType")
+            needs_partition = (
+                vertex_count > RAYLIB_MAX_INDEXED_VERTICES or
+                index_component == UNSIGNED_INT_COMPONENT
+            )
+            if not needs_partition:
+                safe_primitives.append(copy.deepcopy(primitive))
+                continue
+
+            if primitive.get("mode", 4) != 4:
+                raise ValueError("only triangle primitives can be partitioned for raylib")
+            if primitive.get("targets"):
+                raise ValueError("morph-target primitives cannot be partitioned")
+            indices = (
+                _read_unsigned_scalar_accessor(
+                    source_document, source_binary, primitive["indices"]
+                )
+                if "indices" in primitive
+                else list(range(vertex_count))
+            )
+            if len(indices) % 3:
+                raise ValueError("triangle primitive index count is not divisible by three")
+
+            chunks = []
+            source_vertices = []
+            remap = {}
+            remapped_indices = []
+            for triangle_start in range(0, len(indices), 3):
+                triangle = indices[triangle_start:triangle_start + 3]
+                new_vertices = sum(index not in remap for index in triangle)
+                if (remapped_indices and
+                        len(source_vertices) + new_vertices >
+                        RAYLIB_MAX_INDEXED_VERTICES):
+                    chunks.append((source_vertices, remapped_indices))
+                    source_vertices = []
+                    remap = {}
+                    remapped_indices = []
+                for index in triangle:
+                    if not 0 <= index < vertex_count:
+                        raise ValueError("mesh index references a vertex outside POSITION")
+                    if index not in remap:
+                        remap[index] = len(source_vertices)
+                        source_vertices.append(index)
+                    remapped_indices.append(remap[index])
+            if remapped_indices:
+                chunks.append((source_vertices, remapped_indices))
+
+            for source_vertices, remapped_indices in chunks:
+                split = copy.deepcopy(primitive)
+                split["attributes"] = {
+                    semantic: _append_accessor_subset(
+                        result,
+                        output_binary,
+                        source_document,
+                        source_binary,
+                        accessor_index,
+                        source_vertices,
+                        include_bounds=semantic == "POSITION",
+                    )
+                    for semantic, accessor_index in attributes.items()
+                }
+                split["indices"] = _append_unsigned_short_indices(
+                    result, output_binary, remapped_indices
+                )
+                safe_primitives.append(split)
+            partitions += len(chunks)
+        result["meshes"][mesh_index]["primitives"] = safe_primitives
+
+    result["buffers"] = [{"byteLength": len(output_binary)}]
+    return result, bytes(output_binary), partitions
+
+
+def validate_raylib_mesh_primitives(document, binary):
+    total_vertices = 0
+    total_indices = 0
+    for mesh_index, mesh in enumerate(document.get("meshes", [])):
+        for primitive_index, primitive in enumerate(mesh.get("primitives", [])):
+            attributes = primitive.get("attributes", {})
+            position_index = attributes.get("POSITION")
+            if position_index is None:
+                raise ValueError(
+                    f"mesh {mesh_index} primitive {primitive_index} has no POSITION"
+                )
+            position_count = document["accessors"][position_index].get("count", 0)
+            if position_count > RAYLIB_MAX_INDEXED_VERTICES:
+                raise ValueError(
+                    f"mesh {mesh_index} primitive {primitive_index} has"
+                    f" {position_count} vertices; raylib permits at most"
+                    f" {RAYLIB_MAX_INDEXED_VERTICES}"
+                )
+            if any(
+                document["accessors"][index].get("count") != position_count
+                for index in attributes.values()
+            ):
+                raise ValueError("mesh primitive attributes have different vertex counts")
+            total_vertices += position_count
+            if "indices" not in primitive:
+                total_indices += position_count
+                continue
+            accessor = document["accessors"][primitive["indices"]]
+            if accessor.get("componentType") not in (
+                UNSIGNED_BYTE_COMPONENT,
+                UNSIGNED_SHORT_COMPONENT,
+            ):
+                raise ValueError("raylib character meshes require u8/u16 indices")
+            indices = _read_unsigned_scalar_accessor(
+                document, binary, primitive["indices"]
+            )
+            if indices and max(indices) >= position_count:
+                raise ValueError("mesh index references a vertex outside POSITION")
+            total_indices += len(indices)
+
+    total_triangles = total_indices // 3
+    if total_triangles > MAX_TOTAL_TRIANGLES:
+        raise ValueError(
+            f"character mesh has {total_triangles} triangles; the budget is"
+            f" {MAX_TOTAL_TRIANGLES}. Re-export with retopology or run the"
+            " import decimation stage"
+        )
+    if total_vertices > MAX_TOTAL_VERTICES:
+        raise ValueError(
+            f"character mesh has {total_vertices} vertices; the budget is"
+            f" {MAX_TOTAL_VERTICES}. Re-export with retopology or run the"
+            " import decimation stage"
+        )
+
+
 def append_float_accessor(document, binary, values, value_type, include_bounds=False):
     if value_type not in COMPONENTS:
         raise ValueError(f"unsupported accessor type {value_type}")
@@ -227,9 +536,48 @@ def _remap_accessor_references(document, accessor_map):
             sampler["output"] = accessor_map[sampler["output"]]
 
 
+def _dedupe_images(document, binary):
+    """Collapse byte-identical embedded images onto one copy.
+
+    Meshy exports routinely embed the same PNG twice (base color + a second
+    texture slot), which nearly doubles a character's file size for no visual
+    difference. Textures are remapped; the orphaned bufferViews are garbage
+    collected by the repack that follows.
+    """
+    images = document.get("images", [])
+    if len(images) < 2:
+        return
+
+    image_map = {}
+    kept = []
+    by_payload = {}
+    for index, image in enumerate(images):
+        key = None
+        view_index = image.get("bufferView")
+        if isinstance(view_index, int):
+            view = document.get("bufferViews", [])[view_index]
+            start = view.get("byteOffset", 0)
+            key = bytes(binary[start:start + view.get("byteLength", 0)])
+        if key is not None and key in by_payload:
+            image_map[index] = by_payload[key]
+            continue
+        if key is not None:
+            by_payload[key] = len(kept)
+        image_map[index] = len(kept)
+        kept.append(image)
+
+    if len(kept) == len(images):
+        return
+    document["images"] = kept
+    for texture in document.get("textures", []):
+        if "source" in texture:
+            texture["source"] = image_map[texture["source"]]
+
+
 def repack_document(document, binary):
     """Remove unreferenced accessors/views and rebuild one compact embedded buffer."""
     document = clone_document(document)
+    _dedupe_images(document, binary)
     accessors = document.get("accessors", [])
     used_accessors = sorted(referenced_accessors(document))
     if any(not isinstance(index, int) or not 0 <= index < len(accessors)

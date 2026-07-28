@@ -135,6 +135,9 @@ int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 
     GameEmitImpact(w.session, hitPos, (Color){ 70, 244, 166, 255 }, 7);
     GameEmitLight(w.session, (Vector3){ hitPos.x, hitPos.y + 0.7f, hitPos.z },
                  (Color){ 70, 244, 166, 255 }, 1.7f, 0.18f);
+    GameEmitVfxAttached(w.session, VFX_GENERIC_HEAL, hitPos, hitPos,
+                        0.0f, 0.95f, (Color){ 70, 244, 166, 255 },
+                        idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
     return restored;
 }
 
@@ -188,9 +191,29 @@ static void UpdateStatuses(GameContext w, int idx, float dt)
         {
             Vector3 hit = { b->position.x, 0.75f, b->position.z };
             if (b->team == status->sourceTeam)
-                BrawlerApplyHealing(w, idx, status->healing, status->source, hit);
+            {
+                int restored =
+                    BrawlerApplyHealing(w, idx, status->healing,
+                                        status->source, hit);
+                if (restored > 0)
+                    GameEmitVfxAttached(
+                        w.session, VFX_GUARDIAN_RESONANCE_HEAL,
+                        hit, hit, 0.0f, 1.05f,
+                        (Color){ 70, 244, 166, 255 },
+                        idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+            }
             else
-                BrawlerApplyDamage(w, idx, status->damage, status->source, hit);
+            {
+                int removed =
+                    BrawlerApplyDamage(w, idx, status->damage,
+                                       status->source, hit);
+                if (removed > 0)
+                    GameEmitVfxAttached(
+                        w.session, VFX_GUARDIAN_RESONANCE_DAMAGE,
+                        hit, hit, 0.0f, 1.10f,
+                        (Color){ 255, 92, 158, 255 },
+                        idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+            }
             status->tickTimer += status->tickRate;
         }
         if (status->remaining <= 0.0f) *status = (StatusEffect){ 0 };
@@ -259,6 +282,7 @@ bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
     b->dashDir = Vector3Normalize(direction);
     b->dashAbility = character->mobilityAbility;
     b->dashHitMask = 0;
+    b->dashVfxTimer = 0.0f;
     b->mobilityCooldown = ability->cooldown;
     b->velocity = (Vector3){ 0 };
     b->revealTimer = w.tuning->fireReveal;
@@ -267,6 +291,20 @@ bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
                    (Color){ 92, 220, 255, 255 });
     GameEmitLight(w.session, (Vector3){ b->position.x, 0.8f, b->position.z },
                   (Color){ 92, 220, 255, 255 }, 2.2f, 0.16f);
+    Vector3 jetStart = { b->position.x, 0.72f, b->position.z };
+    Vector3 jetEnd =
+        Vector3Subtract(jetStart, Vector3Scale(b->dashDir, 1.45f));
+    GameEmitVfxAttached(
+        w.session, VFX_TANK_JETS_START, jetStart, jetEnd,
+        atan2f(b->dashDir.x, b->dashDir.z), 1.30f,
+        (Color){ 92, 220, 255, 255 },
+        idx, VFX_SOCKET_LEFT_SHOULDER, -1, VFX_SOCKET_NONE);
+    GameEmitVfxAttached(
+        w.session, VFX_TANK_JETS_START, jetStart, jetEnd,
+        atan2f(b->dashDir.x, b->dashDir.z), 1.30f,
+        (Color){ 92, 220, 255, 255 },
+        idx, VFX_SOCKET_RIGHT_SHOULDER, -1, VFX_SOCKET_NONE);
+    GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_MOBILITY);
     return true;
 }
 
@@ -370,7 +408,8 @@ static void UpdateDash(GameContext w, int idx, float dt)
     Vector3 resolved = ArenaResolveCircle(&w.session->arena, next, BRAWLER_RADIUS);
     // A regular boost stops on both cover types; Charge destroys crates first but
     // still ends immediately against a permanent wall.
-    if (Vector3Distance(resolved, next) > 0.01f) b->dashTimer = 0.0f;
+    bool blocked = Vector3Distance(resolved, next) > 0.01f;
+    if (blocked) b->dashTimer = 0.0f;
     b->position = resolved;
 
     if (ability->damage > 0)
@@ -396,9 +435,38 @@ static void UpdateDash(GameContext w, int idx, float dt)
                 }
                 GameEmitImpact(w.session, t->position,
                                (Color){ 255, 220, 120, 255 }, 12);
+                GameEmitVfx(w.session, VFX_TANK_CHARGE_IMPACT,
+                            t->position, t->position, 0.0f, 1.55f,
+                            (Color){ 255, 204, 104, 255 });
             }
         }
     }
+
+    b->dashVfxTimer -= moveDt;
+    if (b->dashVfxTimer <= 0.0f)
+    {
+        Vector3 trailStart = { b->position.x, 0.68f, b->position.z };
+        float trailLength = ability->damage > 0 ? 1.65f : 1.25f;
+        Vector3 trailEnd =
+            Vector3Subtract(trailStart, Vector3Scale(b->dashDir, trailLength));
+        GameEmitVfxAttached(
+            w.session,
+            ability->damage > 0
+                ? VFX_TANK_CHARGE_TRAIL : VFX_TANK_JETS_TRAIL,
+            trailStart, trailEnd,
+            atan2f(b->dashDir.x, b->dashDir.z),
+            ability->damage > 0 ? 1.25f : 1.05f,
+            ability->damage > 0
+                ? (Color){ 255, 196, 96, 255 }
+                : (Color){ 92, 220, 255, 255 },
+            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+        b->dashVfxTimer += ability->damage > 0 ? 0.055f : 0.045f;
+    }
+
+    if (blocked && ability->damage > 0)
+        GameEmitVfx(w.session, VFX_TANK_CHARGE_IMPACT,
+                    b->position, b->position, 0.0f, 1.35f,
+                    (Color){ 255, 204, 104, 255 });
 
     Color trail = ability->damage > 0
                 ? (Color){ 255, 200, 110, 180 }

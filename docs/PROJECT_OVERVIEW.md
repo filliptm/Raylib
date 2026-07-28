@@ -562,12 +562,15 @@ Guardian's tracked mesh source is
 100-point rain pulses over 1.35 seconds and six Resonance ticks over 2.1 seconds. Those
 numbers are content values, not hard-coded combat timing.
 
-Scrapper, Tank, and Guardian use tracked mesh-only models plus the reusable twelve-clip
+Scrapper, Longshot, Tank, and Guardian use tracked mesh-only models plus the reusable twelve-clip
 `resources/characters/animations/meshy_humanoid_v1.glb` library. Small animation-only
 override libraries preserve Scrapper's idle/hit/backpedal and Guardian's distinctive
 idle. `make character-assets` retargets motion relative to each model's recorded
 animation rest pose and generates self-contained raylib GLBs under
 `build/assets/characters/`. All embedded character PNGs are exactly 1024×1024 (1K).
+Longshot's unusually dense source mesh is automatically partitioned into four
+raylib-safe 16-bit indexed primitives during import; the validator rejects unsafe
+32-bit runtime indices instead of allowing raylib to truncate them.
 `make check-character-assets` is part of normal builds and tests and rejects incompatible
 rigs, missing/full-TRS clips, root drift, external or non-PNG textures, and non-1K assets.
 
@@ -579,10 +582,13 @@ From the repository root:
 make -C brawl_arena
 make -C brawl_arena run
 make -C brawl_arena character-assets
+make -C brawl_arena vfx-assets
 make -C brawl_arena validate-config
 make -C brawl_arena check-architecture
 make -C brawl_arena check-ui
+make -C brawl_arena ui-assets
 make -C brawl_arena check-character-assets
+make -C brawl_arena check-vfx-assets
 make -C brawl_arena test
 make -C brawl_arena sanitize
 ```
@@ -605,15 +611,24 @@ The headless suite covers:
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
 - UI layout/focus at four viewports, minimum targets, contrast, reduced motion,
-  configuration round trips, and character presentation profiles.
+  nine-slice metadata, curated asset integrity, configuration round trips, and
+  character presentation profiles.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
-  generation, canonical animation coverage, and 1K source/generated texture contracts.
+  generation, canonical animation coverage, 1K source/generated texture contracts, and
+  presentation-only action-overlay timing.
+- Deterministic CC0 VFX atlas generation, recipe coverage, flipbook frame selection,
+  fixed-pool priority behavior, all-kit ability/action-event mappings, and semantic rig
+  socket metadata. Atlas checks also cover transparent cell guards and removal of black
+  RGB mattes from zero-alpha sampling borders.
 
 `make sanitize` rebuilds those tests with AddressSanitizer and
 UndefinedBehaviorSanitizer on non-Darwin systems. The current Apple clang/macOS 26 ASan
 runtime deadlocks during its own initialization, so the Darwin target runs strict UBSan.
 `make check-architecture` rejects forbidden dependencies in `src/game/` and `src/core/`;
-`make check-ui` enforces the shared text/font ownership policy.
+it also rejects raw presentation depth-mask toggles that could restore depth writes
+before raylib flushes transparent geometry. `make check-ui` enforces shared
+text/font/texture ownership and validates the curated UI asset hashes, dimensions,
+licenses, sources, and archive policy.
 Graphical shaders, input feel, screen transitions, and model animation still require an
 interactive run.
 
@@ -624,9 +639,12 @@ brawl_arena/
 ├── config/                  tracked canonical designer settings
 ├── data/maps/               versioned map catalog and map packages
 ├── data/characters/         character model/animation build manifest
+├── data/vfx/                curated ability-VFX atlas manifest
 ├── docs/                    architecture, content, development, import, visual system
 ├── resources/characters/    tracked mesh-only models and reusable animation libraries
 ├── resources/environment/   runtime environment assets
+├── resources/ui/            curated CC0 interface sources, runtime subset, provenance
+├── resources/vfx/           curated CC0 VFX sources and license notices
 ├── src/
 │   ├── core/                limits, shared IDs, deterministic random
 │   ├── content/             typed content, config storage, map loading/validation
@@ -636,7 +654,7 @@ brawl_arena/
 │   ├── ui/                  shared UI system, player-facing menu, and HUD
 │   └── devtools/            command center and immediate-mode authoring widgets
 ├── tests/                   headless behavior, pipeline, and integration checks
-└── tools/                   character import/retargeting and architecture checks
+└── tools/                   character/UI/VFX asset pipelines and architecture checks
 ```
 
 The intended dependency direction is implemented, not merely aspirational:
@@ -646,8 +664,9 @@ The intended dependency direction is implemented, not merely aspirational:
   `ContentCatalog` pointers. It cannot reach camera, controller, UI, profile, or screen
   state.
 - `app` owns the aggregate lifetime and translates device input into `PlayerInput`.
-- Simulation emits `GameEvent` records. `presentation/effects.c` consumes them after the
-  simulation step.
+- Simulation emits `GameEvent` records, including stable presentation-only
+  `VfxEffectId` values. `presentation/effects.c` consumes them after the simulation
+  step.
 - UI and developer tools use application commands for gameplay mutations.
 
 `tools/check_architecture.sh` prevents game/core code from importing outer-layer headers,
@@ -661,8 +680,8 @@ function, or calling rendering/effect APIs.
 - `GameSession`: arena, brawlers, projectiles, area fields, gems, objective state,
   deterministic random state, simulation clock, statistics, and the event queue.
 - `PlayerController`: aim point/distance and main/super charge interaction state.
-- `PresentationState`: camera plus fixed pools for particles, float text, dynamic lights,
-  and shockwaves.
+- `PresentationState`: camera plus fixed pools for particles, animated VFX layers,
+  float text, dynamic lights, and shockwaves.
 - `AppFlow`: screen, transition, result-banking, and quit state.
 
 It also owns effective `Tuning`, the `ContentCatalog`, and configuration provenance.
@@ -670,8 +689,9 @@ It also owns effective `Tuning`, the `ContentCatalog`, and configuration provena
 reduced-motion, contrast, tutorial, and glyph choices.
 `Assets` has process lifetime in `main.c` and owns shaders, meshes, textures, character
 models, animations, station models, and the scene render target.
-The process-lifetime `UiSystem` owns local font handles, semantic theme/text services,
-reference-canvas layout, input modality, and focus graphs.
+The process-lifetime `UiSystem` owns local font handles, the curated UI skin and its
+per-resource fallbacks, semantic theme/text services, reference-canvas layout, input
+modality, and focus graphs.
 
 `ResetMatch()` clears only session, controller, and presentation state. Content,
 configuration, profile data, and navigation survive because they have separate owners;
@@ -680,8 +700,9 @@ there is no preserve-and-reconstruct whole-application reset.
 Fixed capacities currently include eight brawlers, 512 projectiles, 15 typed content
 abilities (eleven currently active), 24 active ability
 fields, four statuses per brawler, 40 gems, 1,024 game events, 1,024 presentation
-particles, 64 float texts, 64 effect lights, and 24 shockwaves. Maps may be up to 64×64,
-the catalog may contain eight maps, and a map may contain 64 decorative props.
+particles, 192 priority-managed VFX layers, 64 float texts, 64 effect lights, and 24
+shockwaves. Maps may be up to 64×64, the catalog may contain eight maps, and a map may
+contain 64 decorative props.
 
 ## Startup and frame flow
 
@@ -692,8 +713,9 @@ Startup:
 3. Overlay an optional sparse `tuning.local.cfg`, then profile-only `profile.cfg`.
 4. Import legacy `tuning.cfg` once when the new local draft does not exist.
 5. Load and validate `data/maps/manifest.cfg` and every listed map.
-6. Generate procedural fallback assets and load shaders, optional characters, station
-   models, and the local Helios UI fonts.
+6. Generate procedural fallback assets, then load shaders, optional characters, station
+   models, build-generated ability-VFX atlases, local Helios fonts, and the curated UI
+   skin.
 7. Build the initial match and open the main menu.
 
 During an active match:
@@ -826,36 +848,63 @@ separate super that damages, knocks back, and destroys crates.
 
 Simulation never spawns particles or mutates camera state. It emits typed events for
 muzzle flashes, impacts, explosions, deaths, crate breaks, float text, lights,
-shockwaves, particles, and explicitly requested match presentation. Combat camera shake
-is disabled for every attack and impact, including Mortar/thrower attacks; the regression
-test iterates all five kits and direct damage/elimination paths.
+shockwaves, particles, stable ability-VFX recipes, and explicitly requested match
+presentation. Combat camera shake is disabled for every attack and impact, including
+Mortar/thrower attacks; the regression test iterates all five kits and direct
+damage/elimination paths.
 
 ## Rendering and assets
 
 The presentation layer owns:
 
 - A perspective follow camera with aim lead.
-- Imported/fallback brawler drawing and animation selection.
+- Imported/fallback brawler drawing and movement-owned animation selection. Stationary
+  casts retain idle as their base and cannot be changed by the independent bush-reveal
+  timer. Successful actions emit an explicit presentation-only one-shot that blends an
+  optional semantic clip—or a restrained upper-body procedural fallback—over
+  locomotion, while facing, muzzle light, projectiles, and ability VFX carry the shot.
+  The current twelve-clip libraries have no authored attack clips, so current characters
+  use the procedural fallback.
 - A Helios-9 hangar/menu scene and non-rotating character previews, retaining idle
   animation without automatic yaw rotation. Per-character home/select profiles control
   yaw, scale, offset, camera target, and distance. Tank uses 205° at home and a smaller
   180° roster profile so its full silhouette remains visible.
+- Opaque nine-slice Kenney interface hardware and two transparent OpenGameArt-derived
+  orbital/radar motifs, tinted through Helios tokens and independently replaceable by
+  code-drawn fallbacks.
 - External station-map rendering aligned with runtime collision.
 - Generated fallback floor, wall, crate, bush, metal, cloth, grass, flat, and glow
   textures.
 - Instanced wind/brawler-reactive grass.
 - Dynamic point-light selection.
 - Projectile, solid-effect, ability-field, and aim-preview visuals.
+- A presentation-only 28-recipe ability library built from seven generated CC0
+  flipbook/shape atlases, existing particles, lights, and shockwaves. Casts, beams,
+  shoulder jets, healing returns, and received effects can follow semantic hand,
+  shoulder, chest, foot, or center sockets from the final animated pose; primitive and
+  incomplete rigs retain approximate socket positions. Imported recipe layers use a
+  shared `2.0×` presentation scale for match-camera readability without changing
+  gameplay dimensions or authoritative telegraphs.
 - Optional toon/post-processing controls, including outline, bloom, painterly,
   pixelation, halftone, posterization, grade, vignette, grain, and chromatic fringe.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
 in `ability_visuals.c`, camera behavior in `camera.c`, and menu presentation in
-`menu_scene.c`. The window is resizable down to 960×600; the scene/depth target is
+`menu_scene.c`. Match clip selection is isolated in `character_animation.c` and reads
+physical movement rather than attack/concealment timers. Imported ability recipes live
+in `vfx_catalog.c`; `vfx.c` owns their
+fixed pool, animation, alpha sorting, ground/beam/billboard drawing, and render-state
+restoration. Shared no-depth-write transitions in `render_state.h` flush raylib's
+immediate batch before changing and restoring the depth mask, preventing transparent
+billboard rectangles from entering the depth-based ink outline. The World command-center
+tab reports atlas load state, active/pool/dropped counts, event/layer totals, and the
+last recipe, and exposes direct recipe and character action previews for graphical
+checks. The window is resizable down to 960×600; the scene/depth target is
 recreated only when framebuffer size changes and has a direct-render failure fallback.
 
-Sentinel, Ironclad Guardian, and Gaia Guardian share a compatible 24-joint hierarchy, so
+Sentinel, Longshot, Ironclad Guardian, and Gaia Guardian share a compatible 24-joint
+hierarchy, so
 clips can be reused only while skeleton names, parent relationships, orientations, and
 rest pose remain compatible. raylib does not retarget animations. Raw Meshy/Tripo
 exports must pass through `tools/fix_meshy_glb.py`; the detailed constraints and import
@@ -864,8 +913,9 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 ## Known limitations and next seams
 
 - No audio is implemented.
-- Character animation changes have no crossfade.
-- Longshot and Mortar use primitive fallback characters.
+- Locomotion clip changes have no crossfade; explicit action overlays blend in and out
+  over the selected locomotion pose.
+- Mortar uses a primitive fallback character.
 - Character metadata is typed at runtime, but the five stable character IDs/model IDs
   and the legacy authoring schema are still compiled. Adding a sixth slot still requires
   extending those fixed enums/arrays before it can use existing behaviors.
@@ -883,6 +933,8 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 - `brawl_arena/docs/MAPS.md`: map package schema and authoring.
 - `brawl_arena/docs/DEVELOPMENT.md`: source layout, adding features, and verification.
 - `brawl_arena/docs/CHARACTER_PIPELINE.md`: rigged model/animation conversion.
+- `brawl_arena/docs/VFX_PIPELINE.md`: curated effect sources, atlas build, recipes,
+  rendering rules, and verification.
 - `brawl_arena/docs/visual-design/index.html`: browser-ready Helios Broadcast runtime
   reference, linked menu/HUD compositions, and preserved pre-implementation audit.
 - `brawl_arena/docs/visual-design/IMPLEMENTATION_PLAN.md`: implementation record with
@@ -1003,7 +1055,7 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
 - Gem pickup/drop/countdown/result.
 - Full restart and menu return.
 - Command-center input capture and persistence.
-- Primitive fallback plus rigged Scrapper, Tank, and Guardian rendering.
+- Primitive fallback plus rigged Scrapper, Longshot, Tank, and Guardian rendering.
 
 # Documentation maintenance
 

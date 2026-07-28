@@ -56,10 +56,11 @@ App
 `Assets` has process lifetime and is owned next to `App` in `main.c`. It contains GPU and
 imported resource handles rather than simulation data.
 
-`UiSystem` also has process lifetime in `main.c`. It loads local font resources once,
-builds a reference-canvas layout each frame, captures pointer/keyboard/gamepad UI
-navigation, and owns the current/previous focus graph. It is not part of deterministic
-simulation.
+`UiSystem` also has process lifetime in `main.c`. It loads local font and curated UI-skin
+textures once, builds a reference-canvas layout each frame, captures
+pointer/keyboard/gamepad UI navigation, and owns the current/previous focus graph. Each
+skin resource has an independent ready flag and a code-drawn fallback. It is not part of
+deterministic simulation.
 
 `GameSession` owns:
 
@@ -160,20 +161,37 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 - `environment.c`: map-cell and prop presentation.
 - `camera.c`: camera initialization, lead, follow, and permitted shake.
 - `effects.c`: game-event consumption and transient visual pools.
+- `vfx_catalog.c`: stable, kit-specific effect recipes.
+- `vfx.c`: fixed VFX layer pool, animation, pose-socket resolution, sorting, and draw
+  state restoration.
+- `render_state.h`: batch-safe depth-write transitions shared by transparent,
+  additive, billboard, decal, field, and preview passes.
 - `ability_visuals.c`: active rain/sound fields and all aim previews.
+- `character_animation.c`: pure match clip selection from life, dash, velocity, and
+  facing, plus presentation-only action-state timing/blend envelopes. Concealment reveal
+  and attack cooldown timers never double as animation state.
 - `menu_scene.c`: hangar, podium, lights, non-rotating preview brawler, and application
-  of per-character presentation profiles.
+  of per-character presentation profiles. Its stage and brawler passes are separate so
+  tintable 2D station motifs can sit behind the model without entering world rendering.
 - `render.c`: world-pass orchestration and brawler/projectile/grass drawing.
 
-The renderer reads simulation snapshots. It does not decide hits, healing, line-of-sight
-damage, objective results, or other game rules.
+The renderer reads simulation snapshots and presentation events. Ability VFX can name a
+source/target brawler and semantic rig socket; the final composed character pose supplies
+the mapped positions, with approximate fallbacks for primitives and missing bones. The
+renderer does not decide hits, healing, line-of-sight damage, objective results, or
+other game rules. Presentation code must not call raw rlgl depth-mask toggles: raylib
+batches immediate geometry, so `render_state.h` flushes pending draws on both sides of
+every no-depth-write interval.
 
 ## UI ownership
 
-`ui_system.[ch]`, `ui_theme.[ch]`, `ui_icons.[ch]`, and `ui_types.h` define the Helios
-Broadcast presentation contract: semantic colors, local fonts and fallback handling,
-named text roles, 1280×800 reference layout, focus IDs, input modality, controls, icons,
-and reduced-motion timing. Migrated UI draws text only through this layer.
+`ui_system.[ch]`, `ui_theme.[ch]`, `ui_skin.[ch]`, `ui_icons.[ch]`, and `ui_types.h`
+define the Helios Broadcast presentation contract: semantic colors, local fonts,
+curated texture lifetime, nine-slice controls, per-resource fallbacks, named text roles,
+1280×800 reference layout, focus IDs, input modality, controls, icons, and
+reduced-motion timing. Migrated UI draws text and imported UI textures only through this
+layer. `Assets` continues to own world models, shaders, textures, and render targets;
+UI skin textures never enter deterministic or world-presentation state.
 
 The player-facing shell is split by responsibility:
 
@@ -205,6 +223,7 @@ Place a change according to the state it owns:
 | Menu/HUD display | `ui` |
 | Menu podium/hangar/model framing | `presentation/menu_scene` + content presentation profile |
 | UI theme, text, focus, and components | `ui/ui_system` |
+| UI texture lifetime, slicing, and decoration | `ui/ui_skin` |
 | Shader/model/texture lifetime | `presentation/assets` |
 
 Avoid utilities that require every layer. A narrow duplicate helper is preferable to
@@ -224,10 +243,12 @@ The game test executable links core/content/game objects without presentation or
 The replay test additionally links the app controller but still verifies that
 presentation state remains untouched.
 
-`test_ui` exercises pure layout, target size, focus-neighbor, ID, motion, contrast, and
-presentation-profile behavior without opening a window. `check-ui` prevents migrated
-player UI from bypassing shared text ownership and verifies the shipped font/license
-set. Graphical checks remain documented in [UI_SMOKE_CHECKLIST.md](UI_SMOKE_CHECKLIST.md).
+`test_ui` exercises pure layout, target size, focus-neighbor, ID, motion, contrast,
+nine-slice metadata, and presentation-profile behavior without opening a window.
+`check-ui` prevents migrated player UI from bypassing shared text/texture ownership and
+verifies shipped font and UI-asset hashes, dimensions, licenses, sources, and archive
+policy. Graphical checks remain documented in
+[UI_SMOKE_CHECKLIST.md](UI_SMOKE_CHECKLIST.md).
 
 Non-Darwin sanitizer builds use ASan plus UBSan. The current Apple clang/macOS 26 ASan
 runtime deadlocks in its own initializer, so Darwin's maintained target runs strict
