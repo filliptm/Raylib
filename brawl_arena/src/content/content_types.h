@@ -69,9 +69,17 @@ typedef struct WeaponDef {
     float duration;
     float tickRate;
     float growTime;
+    float returnSpeed;
+    SecondaryKind secondaryKind;
     float mobilityCooldown;
     float mobilityDuration;
     float mobilitySpeed;
+    int secondaryCapacity;
+    float secondaryMoveMultiplier;
+    float secondaryHealRatio;
+    float secondaryRechargeDelay;
+    float secondaryRechargeRate;
+    float secondaryBreakLockout;
     const char *superName;
     SuperKind superKind;
     int sPellets;
@@ -85,6 +93,9 @@ typedef struct WeaponDef {
     float sDuration;
     float sTickRate;
     float sVisualDuration;
+    float sReturnSpeed;
+    float sOutboundPull;
+    float sReturnKnockback;
 } WeaponDef;
 
 typedef enum {
@@ -101,7 +112,9 @@ typedef enum {
     ABILITY_BEHAVIOR_RAIN,
     ABILITY_BEHAVIOR_DASH,
     ABILITY_BEHAVIOR_HEALING_BURST,
-    ABILITY_BEHAVIOR_SOUND_WAVE
+    ABILITY_BEHAVIOR_SOUND_WAVE,
+    ABILITY_BEHAVIOR_RETURNING,
+    ABILITY_BEHAVIOR_SHIELD
 } AbilityBehavior;
 
 typedef struct ProjectileAbility {
@@ -127,6 +140,23 @@ typedef struct DashAbility {
     bool breaksCrates;
 } DashAbility;
 
+typedef struct ReturningAbility {
+    float outboundSpeed;
+    float returnSpeed;
+    float outboundPull;
+    float returnKnockback;
+    bool breaksCrates;
+} ReturningAbility;
+
+typedef struct ShieldAbility {
+    int capacity;
+    float moveMultiplier;
+    float healRatio;
+    float rechargeDelay;
+    float rechargeRate;
+    float breakLockout;
+} ShieldAbility;
+
 typedef struct AbilityDefinition {
     char id[48];
     char name[48];
@@ -143,6 +173,8 @@ typedef struct AbilityDefinition {
         ProjectileAbility projectile;
         AreaAbility area;
         DashAbility dash;
+        ReturningAbility returning;
+        ShieldAbility shield;
     } data;
 } AbilityDefinition;
 
@@ -159,23 +191,21 @@ typedef struct CharacterDefinition {
     int mobilityAbility;
 } CharacterDefinition;
 
-// Content-owned framing for the non-interactive 3D character presentation. These
-// values belong to tracked project truth, while a player's UI preferences do not.
-typedef struct CharacterPresentationDefinition {
-    float homeYawDegrees;
-    float selectYawDegrees;
-    float homeScale;
-    float selectScale;
-    Vector2 homeOffset;
-    Vector2 selectOffset;
-    float cameraTargetY;
-    float cameraDistance;
-} CharacterPresentationDefinition;
+// One content-owned camera/transform contract for every non-interactive character
+// preview. Candidate and screen changes swap only the model.
+typedef struct CharacterShowcaseDefinition {
+    float yawDegrees;
+    float scale;
+    Vector2 offset;
+    Vector3 cameraPosition;
+    Vector3 cameraTarget;
+    float verticalFov;
+} CharacterShowcaseDefinition;
 
 typedef struct ContentCatalog {
     WeaponDef weapons[CLASS_COUNT];
     CharacterDefinition characters[CLASS_COUNT];
-    CharacterPresentationDefinition presentation[CLASS_COUNT];
+    CharacterShowcaseDefinition showcase;
     AbilityDefinition abilities[MAX_ABILITIES];
     int abilityCount;
     MapDefinition maps[MAX_MAPS];
@@ -246,7 +276,7 @@ void TuningSetDefaults(Tuning *tuning);
 typedef struct ConfigState {
     Tuning projectTuning;
     WeaponDef projectWeapons[CLASS_COUNT];
-    CharacterPresentationDefinition projectPresentation[CLASS_COUNT];
+    CharacterShowcaseDefinition projectShowcase;
     bool projectLoaded;
     bool recoveryDefaults;
     bool legacyImported;

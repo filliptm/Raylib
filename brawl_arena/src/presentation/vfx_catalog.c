@@ -115,6 +115,43 @@ static const VfxRecipeDefinition RECIPES[VFX_EFFECT_COUNT] = {
             SHAPE_GROUND(SHAPE_CIRCLE, 0.58f, 0.50f, 1.55f, 0.9f, 0.0f, VFX_ANCHOR_START, true)
         }
     },
+    [VFX_SCRAPPER_RETURN] = {
+        "scrapper_return", 1.15f, 1, 2, {
+            SHAPE_BEAM(SHAPE_TRACE, 0.34f, 0.34f, 0.9f, 0.0f, true),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.36f, 0.42f, 1.20f, 0.8f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
+    [VFX_SCRAPPER_CATCH] = {
+        "scrapper_catch", 1.0f, 1, 2, {
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.38f, 0.48f, 1.42f, 1.0f, 0.0f, VFX_ANCHOR_END, true),
+            SHAPE_GROUND(SHAPE_CIRCLE, 0.40f, 0.34f, 0.96f, 0.72f, 0.0f, VFX_ANCHOR_END, true)
+        }
+    },
+    [VFX_SCRAPPER_SHIELD_START] = {
+        "scrapper_shield_start", 1.25f, 2, 2, {
+            ANIM_BILLBOARD(VFX_ATLAS_ENERGY_LOOP, 16, 32.0f, 0.0f, 0.50f, 0.42f, 1.36f, 0.9f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE),
+            SHAPE_GROUND(SHAPE_MAGIC, 0.54f, 0.46f, 1.35f, 0.82f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
+    [VFX_SCRAPPER_SHIELD_HIT] = {
+        "scrapper_shield_hit", 1.15f, 2, 2, {
+            ANIM_BILLBOARD(VFX_ATLAS_AIR_BURST, 16, 42.0f, 0.0f, 0.38f, 0.36f, 1.18f, 1.0f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.30f, 0.40f, 1.30f, 1.0f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
+    [VFX_SCRAPPER_SHIELD_BREAK] = {
+        "scrapper_shield_break", 1.45f, 3, 3, {
+            ANIM_BILLBOARD(VFX_ATLAS_AIR_BURST, 24, 44.0f, 0.0f, 0.54f, 0.48f, 1.52f, 1.0f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE),
+            SHAPE_GROUND(SHAPE_CIRCLE, 0.52f, 0.52f, 1.62f, 0.9f, 0.0f, VFX_ANCHOR_START, true),
+            SHAPE_BILLBOARD(SHAPE_SPARK, 0.44f, 0.52f, 1.82f, 1.0f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
+    [VFX_SCRAPPER_SHIELD_RESTORE] = {
+        "scrapper_shield_restore", 1.30f, 2, 2, {
+            ANIM_BILLBOARD(VFX_ATLAS_ENERGY_LOOP, 16, 30.0f, 0.0f, 0.54f, 0.46f, 1.48f, 0.9f, 0.0f, VFX_ANCHOR_START, true, VFX_BLEND_ADDITIVE),
+            SHAPE_GROUND(SHAPE_MAGIC, 0.62f, 0.48f, 1.44f, 0.86f, 0.0f, VFX_ANCHOR_START, true)
+        }
+    },
     [VFX_LONGSHOT_CAST] = {
         "longshot_cast", 1.0f, 1, 2, {
             SHAPE_BILLBOARD(SHAPE_MUZZLE, 0.26f, 0.46f, 1.25f, 1.0f, 0.0f, VFX_ANCHOR_START, true),

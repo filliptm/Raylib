@@ -94,17 +94,20 @@ static float SuperGainFor(GameContext w, int owner)
     return ContentMainAbility(w.content, character)->superPerHit*w.tuning->superMult;
 }
 
-static int ApplyProjectileDamage(GameContext w, Projectile *projectile,
-                                 int target, int damage, Vector3 hitPosition)
+static BrawlerDamageResult ApplyProjectileDamage(
+    GameContext w, Projectile *projectile, int target, int damage,
+    Vector3 hitPosition)
 {
-    int removed = BrawlerApplyDamage(w, target, damage,
-                                     projectile->owner, hitPosition);
-    if (removed <= 0 || projectile->selfHealRatio <= 0.0f ||
+    BrawlerDamageResult result =
+        BrawlerApplyDamageDetailed(w, target, damage,
+                                   projectile->owner, hitPosition);
+    if (result.healthRemoved <= 0 || projectile->selfHealRatio <= 0.0f ||
         projectile->owner < 0 ||
         projectile->owner >= w.session->brawlerCount)
-        return removed;
+        return result;
 
-    int healing = (int)floorf(removed*projectile->selfHealRatio + 0.5f);
+    int healing = (int)floorf(
+        result.healthRemoved*projectile->selfHealRatio + 0.5f);
     if (healing > 0)
     {
         Brawler *owner = &w.session->brawlers[projectile->owner];
@@ -118,7 +121,35 @@ static int ApplyProjectileDamage(GameContext w, Projectile *projectile,
                                 -1, VFX_SOCKET_NONE,
                                 projectile->owner, VFX_SOCKET_CHEST);
     }
-    return removed;
+    return result;
+}
+
+static bool BeginProjectileReturn(GameContext w, Projectile *projectile)
+{
+    if (!projectile || projectile->motion != PROJECTILE_MOTION_RETURNING ||
+        !projectile->outbound)
+        return false;
+    if (projectile->owner < 0 ||
+        projectile->owner >= w.session->brawlerCount)
+        return false;
+
+    Brawler *owner = &w.session->brawlers[projectile->owner];
+    if (!owner->alive || owner->cls != projectile->ownerClass) return false;
+
+    projectile->outbound = false;
+    projectile->traveled = 0.0f;
+    projectile->hitMask = 0;
+    Vector3 toOwner = Vector3Subtract(owner->position, projectile->position);
+    toOwner.y = 0.0f;
+    if (Vector3Length(toOwner) > 0.001f)
+        projectile->velocity =
+            Vector3Scale(Vector3Normalize(toOwner), projectile->returnSpeed);
+
+    GameEmitVfx(w.session, VFX_SCRAPPER_RETURN,
+                projectile->position, owner->position,
+                atan2f(projectile->velocity.x, projectile->velocity.z),
+                projectile->isSuper ? 1.65f : 1.15f, projectile->color);
+    return true;
 }
 
 Vector3 WeaponsArcLanding(GameContext w, const Brawler *b, float aimDist)
@@ -316,13 +347,16 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         return;
     }
 
-    int pellets = ability->data.projectile.pellets;
-    float spreadDeg = ability->data.projectile.spreadDegrees;
-    float speed = ability->data.projectile.speed;
+    bool returning = ability->behavior == ABILITY_BEHAVIOR_RETURNING;
+    int pellets = returning ? 1 : ability->data.projectile.pellets;
+    float spreadDeg = returning ? 0.0f
+                                : ability->data.projectile.spreadDegrees;
+    float speed = returning ? ability->data.returning.outboundSpeed
+                            : ability->data.projectile.speed;
     float range = ability->range;
     int damage = ability->damage;
     float radius = ability->radius;
-    bool piercing = ability->data.projectile.piercing;
+    bool piercing = returning ? true : ability->data.projectile.piercing;
 
     if (pellets <= 0) return;
     GameEmitCharacterAction(w.session, idx,
@@ -357,13 +391,25 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         p->range = range;
         p->isSuper = super;
         p->piercing = piercing;
-        p->breaksWalls = super;
-        p->rangeScaled = ability->data.projectile.rangeScaled;
+        p->breaksWalls = super && !returning;
+        p->rangeScaled = returning ? false
+                                   : ability->data.projectile.rangeScaled;
+        p->ownerClass = b->cls;
         p->color = super ? (Color){ 255, 214, 92, 255 }
                          : (p->healing > 0
                                 ? healColor
                                 : AbilityVfxColor(b->cls, b->team, false));
         p->active = true;
+
+        if (returning)
+        {
+            p->motion = PROJECTILE_MOTION_RETURNING;
+            p->outbound = true;
+            p->returnSpeed = ability->data.returning.returnSpeed;
+            p->outboundPull = ability->data.returning.outboundPull;
+            p->returnKnockback = ability->data.returning.returnKnockback;
+            p->breaksCrates = ability->data.returning.breaksCrates;
+        }
 
         if (ability->behavior == ABILITY_BEHAVIOR_LOB)
         {
@@ -516,6 +562,32 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
     // Walls first: an arcing shot flies over them entirely.
     if (!p->arcing && ArenaSolidAt(&w.session->arena, p->position.x, p->position.z))
     {
+        if (p->motion == PROJECTILE_MOTION_RETURNING)
+        {
+            TileType cover =
+                ArenaTypeAt(&w.session->arena, p->position.x, p->position.z);
+            if (cover == TILE_CRATE && p->breaksCrates)
+            {
+                int tileX = ArenaTileX(&w.session->arena, p->position.x);
+                int tileZ = ArenaTileZ(&w.session->arena, p->position.z);
+                int crateHealth = p->damage;
+                if (ArenaInBounds(&w.session->arena, tileX, tileZ))
+                    crateHealth =
+                        w.session->arena.tiles[tileZ][tileX].health;
+                if (ArenaDamageAt(&w.session->arena, p->position.x,
+                                  p->position.z, crateHealth))
+                    GameEmitCrateBreak(w.session, p->position);
+                return false;
+            }
+            if (p->outbound && BeginProjectileReturn(w, p)) return false;
+
+            GameEmitImpact(w.session, p->position, p->color, 8);
+            GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                        p->position, 0.0f, p->isSuper ? 1.35f : 1.0f,
+                        p->color);
+            return true;
+        }
+
         if (p->breaksWalls)
         {
             if (ArenaDamageAt(&w.session->arena, p->position.x, p->position.z, p->damage))
@@ -561,9 +633,46 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             dmg = (int)(p->damage * (0.5f + 0.5f * ratio));
         }
 
-        ApplyProjectileDamage(w, p, i, dmg, p->position);
+        BrawlerDamageResult damageResult =
+            ApplyProjectileDamage(w, p, i, dmg, p->position);
         if (p->owner >= 0)
             BrawlerAwardSuper(w, p->owner, SuperGainFor(w, p->owner));
+
+        if ((damageResult.healthRemoved > 0 ||
+             damageResult.shieldAbsorbed > 0) &&
+            p->motion == PROJECTILE_MOTION_RETURNING)
+        {
+            if (p->outbound && p->outboundPull > 0.0f)
+            {
+                Vector3 direction = Vector3Normalize(
+                    (Vector3){ p->velocity.x, 0.0f, p->velocity.z });
+                Vector3 fromLine = Vector3Subtract(t->position, p->position);
+                float along = Vector3DotProduct(fromLine, direction);
+                Vector3 nearest =
+                    Vector3Add(p->position, Vector3Scale(direction, along));
+                Vector3 pull = Vector3Subtract(nearest, t->position);
+                pull.y = 0.0f;
+                if (Vector3Length(pull) > 0.001f)
+                {
+                    pull = Vector3Scale(
+                        Vector3Normalize(pull),
+                        fminf(p->outboundPull, Vector3Length(pull)));
+                    t->position = ArenaResolveCircle(
+                        &w.session->arena, Vector3Add(t->position, pull),
+                        BRAWLER_RADIUS);
+                }
+            }
+            else if (!p->outbound && p->returnKnockback > 0.0f)
+            {
+                Vector3 direction = Vector3Normalize(
+                    (Vector3){ p->velocity.x, 0.0f, p->velocity.z });
+                t->position = ArenaResolveCircle(
+                    &w.session->arena,
+                    Vector3Add(t->position,
+                               Vector3Scale(direction, p->returnKnockback)),
+                    BRAWLER_RADIUS);
+            }
+        }
 
         GameEmitImpact(w.session, p->position, p->color, 8);
         GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
@@ -584,6 +693,38 @@ void ProjectilesUpdate(GameContext w, float dt)
     {
         Projectile *p = &w.session->projectiles[i];
         if (!p->active) continue;
+
+        if (p->motion == PROJECTILE_MOTION_RETURNING)
+        {
+            if (p->owner < 0 || p->owner >= w.session->brawlerCount ||
+                !w.session->brawlers[p->owner].alive ||
+                w.session->brawlers[p->owner].cls != p->ownerClass)
+            {
+                p->active = false;
+                continue;
+            }
+
+            if (!p->outbound)
+            {
+                Brawler *owner = &w.session->brawlers[p->owner];
+                Vector3 toOwner = Vector3Subtract(owner->position, p->position);
+                toOwner.y = 0.0f;
+                if (Vector3Length(toOwner) <=
+                    BRAWLER_RADIUS + p->radius*0.65f)
+                {
+                    GameEmitVfxAttached(
+                        w.session, VFX_SCRAPPER_CATCH,
+                        p->position, owner->position, owner->aimAngle,
+                        p->isSuper ? 1.55f : 1.05f, p->color,
+                        p->owner, VFX_SOCKET_RIGHT_HAND,
+                        -1, VFX_SOCKET_NONE);
+                    p->active = false;
+                    continue;
+                }
+                p->velocity =
+                    Vector3Scale(Vector3Normalize(toOwner), p->returnSpeed);
+            }
+        }
 
         if (p->arcing)
         {
@@ -613,6 +754,7 @@ void ProjectilesUpdate(GameContext w, float dt)
         int steps = (int)(frameDist / 0.3f) + 1;
         float sub = dt / steps;
         bool consumed = false;
+        bool turned = false;
 
         for (int s = 0; s < steps; s++)
         {
@@ -622,8 +764,15 @@ void ProjectilesUpdate(GameContext w, float dt)
 
             if (ProjectileHitCheck(w, p)) { consumed = true; break; }
 
-            if (p->traveled >= p->range)
+            if (p->traveled >= p->range &&
+                (p->motion != PROJECTILE_MOTION_RETURNING || p->outbound))
             {
+                if (p->motion == PROJECTILE_MOTION_RETURNING && p->outbound)
+                {
+                    if (!BeginProjectileReturn(w, p)) consumed = true;
+                    turned = true;
+                    break;
+                }
                 if (p->isSuper && p->radius > 1.0f) Detonate(w, p, p->position);
                 consumed = true;
                 break;
@@ -631,6 +780,7 @@ void ProjectilesUpdate(GameContext w, float dt)
         }
 
         if (consumed) { p->active = false; continue; }
+        if (turned) continue;
 
         if (GameRandomInt(&w.session->random, 0, 100) < 30)
         {

@@ -396,6 +396,45 @@ static void DrawSolidEffects(App *w, Assets *a)
         if (!p->active || p->arcing) continue;
 
         float r = fmaxf(p->radius, 0.16f)*2.0f;
+        if (p->motion == PROJECTILE_MOTION_RETURNING)
+        {
+            float spin = p->traveled/fmaxf(p->radius, 0.1f)*0.55f;
+            Matrix blade = MatrixMultiply(
+                MatrixScale(r, 0.16f, r),
+                MatrixRotateY(spin));
+            blade = MatrixMultiply(
+                blade,
+                MatrixTranslate(p->position.x, p->position.y - 0.08f,
+                                p->position.z));
+            DrawLit(a, a->cylinder, blade, a->texMetal,
+                    p->isSuper ? (Color){ 236, 196, 96, 255 }
+                               : (Color){ 118, 166, 204, 255 },
+                    (Vector2){ 1.0f, 1.0f }, 0.25f);
+
+            Matrix hub = MatrixMultiply(
+                MatrixScale(r*0.42f, 0.22f, r*0.42f),
+                MatrixTranslate(p->position.x, p->position.y - 0.11f,
+                                p->position.z));
+            DrawLit(a, a->cylinder, hub, a->texFlat, p->color,
+                    (Vector2){ 1.0f, 1.0f }, 0.90f);
+
+            for (int tooth = 0; tooth < 12; tooth++)
+            {
+                float angle = spin + tooth*(PI*2.0f/12.0f);
+                Vector3 toothPosition = {
+                    p->position.x + sinf(angle)*r*0.58f,
+                    p->position.y,
+                    p->position.z + cosf(angle)*r*0.58f
+                };
+                DrawLit(a, a->cube,
+                        TRS((Vector3){ r*0.20f, 0.12f, r*0.10f },
+                            angle, toothPosition),
+                        a->texMetal, (Color){ 198, 210, 218, 255 },
+                        (Vector2){ 1.0f, 1.0f }, 0.18f);
+            }
+            continue;
+        }
+
         Matrix m = MatrixMultiply(MatrixScale(r, r, r),
                                   MatrixTranslate(p->position.x, p->position.y, p->position.z));
         DrawLit(a, a->sphere, m, a->texFlat, p->color, (Vector2){ 1.0f, 1.0f }, 0.85f);

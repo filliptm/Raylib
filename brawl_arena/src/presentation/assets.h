@@ -20,6 +20,7 @@ typedef struct RiggedCharacter {
     // Optional library clips. Current generated characters use the shared
     // procedural action overlay when these tracks are absent.
     int clipActionMain, clipActionSuper, clipActionCast, clipActionMobility;
+    int clipActionGuard;
     int boneHips, boneSpine, boneChest;
     int boneLeftShoulder, boneLeftArm, boneLeftForeArm, boneLeftHand;
     int boneRightShoulder, boneRightArm, boneRightForeArm, boneRightHand;

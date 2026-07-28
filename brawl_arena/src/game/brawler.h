@@ -7,7 +7,17 @@ void BrawlerSpawn(GameContext game, int idx, Team team, BrawlerClass cls,
                   Vector3 position, bool isPlayer);
 void BrawlerRespawn(GameContext game, int idx);
 
-// Applies damage without going below zero and returns the health actually removed.
+typedef struct BrawlerDamageResult {
+    int healthRemoved;
+    int shieldAbsorbed;
+} BrawlerDamageResult;
+
+// Applies hostile combat damage through an active shield before health. The detailed
+// result keeps shield damage useful for hit-confirm rules without allowing it to feed
+// health-damage-only mechanics such as Tank's Reclaim.
+BrawlerDamageResult BrawlerApplyDamageDetailed(
+    GameContext game, int idx, int damage, int attacker, Vector3 hitPosition);
+// Compatibility helper that returns only health actually removed.
 int BrawlerApplyDamage(GameContext game, int idx, int damage, int attacker,
                        Vector3 hitPosition);
 // Restores up to `amount` health without reviving. Returns the health actually restored.
@@ -23,8 +33,13 @@ void BrawlerApplyPulseStatus(GameContext game, int idx, Team sourceTeam, int sou
 // True when the attack actually went off (ammo and cooldown allowing).
 bool BrawlerTryAttack(GameContext game, int idx, float aimDist);
 bool BrawlerTrySuper(GameContext game, int idx, float aimDist);
-// Starts the character's optional movement ability along `direction`.
+// Starts the character's optional Shift/LB ability along `direction`.
+bool BrawlerTrySecondary(GameContext game, int idx, Vector3 direction);
+// Compatibility helper for callers that specifically require a dash secondary.
 bool BrawlerTryMobility(GameContext game, int idx, Vector3 direction);
+// Lowers a held shield and clears its release-to-rearm latch.
+void BrawlerReleaseShield(GameContext game, int idx);
+bool BrawlerProjectileThreat(GameContext game, int idx, float horizon);
 
 // Can `viewer` see `target`? Accounts for line of sight, bushes and recent firing.
 bool BrawlerCanSee(GameContext game, int viewer, int target);

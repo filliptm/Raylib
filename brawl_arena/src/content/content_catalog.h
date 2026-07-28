@@ -17,9 +17,11 @@ const AbilityDefinition *ContentSuperAbility(const ContentCatalog *catalog,
                                              BrawlerClass character);
 const AbilityDefinition *ContentMobilityAbility(const ContentCatalog *catalog,
                                                 BrawlerClass character);
+const AbilityDefinition *ContentSecondaryAbility(const ContentCatalog *catalog,
+                                                 BrawlerClass character);
 const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abilityId);
-const CharacterPresentationDefinition *ContentCharacterPresentation(
-    const ContentCatalog *catalog, BrawlerClass character);
-bool ContentPresentationValid(const CharacterPresentationDefinition *presentation);
+const CharacterShowcaseDefinition *ContentCharacterShowcase(
+    const ContentCatalog *catalog);
+bool ContentShowcaseValid(const CharacterShowcaseDefinition *showcase);
 
 #endif

@@ -1,6 +1,6 @@
 # Project Overview
 
-Last code-verified: 2026-07-27
+Last code-verified: 2026-07-28
 
 This is the maintained repository-level guide to the projects in this workspace. It is
 intended for contributors, coding agents, and anyone deciding where a change belongs.
@@ -550,17 +550,17 @@ The current roster contains five kits:
 
 | Kit | Role | Main attack | Ultimate |
 |---|---|---|---|
-| Scrapper | damage | short five-pellet spread | nine-pellet crate-breaking Buckshot |
+| Scrapper | damage | returning Ripsaw that can hit once on each leg, plus renewable Magnetic Scrap Shell | returning crate-breaking Wrecking Disc with outbound pull and return knockback |
 | Longshot | marksman | range-scaled single projectile | piercing Railgun |
 | Mortar | artillery | arcing splash shell | three-shell Barrage |
-| Tank | tank | short four-pellet burst that self-heals from actual damage, plus Shift Shoulder Jets | damaging crate-breaking Charge |
+| Tank | tank | short six-pellet burst that self-heals from actual damage, plus Shift Shoulder Jets | damaging crate-breaking Charge |
 | Guardian | support | growing rain field that repeatedly damages enemies and heals allies | wide Resonance cone that applies enemy damage-over-time or ally healing-over-time |
 
 Guardian's tracked mesh source is
 `resources/characters/models/gaia_guardian.glb`; its generated runtime asset is
 `build/assets/characters/gaia_guardian.glb`. The current Guardian defaults produce nine
-100-point rain pulses over 1.35 seconds and six Resonance ticks over 2.1 seconds. Those
-numbers are content values, not hard-coded combat timing.
+255-damage/263-healing rain pulses over 1.35 seconds and six Resonance ticks over 2.1
+seconds. Those numbers are content values, not hard-coded combat timing.
 
 Scrapper, Longshot, Tank, and Guardian use tracked mesh-only models plus the reusable twelve-clip
 `resources/characters/animations/meshy_humanoid_v1.glb` library. Small animation-only
@@ -607,12 +607,15 @@ The headless suite covers:
 - The rule that no attack, impact, damage, or elimination shakes any user's camera.
 - Tank self-healing, projectile snapshotting, Shoulder Jets timing/cover behavior, and
   preservation of Charge damage/crate destruction.
+- Scrapper Ripsaw/Wrecking Disc outbound and return hits, cover policy, ownership,
+  Magnetic Scrap Shell absorption/healing/recharge/break/rearm, and Fight-bot
+  threat prediction/release.
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
 - UI layout/focus at four viewports, minimum targets, contrast, reduced motion,
   nine-slice metadata, curated asset integrity, configuration round trips, and
-  character presentation profiles.
+  the shared character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -698,7 +701,7 @@ configuration, profile data, and navigation survive because they have separate o
 there is no preserve-and-reconstruct whole-application reset.
 
 Fixed capacities currently include eight brawlers, 512 projectiles, 15 typed content
-abilities (eleven currently active), 24 active ability
+abilities (twelve currently active), 24 active ability
 fields, four statuses per brawler, 40 gems, 1,024 game events, 1,024 presentation
 particles, 192 priority-managed VFX layers, 64 float texts, 64 effect lights, and 24
 shockwaves. Maps may be up to 64×64, the catalog may contain eight maps, and a map may
@@ -738,8 +741,9 @@ returns to the menu after the configured hold or the explicit Continue action.
 ## Controls and modes
 
 - WASD/arrows or left stick: camera-relative movement.
-- Left Shift or left bumper: Tank Shoulder Jets along movement input, or current aim
-  while stationary.
+- Left Shift or left bumper: use the current kit's secondary. Tank fires Shoulder Jets
+  along movement input, or current aim while stationary; Scrapper holds its
+  360-degree Magnetic Scrap Shell until released or broken.
 - Hold/release left mouse or right trigger: preview and fire the main attack.
 - Tap left mouse or press Space: auto-aim. Guardian first considers a wounded ally in
   range; gamepad A is the same quick action.
@@ -762,10 +766,11 @@ Static, Roam, or Fight.
 `ContentCatalog` owns the mutable authoring records, typed character definitions, typed
 ability definitions, and validated map definitions. Each character has a stable ID,
 display name, model asset ID, role, health/ammo values, handles for its main and ultimate
-abilities, and an optional mobility handle. It also owns a project-authorable
-home/select presentation profile. Ability behavior is a tagged enum with typed
-projectile, area, or dash payloads. Projectile content can define self-healing from
-actual damage; dash content defines duration, speed, knockback, and crate behavior.
+abilities, and an optional secondary handle. It also owns one project-authorable
+showcase transform/camera shared by every character and both menu screens. Ability
+behavior is a tagged enum with typed projectile, area, dash, returning-disc, or shield
+payloads. Projectile content can define self-healing from actual damage; dash content
+defines duration, speed, knockback, and crate behavior.
 
 The current config schema retains `WeaponDef` as a compatibility/authoring record.
 `ContentCatalogRebuildTyped()` converts it into the runtime character/ability catalog
@@ -785,7 +790,7 @@ profile.cfg               ignored profile-only state
 ```
 
 Command-center changes apply immediately and autosave after 0.6 seconds. Explicit
-`SAVE KIT + FRAMING AS PROJECT DEFAULT` and `SAVE ALL AS PROJECT DEFAULTS` actions
+`SAVE KIT + SHOWCASE AS PROJECT DEFAULT` and `SAVE ALL AS PROJECT DEFAULTS` actions
 validate a full candidate and atomically rewrite the tracked project file. They create
 an ordinary Git working-tree change; they do not commit it. Reset actions restore
 project values and rewrite the sparse local draft. Missing or malformed canonical
@@ -801,6 +806,15 @@ The parser rejects missing, duplicate, unknown, out-of-range, non-finite, or
 behavior-inconsistent values transactionally. Automated probes can isolate all four
 paths with `BRAWL_PROJECT_CONFIG`, `BRAWL_TUNING`, `BRAWL_PROFILE`, and
 `BRAWL_LEGACY_TUNING`.
+
+The tracked project format is version 3. It stores returning-attack values, typed
+`secondary.*` values, and one `preview.showcase.*` camera/transform. Version-1 files are
+migrated in memory: Tank mobility becomes a dash secondary, legacy Scrapper weapon
+numbers are discarded in favor of Ripsaw/Shell, and the shared showcase is derived from
+Scrapper's old home profile. Version-2 typed files migrate `guard` to `shield`, retain
+capacity and movement, discard the obsolete arc/hold/counterblast fields, and seed
+healing/recharge/break values from current recovery defaults. The next save emits
+version 3.
 
 ## Maps
 
@@ -830,9 +844,10 @@ The simulation uses fixed pools and deterministic xorshift random state. Player 
 captured once per frame, so tests can replay the same input sequence without linking
 keyboard or mouse reads into simulation.
 
-Damage, healing, ammo, cooldown, optional mobility, ultimate gain, deaths, respawns,
-concealment, dash collision, crate damage, projectiles, rain fields, sound-wave status
-application, and out-of-combat regeneration all belong to `src/game/`. Every living
+Damage, healing, ammo, cooldown, optional secondary abilities, ultimate gain, deaths,
+respawns, concealment, dash collision, shield interception, crate damage, returning
+projectiles, rain fields, sound-wave status application, and out-of-combat regeneration
+all belong to `src/game/`. Every living
 brawler restores 13% maximum health at the three-second quiet mark and once per second
 afterward. Successful main/ultimate casts and actual health loss reset combat time;
 failed attacks, movement, aiming, Shoulder Jets, and received healing do not.
@@ -840,11 +855,32 @@ Regeneration uses the normal capped healing path and never revives. Periodic eff
 generic, team-aware `StatusEffect` slots: the same status heals allies and damages
 enemies according to the source team.
 
-Tank's main projectiles restore 20% of enemy health actually removed, so overkill,
-blocked damage, crates, Charge, and overheal do not create extra sustain. Shoulder Jets
-is a non-damaging roughly four-unit boost on a 2.5-second cooldown. It stops on solid
-cover; Fight bots use it while closing meaningful gaps or retreating. Charge remains a
-separate super that damages, knocks back, and destroys crates.
+Tank's tracked main projectiles restore about 49.9% of enemy health actually removed, so
+overkill, blocked damage, crates, Charge, and overheal do not create extra sustain.
+Shoulder Jets is a non-damaging roughly four-unit boost on a 2.5-second cooldown. It
+stops on solid cover; Fight bots use it while closing meaningful gaps or retreating.
+Charge remains a separate super that damages, knocks back, and destroys crates.
+
+Scrapper's 700-damage Ripsaw travels outward for 13 units, turns at range or solid
+cover, and returns to the owner's current position. It may damage each target once per
+leg, does not damage crates, and disappears when caught, when its return strikes solid
+cover, or when its owner dies or changes class. Wrecking Disc uses the same two-leg
+rule at 1,100 damage per leg and 18-unit range; it breaks and passes through crates,
+pulls targets toward its line outbound, and knocks them along its travel direction on
+return.
+
+Holding Scrapper's Magnetic Scrap Shell raises a 1,200-point, 360-degree bubble at 65%
+movement speed and disables main/ultimate attacks. The central damage gateway spends
+charge before health for hostile projectiles, area fields, dashes, and periodic damage,
+healing Scrapper for 30% of the amount absorbed. Only overflow feeds Tank lifesteal,
+while shield contact still preserves existing super-gain, pull, and knockback rules.
+Shield hits also interrupt ordinary out-of-combat regeneration.
+
+Releasing preserves charge. After three seconds without shield or health damage it
+recharges at 300 points per second. Breaking it forces a five-second lockout, restores
+full charge, and requires control release before reactivation. Fight bots raise it for
+projectiles predicted within 0.48 seconds and lower it when the threat passes so it can
+recharge.
 
 Simulation never spawns particles or mutates camera state. It emits typed events for
 muzzle flashes, impacts, explosions, deaths, crate breaks, float text, lights,
@@ -863,12 +899,14 @@ The presentation layer owns:
   timer. Successful actions emit an explicit presentation-only one-shot that blends an
   optional semantic clip—or a restrained upper-body procedural fallback—over
   locomotion, while facing, muzzle light, projectiles, and ability VFX carry the shot.
-  The current twelve-clip libraries have no authored attack clips, so current characters
-  use the procedural fallback.
+  The current twelve-clip libraries have no authored action clips, so current characters
+  use the procedural fallback, including Scrapper's braced Shell pose (the internal
+  semantic action/clip name remains `guard`).
 - A Helios-9 hangar/menu scene and non-rotating character previews, retaining idle
-  animation without automatic yaw rotation. Per-character home/select profiles control
-  yaw, scale, offset, camera target, and distance. Tank uses 205° at home and a smaller
-  180° roster profile so its full silhouette remains visible.
+  animation without automatic yaw rotation. Every character and both menu screens use
+  the same exact showcase: 180° yaw, 0.90 scale, zero offset, camera
+  `(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV. Swapping candidates
+  replaces only the model; the stage clock and background continue uninterrupted.
 - Opaque nine-slice Kenney interface hardware and two transparent OpenGameArt-derived
   orbital/radar motifs, tinted through Helios tokens and independently replaceable by
   code-drawn fallbacks.
@@ -878,9 +916,10 @@ The presentation layer owns:
 - Instanced wind/brawler-reactive grass.
 - Dynamic point-light selection.
 - Projectile, solid-effect, ability-field, and aim-preview visuals.
-- A presentation-only 28-recipe ability library built from seven generated CC0
+- A presentation-only 34-recipe ability library built from seven generated CC0
   flipbook/shape atlases, existing particles, lights, and shockwaves. Casts, beams,
-  shoulder jets, healing returns, and received effects can follow semantic hand,
+  returning saw transitions/catches, Shell start/hit/collapse/restore, shoulder jets, healing
+  returns, and received effects can follow semantic hand,
   shoulder, chest, foot, or center sockets from the final animated pose; primitive and
   incomplete rigs retain approximate socket positions. Imported recipe layers use a
   shared `4.0×` presentation scale for match-camera readability without changing
@@ -1046,9 +1085,10 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
 
 - Menu and screen transitions.
 - Practice and Play.
-- All five kits, including Guardian rain growth/pulses and Resonance cone HoT/DoT.
+- All five kits, including Scrapper's two-leg saws and held Shell lifecycle, plus
+  Guardian rain growth/pulses and Resonance cone HoT/DoT.
 - Combat casts, hits, explosions, crate breaks, and eliminations without camera shake.
-- Main and super previews.
+- Main, super, and secondary previews and state.
 - Bush concealment.
 - Crate destruction versus permanent walls.
 - Bot modes.
@@ -1056,6 +1096,8 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
 - Full restart and menu return.
 - Command-center input capture and persistence.
 - Primitive fallback plus rigged Scrapper, Longshot, Tank, and Guardian rendering.
+- Identical home/roster showcase framing while rapidly changing candidates, without
+  resetting the hangar background.
 
 # Documentation maintenance
 

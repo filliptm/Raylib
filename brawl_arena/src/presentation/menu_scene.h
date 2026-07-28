@@ -9,7 +9,8 @@ typedef struct MenuScene {
     Camera3D camera;
     Brawler preview;
     BrawlerClass previewKit;
-    float time;
+    float stageTime;
+    float previewTime;
 } MenuScene;
 
 void MenuSceneInit(MenuScene *scene, Assets *assets);

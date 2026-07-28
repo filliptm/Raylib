@@ -79,7 +79,10 @@ static bool FindNearbyBush(GameContext w, Vector3 from, Vector3 *out)
 static bool TryTacticalMobility(GameContext w, int idx, Vector3 direction)
 {
     Brawler *b = &w.session->brawlers[idx];
-    if (!ContentMobilityAbility(w.content, b->cls)) return false;
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(w.content, b->cls);
+    if (!secondary || secondary->behavior != ABILITY_BEHAVIOR_DASH)
+        return false;
     if (!BrawlerTryMobility(w, idx, direction)) return false;
 
     b->aiReactTimer = fmaxf(b->aiReactTimer, 0.18f);
@@ -110,12 +113,33 @@ void AIUpdate(GameContext w, float dt)
 
         const AbilityDefinition *mainAbility = ContentMainAbility(w.content, b->cls);
         const AbilityDefinition *superAbility = ContentSuperAbility(w.content, b->cls);
-        float mainSpeed = (mainAbility->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
-                           mainAbility->behavior == ABILITY_BEHAVIOR_LOB)
-                        ? mainAbility->data.projectile.speed : 0.0f;
+        float mainSpeed = 0.0f;
+        if (mainAbility->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+            mainAbility->behavior == ABILITY_BEHAVIOR_LOB)
+            mainSpeed = mainAbility->data.projectile.speed;
+        else if (mainAbility->behavior == ABILITY_BEHAVIOR_RETURNING)
+            mainSpeed = mainAbility->data.returning.outboundSpeed;
 
         b->aiTimer -= dt;
         b->aiReactTimer -= dt;
+
+        bool shieldThreat = BrawlerProjectileThreat(w, i, 0.48f);
+        if (b->shieldActive && !shieldThreat)
+            BrawlerReleaseShield(w, i);
+        else if (!b->shieldActive && !shieldThreat &&
+                 b->shieldRearmRequired)
+            BrawlerReleaseShield(w, i);
+        if (mode == BOT_FIGHT && shieldThreat && !b->shieldActive)
+        {
+            Vector3 facing = {
+                sinf(b->aimAngle), 0.0f, cosf(b->aimAngle)
+            };
+            if (BrawlerTrySecondary(w, i, facing))
+            {
+                b->aiReactTimer = fmaxf(b->aiReactTimer, 0.18f);
+                continue;
+            }
+        }
 
         // Roaming bots wander but never acquire a target, so they never open fire.
         int target = -1;

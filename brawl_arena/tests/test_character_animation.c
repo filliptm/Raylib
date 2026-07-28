@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #define CHECK(condition, message) do { \
     if (!(condition)) { fprintf(stderr, "FAIL: %s\n", message); return 1; } \
@@ -142,6 +143,9 @@ int main(void)
     CHECK(CharacterActionDuration(CHARACTER_ACTION_SUPER) >
           CharacterActionDuration(CHARACTER_ACTION_MAIN),
           "super action is not authored as the longer readable gesture");
+    CHECK(CharacterActionDuration(CHARACTER_ACTION_GUARD) >= 0.75f &&
+          strcmp(CharacterActionName(CHARACTER_ACTION_GUARD), "GUARD") == 0,
+          "guard action is not available for the held Scrapper pose");
     CharacterActionsUpdate(&presentation, 0.10f);
     CHECK(CharacterActionProgress(&presentation.actions[2]) > 0.0f &&
           CharacterActionBlendWeight(&presentation.actions[2]) > 0.0f,

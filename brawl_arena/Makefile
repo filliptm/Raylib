@@ -44,6 +44,7 @@ ARENA_TEST_TARGET = $(BUILD_DIR)/test_arena
 GAMEPLAY_TEST_TARGET = $(BUILD_DIR)/test_gameplay
 REGEN_TEST_TARGET = $(BUILD_DIR)/test_regeneration
 TANK_TEST_TARGET = $(BUILD_DIR)/test_tank
+SCRAPPER_TEST_TARGET = $(BUILD_DIR)/test_scrapper
 UI_TEST_TARGET = $(BUILD_DIR)/test_ui
 CHARACTER_ANIMATION_TEST_TARGET = $(BUILD_DIR)/test_character_animation
 VFX_TEST_TARGET = $(BUILD_DIR)/test_vfx
@@ -123,6 +124,10 @@ $(TANK_TEST_TARGET): tests/test_tank.c $(GAME_CORE_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_tank.c \
 		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
+$(SCRAPPER_TEST_TARGET): tests/test_scrapper.c $(GAME_CORE_OBJECTS)
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_scrapper.c \
+		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
 $(UI_TEST_TARGET): tests/test_ui.c $(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o \
 	$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/ui/ui_skin.o $(OBJ_DIR)/content/content_catalog.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_ui.c \
@@ -169,7 +174,7 @@ debug: CFLAGS = -Wall -Wextra -std=c99 $(DEBUG_FLAGS)
 debug: clean check-ui check-character-assets check-vfx-assets $(TARGET)
 
 sanitize: CFLAGS = -Wall -Wextra -std=c99 $(SANITIZE_FLAGS)
-sanitize: clean check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
+sanitize: clean check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
@@ -179,6 +184,7 @@ sanitize: clean check-architecture check-ui check-character-assets check-vfx-ass
 	$(SANITIZER_ENV) ./$(GAMEPLAY_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(REGEN_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(TANK_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(SCRAPPER_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(UI_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(CHARACTER_ANIMATION_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(VFX_TEST_TARGET)
@@ -189,7 +195,7 @@ clean:
 
 rebuild: clean all
 
-test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
+test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	./$(TEST_TARGET)
@@ -199,6 +205,7 @@ test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST
 	./$(GAMEPLAY_TEST_TARGET)
 	./$(REGEN_TEST_TARGET)
 	./$(TANK_TEST_TARGET)
+	./$(SCRAPPER_TEST_TARGET)
 	./$(UI_TEST_TARGET)
 	./$(CHARACTER_ANIMATION_TEST_TARGET)
 	./$(VFX_TEST_TARGET)

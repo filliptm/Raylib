@@ -171,6 +171,7 @@ float CharacterActionDuration(CharacterActionId action)
         case CHARACTER_ACTION_SUPER: return 0.82f;
         case CHARACTER_ACTION_CAST: return 0.72f;
         case CHARACTER_ACTION_MOBILITY: return 0.58f;
+        case CHARACTER_ACTION_GUARD: return 0.78f;
         default: return 0.0f;
     }
 }
@@ -183,6 +184,7 @@ const char *CharacterActionName(CharacterActionId action)
         case CHARACTER_ACTION_SUPER: return "SUPER";
         case CHARACTER_ACTION_CAST: return "CAST";
         case CHARACTER_ACTION_MOBILITY: return "MOBILITY";
+        case CHARACTER_ACTION_GUARD: return "GUARD";
         default: return "NONE";
     }
 }

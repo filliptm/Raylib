@@ -16,14 +16,15 @@
 
 #define MAX_FIELDS 384
 #define SAVE_DELAY 0.6f
-#define CONFIG_FORMAT_VERSION 1
+#define CONFIG_FORMAT_VERSION 3
 
 typedef enum {
     FIELD_FLOAT = 0,
     FIELD_INT,
     FIELD_BOOL,
     FIELD_ATTACK_KIND,
-    FIELD_SUPER_KIND
+    FIELD_SUPER_KIND,
+    FIELD_SECONDARY_KIND
 } FieldType;
 
 typedef enum {
@@ -48,11 +49,15 @@ static const char *KIT_KEYS[CLASS_COUNT] = {
 };
 
 static const char *ATTACK_KIND_NAMES[ATTACK_KIND_COUNT] = {
-    "projectile", "lob", "rain"
+    "projectile", "lob", "rain", "returning"
 };
 
 static const char *SUPER_KIND_NAMES[SUPER_KIND_COUNT] = {
-    "projectile", "dash", "healing_burst", "sound_wave"
+    "projectile", "dash", "healing_burst", "sound_wave", "returning"
+};
+
+static const char *SECONDARY_KIND_NAMES[SECONDARY_KIND_COUNT] = {
+    "none", "dash", "shield"
 };
 
 static bool g_dirty = false;
@@ -134,7 +139,7 @@ static int AddField(Field *fields, int count, const char *key, FieldType type,
     n = AddField(f, n, key, FIELD_BOOL, scope, &(member), 0, 1, -1)
 
 static int BuildFields(Tuning *t, UiPreferences *preferences,
-                       CharacterPresentationDefinition *presentations,
+                       CharacterShowcaseDefinition *showcase,
                        WeaponDef *kits, Field *f)
 {
     int n = 0;
@@ -196,6 +201,29 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
     ADD_FLOAT("presentation.brightness", SCOPE_PROJECT, t->styleBrightness, 0.6, 1.5);
     ADD_FLOAT("presentation.vignette", SCOPE_PROJECT, t->styleVignette, 0.0, 1.5);
 
+    ADD_FLOAT("preview.showcase.yaw_degrees", SCOPE_PROJECT,
+              showcase->yawDegrees, -360.0, 360.0);
+    ADD_FLOAT("preview.showcase.scale", SCOPE_PROJECT,
+              showcase->scale, 0.50, 1.50);
+    ADD_FLOAT("preview.showcase.offset_x", SCOPE_PROJECT,
+              showcase->offset.x, -8.0, 8.0);
+    ADD_FLOAT("preview.showcase.offset_y", SCOPE_PROJECT,
+              showcase->offset.y, -4.0, 4.0);
+    ADD_FLOAT("preview.showcase.camera_position_x", SCOPE_PROJECT,
+              showcase->cameraPosition.x, -20.0, 20.0);
+    ADD_FLOAT("preview.showcase.camera_position_y", SCOPE_PROJECT,
+              showcase->cameraPosition.y, 0.20, 12.0);
+    ADD_FLOAT("preview.showcase.camera_position_z", SCOPE_PROJECT,
+              showcase->cameraPosition.z, -20.0, -2.0);
+    ADD_FLOAT("preview.showcase.camera_target_x", SCOPE_PROJECT,
+              showcase->cameraTarget.x, -8.0, 8.0);
+    ADD_FLOAT("preview.showcase.camera_target_y", SCOPE_PROJECT,
+              showcase->cameraTarget.y, 0.20, 4.0);
+    ADD_FLOAT("preview.showcase.camera_target_z", SCOPE_PROJECT,
+              showcase->cameraTarget.z, -8.0, 8.0);
+    ADD_FLOAT("preview.showcase.vertical_fov", SCOPE_PROJECT,
+              showcase->verticalFov, 20.0, 80.0);
+
     ADD_BOOL("local.god_mode", SCOPE_LOCAL, t->godMode);
     ADD_BOOL("local.infinite_ammo", SCOPE_LOCAL, t->infiniteAmmo);
     ADD_BOOL("local.show_debug", SCOPE_LOCAL, t->showDebug);
@@ -215,27 +243,8 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
 
     for (int i = 0; i < CLASS_COUNT; i++)
     {
-        CharacterPresentationDefinition *p = &presentations[i];
         WeaponDef *k = &kits[i];
         char key[96];
-
-        #define PRESENTATION_FIELD(suffix, member, lo, hi) do { \
-            snprintf(key, sizeof(key), "preview.%s.%s", KIT_KEYS[i], suffix); \
-            n = AddField(f, n, key, FIELD_FLOAT, SCOPE_PROJECT, &p->member, lo, hi, i); \
-        } while (0)
-
-        PRESENTATION_FIELD("home_yaw_degrees", homeYawDegrees, -360.0, 360.0);
-        PRESENTATION_FIELD("select_yaw_degrees", selectYawDegrees, -360.0, 360.0);
-        PRESENTATION_FIELD("home_scale", homeScale, 0.50, 1.50);
-        PRESENTATION_FIELD("select_scale", selectScale, 0.50, 1.50);
-        PRESENTATION_FIELD("home_offset_x", homeOffset.x, -8.0, 8.0);
-        PRESENTATION_FIELD("home_offset_y", homeOffset.y, -4.0, 4.0);
-        PRESENTATION_FIELD("select_offset_x", selectOffset.x, -8.0, 8.0);
-        PRESENTATION_FIELD("select_offset_y", selectOffset.y, -4.0, 4.0);
-        PRESENTATION_FIELD("camera_target_y", cameraTargetY, 0.20, 4.0);
-        PRESENTATION_FIELD("camera_distance", cameraDistance, 4.0, 14.0);
-
-        #undef PRESENTATION_FIELD
 
         #define KIT_KEY(suffix) \
             snprintf(key, sizeof(key), "kit.%s.%s", KIT_KEYS[i], suffix)
@@ -262,10 +271,24 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
         KIT_FIELD("main.duration", FIELD_FLOAT, duration, 0.0, 30.0);
         KIT_FIELD("main.tick_interval", FIELD_FLOAT, tickRate, 0.0, 10.0);
         KIT_FIELD("main.grow_time", FIELD_FLOAT, growTime, 0.0, 30.0);
+        KIT_FIELD("main.return_speed", FIELD_FLOAT, returnSpeed, 0.0, 300.0);
 
-        KIT_FIELD("mobility.cooldown", FIELD_FLOAT, mobilityCooldown, 0.0, 20.0);
-        KIT_FIELD("mobility.duration", FIELD_FLOAT, mobilityDuration, 0.0, 5.0);
-        KIT_FIELD("mobility.speed", FIELD_FLOAT, mobilitySpeed, 0.0, 100.0);
+        KIT_FIELD("secondary.kind", FIELD_SECONDARY_KIND,
+                  secondaryKind, 0, SECONDARY_KIND_COUNT - 1);
+        KIT_FIELD("secondary.cooldown", FIELD_FLOAT, mobilityCooldown, 0.0, 20.0);
+        KIT_FIELD("secondary.duration", FIELD_FLOAT, mobilityDuration, 0.0, 5.0);
+        KIT_FIELD("secondary.speed", FIELD_FLOAT, mobilitySpeed, 0.0, 100.0);
+        KIT_FIELD("secondary.capacity", FIELD_INT, secondaryCapacity, 0, 100000);
+        KIT_FIELD("secondary.move_multiplier", FIELD_FLOAT,
+                  secondaryMoveMultiplier, 0.0, 1.0);
+        KIT_FIELD("secondary.heal_ratio", FIELD_FLOAT,
+                  secondaryHealRatio, 0.0, 1.0);
+        KIT_FIELD("secondary.recharge_delay", FIELD_FLOAT,
+                  secondaryRechargeDelay, 0.0, 30.0);
+        KIT_FIELD("secondary.recharge_rate", FIELD_FLOAT,
+                  secondaryRechargeRate, 0.0, 100000.0);
+        KIT_FIELD("secondary.break_lockout", FIELD_FLOAT,
+                  secondaryBreakLockout, 0.0, 30.0);
 
         KIT_FIELD("super.kind", FIELD_SUPER_KIND, superKind, 0, SUPER_KIND_COUNT - 1);
         KIT_FIELD("super.pellets", FIELD_INT, sPellets, 0, 64);
@@ -279,6 +302,10 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
         KIT_FIELD("super.duration", FIELD_FLOAT, sDuration, 0.0, 60.0);
         KIT_FIELD("super.tick_interval", FIELD_FLOAT, sTickRate, 0.0, 10.0);
         KIT_FIELD("super.visual_duration", FIELD_FLOAT, sVisualDuration, 0.0, 20.0);
+        KIT_FIELD("super.return_speed", FIELD_FLOAT, sReturnSpeed, 0.0, 300.0);
+        KIT_FIELD("super.outbound_pull", FIELD_FLOAT, sOutboundPull, 0.0, 30.0);
+        KIT_FIELD("super.return_knockback", FIELD_FLOAT,
+                  sReturnKnockback, 0.0, 30.0);
 
         #undef KIT_FIELD
         #undef KIT_KEY
@@ -327,6 +354,8 @@ static bool AssignField(Field *field, const char *value, char *message, int mess
         enumValue = NameIndex(value, ATTACK_KIND_NAMES, ATTACK_KIND_COUNT);
     else if (field->type == FIELD_SUPER_KIND)
         enumValue = NameIndex(value, SUPER_KIND_NAMES, SUPER_KIND_COUNT);
+    else if (field->type == FIELD_SECONDARY_KIND)
+        enumValue = NameIndex(value, SECONDARY_KIND_NAMES, SECONDARY_KIND_COUNT);
     else if (field->type == FIELD_BOOL)
     {
         if (strcmp(value, "true") == 0) number = 1.0;
@@ -339,7 +368,9 @@ static bool AssignField(Field *field, const char *value, char *message, int mess
         return false;
     }
 
-    if (field->type == FIELD_ATTACK_KIND || field->type == FIELD_SUPER_KIND)
+    if (field->type == FIELD_ATTACK_KIND ||
+        field->type == FIELD_SUPER_KIND ||
+        field->type == FIELD_SECONDARY_KIND)
     {
         if (enumValue < 0)
         {
@@ -381,14 +412,14 @@ static bool AssignField(Field *field, const char *value, char *message, int mess
 }
 
 static bool ValidateValues(const Tuning *t,
-                           const CharacterPresentationDefinition *presentations,
+                           const CharacterShowcaseDefinition *showcase,
                            const WeaponDef *kits,
                            char *message, int messageSize)
 {
     Field fields[MAX_FIELDS];
     UiPreferences preferences = { .scale = 1.0f };
     int count = BuildFields((Tuning *)t, &preferences,
-                            (CharacterPresentationDefinition *)presentations,
+                            (CharacterShowcaseDefinition *)showcase,
                             (WeaponDef *)kits, fields);
     for (int i = 0; i < count; i++)
     {
@@ -400,7 +431,10 @@ static bool ValidateValues(const Tuning *t,
             case FIELD_FLOAT: value = *(float *)fields[i].ptr; break;
             case FIELD_INT:
             case FIELD_ATTACK_KIND:
-            case FIELD_SUPER_KIND: value = *(int *)fields[i].ptr; break;
+            case FIELD_SUPER_KIND:
+            case FIELD_SECONDARY_KIND:
+                value = *(int *)fields[i].ptr;
+                break;
             case FIELD_BOOL: value = *(bool *)fields[i].ptr ? 1.0 : 0.0; break;
         }
         if (!isfinite(value) || value < fields[i].minimum || value > fields[i].maximum)
@@ -411,13 +445,14 @@ static bool ValidateValues(const Tuning *t,
         }
     }
 
+    if (!ContentShowcaseValid(showcase))
+    {
+        snprintf(message, messageSize, "preview.showcase framing is invalid");
+        return false;
+    }
+
     for (int i = 0; i < CLASS_COUNT; i++)
     {
-        if (!ContentPresentationValid(&presentations[i]))
-        {
-            snprintf(message, messageSize, "preview.%s framing is invalid", KIT_KEYS[i]);
-            return false;
-        }
         const WeaponDef *k = &kits[i];
         if ((k->mainKind == ATTACK_PROJECTILE || k->mainKind == ATTACK_LOB) &&
             (k->pellets < 1 || k->speed <= 0.0f))
@@ -434,17 +469,34 @@ static bool ValidateValues(const Tuning *t,
             snprintf(message, messageSize, "kit.%s rain timing/radius is invalid", KIT_KEYS[i]);
             return false;
         }
-        bool hasMobility = k->mobilityCooldown > 0.0f ||
-                           k->mobilityDuration > 0.0f ||
-                           k->mobilitySpeed > 0.0f;
-        if (hasMobility &&
+        if (k->mainKind == ATTACK_RETURNING &&
+            (k->pellets != 1 || k->speed <= 0.0f ||
+             k->returnSpeed <= 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s returning main needs one disc and both speeds",
+                     KIT_KEYS[i]);
+            return false;
+        }
+        if (k->secondaryKind == SECONDARY_DASH &&
             (k->mobilityCooldown <= 0.0f ||
              k->mobilityDuration <= 0.0f ||
              k->mobilitySpeed <= 0.0f))
         {
             snprintf(message, messageSize,
-                     "kit.%s mobility needs cooldown, duration, and speed",
-                     KIT_KEYS[i]);
+                     "kit.%s dash secondary is incomplete", KIT_KEYS[i]);
+            return false;
+        }
+        if (k->secondaryKind == SECONDARY_SHIELD &&
+            (k->secondaryCapacity <= 0 ||
+             k->secondaryMoveMultiplier <= 0.0f ||
+             k->secondaryHealRatio < 0.0f ||
+             k->secondaryRechargeDelay <= 0.0f ||
+             k->secondaryRechargeRate <= 0.0f ||
+             k->secondaryBreakLockout <= 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s shield secondary is incomplete", KIT_KEYS[i]);
             return false;
         }
         if (k->superKind == SUPER_PROJECTILE &&
@@ -461,12 +513,141 @@ static bool ValidateValues(const Tuning *t,
             snprintf(message, messageSize, "kit.%s sound-wave timing/cone is invalid", KIT_KEYS[i]);
             return false;
         }
+        if (k->superKind == SUPER_RETURNING &&
+            (k->sPellets != 1 || k->sSpeed <= 0.0f ||
+             k->sReturnSpeed <= 0.0f || k->sRange <= 0.0f ||
+             k->sProjRadius <= 0.0f))
+        {
+            snprintf(message, messageSize,
+                     "kit.%s returning super is incomplete", KIT_KEYS[i]);
+            return false;
+        }
     }
     return true;
 }
 
+static int KitIndexForKey(const char *name)
+{
+    for (int i = 0; i < CLASS_COUNT; i++)
+        if (strcmp(name, KIT_KEYS[i]) == 0) return i;
+    return -1;
+}
+
+static bool AssignV1Preview(CharacterShowcaseDefinition *showcase,
+                            const char *key, const char *value,
+                            char *message, int messageSize)
+{
+    char kitName[32], suffix[64], extra;
+    if (sscanf(key, "preview.%31[^.].%63s%c",
+               kitName, suffix, &extra) != 2)
+        return false;
+    int kit = KitIndexForKey(kitName);
+    if (kit < 0) return false;
+
+    double number = 0.0;
+    if (!ParseNumber(value, &number))
+    {
+        snprintf(message, messageSize, "%s has invalid value '%s'", key, value);
+        return false;
+    }
+
+    bool yaw = strcmp(suffix, "home_yaw_degrees") == 0 ||
+               strcmp(suffix, "select_yaw_degrees") == 0;
+    bool scale = strcmp(suffix, "home_scale") == 0 ||
+                 strcmp(suffix, "select_scale") == 0;
+    bool offsetX = strcmp(suffix, "home_offset_x") == 0 ||
+                   strcmp(suffix, "select_offset_x") == 0;
+    bool offsetY = strcmp(suffix, "home_offset_y") == 0 ||
+                   strcmp(suffix, "select_offset_y") == 0;
+    bool target = strcmp(suffix, "camera_target_y") == 0;
+    bool distance = strcmp(suffix, "camera_distance") == 0;
+    if (!yaw && !scale && !offsetX && !offsetY && !target && !distance)
+        return false;
+
+    double minimum = yaw ? -360.0 :
+                     scale ? 0.50 :
+                     offsetX ? -8.0 :
+                     offsetY ? -4.0 :
+                     target ? 0.20 : 4.0;
+    double maximum = yaw ? 360.0 :
+                     scale ? 1.50 :
+                     offsetX ? 8.0 :
+                     offsetY ? 4.0 :
+                     target ? 4.0 : 14.0;
+    if (number < minimum || number > maximum)
+    {
+        snprintf(message, messageSize, "%s is outside %.3g..%.3g",
+                 key, minimum, maximum);
+        return false;
+    }
+
+    // Version 1 had per-character and per-screen framing. The migration deliberately
+    // derives the one v2 contract from Scrapper's home profile and discards every
+    // select/other-character override.
+    if (kit == CLASS_SHOTGUNNER)
+    {
+        if (strcmp(suffix, "home_yaw_degrees") == 0)
+            showcase->yawDegrees = (float)number;
+        else if (strcmp(suffix, "home_scale") == 0)
+            showcase->scale = (float)number;
+        else if (strcmp(suffix, "home_offset_x") == 0)
+            showcase->offset.x = (float)number;
+        else if (strcmp(suffix, "home_offset_y") == 0)
+            showcase->offset.y = (float)number;
+        else if (target)
+            showcase->cameraTarget.y = (float)number;
+        else if (distance)
+            showcase->cameraPosition.z = -(float)number;
+    }
+    return true;
+}
+
+static Field *V1MobilityField(Field *fields, int count, const char *key,
+                              bool *recognized)
+{
+    char kitName[32], suffix[32], extra;
+    *recognized = false;
+    if (sscanf(key, "kit.%31[^.].mobility.%31s%c",
+               kitName, suffix, &extra) != 2)
+        return NULL;
+    int kit = KitIndexForKey(kitName);
+    if (kit < 0) return NULL;
+    if (strcmp(suffix, "cooldown") != 0 &&
+        strcmp(suffix, "duration") != 0 &&
+        strcmp(suffix, "speed") != 0)
+        return NULL;
+    *recognized = true;
+    if (kit != CLASS_BRUISER) return NULL;
+
+    char migrated[96];
+    snprintf(migrated, sizeof(migrated), "kit.%s.secondary.%s",
+             kitName, suffix);
+    return FindField(fields, count, migrated);
+}
+
+static bool IsV2ObsoleteShieldField(const char *key)
+{
+    char kitName[32], suffix[64], extra;
+    if (sscanf(key, "kit.%31[^.].secondary.%63s%c",
+               kitName, suffix, &extra) != 2)
+        return false;
+
+    if (strcmp(suffix, "arc_degrees") == 0 ||
+        strcmp(suffix, "counter_range") == 0 ||
+        strcmp(suffix, "counter_damage_min") == 0 ||
+        strcmp(suffix, "counter_damage_max") == 0 ||
+        strcmp(suffix, "counter_knockback_min") == 0 ||
+        strcmp(suffix, "counter_knockback_max") == 0)
+        return true;
+
+    return strcmp(kitName, "scrapper") == 0 &&
+           (strcmp(suffix, "cooldown") == 0 ||
+            strcmp(suffix, "duration") == 0 ||
+            strcmp(suffix, "speed") == 0);
+}
+
 static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preferences,
-                          CharacterPresentationDefinition *presentations, WeaponDef *kits,
+                          CharacterShowcaseDefinition *showcase, WeaponDef *kits,
                           FieldScope allowedScope, bool projectFile,
                           char *message, int messageSize)
 {
@@ -477,12 +658,53 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
         return false;
     }
 
+    int declaredVersion = 0;
+    bool declaredSeen = false;
+    char probeLine[320];
+    int probeLineNumber = 0;
+    while (fgets(probeLine, sizeof(probeLine), file))
+    {
+        probeLineNumber++;
+        char key[96], value[128], extra[8];
+        int parsed = sscanf(probeLine, " %95s %127s %7s", key, value, extra);
+        if (parsed <= 0 || key[0] == '#') continue;
+        if (strcmp(key, "format_version") != 0) continue;
+        double parsedVersion = 0.0;
+        if (declaredSeen || parsed != 2 ||
+            !ParseNumber(value, &parsedVersion) ||
+            parsedVersion != floor(parsedVersion))
+        {
+            snprintf(message, messageSize,
+                     "%s:%d has invalid or duplicate format_version",
+                     path, probeLineNumber);
+            fclose(file);
+            return false;
+        }
+        declaredVersion = (int)parsedVersion;
+        declaredSeen = true;
+    }
+    if (!declaredSeen ||
+        (declaredVersion != 1 && declaredVersion != 2 &&
+         declaredVersion != CONFIG_FORMAT_VERSION))
+    {
+        snprintf(message, messageSize, "%s uses unsupported format version %d",
+                 path, declaredVersion);
+        fclose(file);
+        return false;
+    }
+    rewind(file);
+
     Field fields[MAX_FIELDS];
-    int count = BuildFields(t, preferences, presentations, kits, fields);
+    int count = BuildFields(t, preferences, showcase, kits, fields);
+    WeaponDef scrapperBefore = kits[CLASS_SHOTGUNNER];
+    bool migrateV1 = declaredVersion == 1;
+    bool migrateV2 = declaredVersion == 2;
     int version = 0;
     bool versionSeen = false;
     char line[320];
     int lineNumber = 0;
+    char seenKeys[MAX_FIELDS][96];
+    int seenKeyCount = 0;
 
     while (fgets(line, sizeof(line), file))
     {
@@ -526,7 +748,71 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
             continue;
         }
 
-        Field *field = FindField(fields, count, key);
+        for (int seen = 0; seen < seenKeyCount; seen++)
+        {
+            if (strcmp(seenKeys[seen], key) == 0)
+            {
+                snprintf(message, messageSize, "%s:%d duplicates %s",
+                         path, lineNumber, key);
+                fclose(file);
+                return false;
+            }
+        }
+        if (seenKeyCount < MAX_FIELDS)
+            snprintf(seenKeys[seenKeyCount++],
+                     sizeof(seenKeys[0]), "%s", key);
+
+        if (migrateV1 && strncmp(key, "preview.", 8) == 0)
+        {
+            if (!projectFile && allowedScope == SCOPE_PROFILE) continue;
+            if (!AssignV1Preview(showcase, key, value,
+                                 message, messageSize))
+            {
+                snprintf(message, messageSize,
+                         "%s:%d has unknown v1 preview key %s",
+                         path, lineNumber, key);
+                fclose(file);
+                return false;
+            }
+            continue;
+        }
+
+        if (migrateV2 && IsV2ObsoleteShieldField(key))
+        {
+            double ignored = 0.0;
+            if (!ParseNumber(value, &ignored))
+            {
+                snprintf(message, messageSize,
+                         "%s has invalid value '%s'", key, value);
+                fclose(file);
+                return false;
+            }
+            continue;
+        }
+
+        Field *field = NULL;
+        if (migrateV1)
+        {
+            bool recognizedMobility = false;
+            field = V1MobilityField(fields, count, key, &recognizedMobility);
+            if (recognizedMobility)
+            {
+                if (!field)
+                {
+                    double ignored = 0.0;
+                    if (!ParseNumber(value, &ignored))
+                    {
+                        snprintf(message, messageSize,
+                                 "%s has invalid value '%s'", key, value);
+                        fclose(file);
+                        return false;
+                    }
+                    continue;
+                }
+            }
+            else field = FindField(fields, count, key);
+        }
+        else field = FindField(fields, count, key);
         if (!field || (projectFile ? field->scope != SCOPE_PROJECT
                                   : field->scope == SCOPE_PROFILE && allowedScope != SCOPE_PROFILE))
         {
@@ -547,7 +833,10 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
             fclose(file);
             return false;
         }
-        if (!AssignField(field, value, message, messageSize))
+        if (migrateV2 && field->type == FIELD_SECONDARY_KIND &&
+            strcmp(value, "guard") == 0)
+            *(int *)field->ptr = SECONDARY_SHIELD;
+        else if (!AssignField(field, value, message, messageSize))
         {
             fclose(file);
             return false;
@@ -556,13 +845,16 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
     }
     fclose(file);
 
-    if (version != CONFIG_FORMAT_VERSION)
+    if (version != declaredVersion)
     {
-        snprintf(message, messageSize, "%s uses unsupported format version %d", path, version);
+        snprintf(message, messageSize, "%s changed format version while parsing", path);
         return false;
     }
 
-    if (projectFile)
+    if (migrateV1)
+        kits[CLASS_SHOTGUNNER] = scrapperBefore;
+
+    if (projectFile && declaredVersion == CONFIG_FORMAT_VERSION)
     {
         for (int i = 0; i < count; i++)
         {
@@ -575,7 +867,7 @@ static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preference
         }
     }
 
-    return ValidateValues(t, presentations, kits, message, messageSize);
+    return ValidateValues(t, showcase, kits, message, messageSize);
 }
 
 //------------------------------------------------------------------------------------
@@ -671,7 +963,7 @@ static int BuildLegacyFields(Tuning *t, WeaponDef *kits, Field *f)
 }
 
 static bool LoadLegacyFile(const char *path, Tuning *t,
-                           CharacterPresentationDefinition *presentations,
+                           CharacterShowcaseDefinition *showcase,
                            WeaponDef *kits,
                            const WeaponDef *projectKits, char *message, int messageSize)
 {
@@ -707,7 +999,7 @@ static bool LoadLegacyFile(const char *path, Tuning *t,
 
     // Version 1 predates rain/Resonance. Its Guardian numbers describe a different kit.
     if (version < 2) kits[CLASS_HEALER] = projectKits[CLASS_HEALER];
-    return ValidateValues(t, presentations, kits, message, messageSize);
+    return ValidateValues(t, showcase, kits, message, messageSize);
 }
 
 //------------------------------------------------------------------------------------
@@ -723,6 +1015,7 @@ static bool SameFieldValue(const Field *a, const Field *b)
         case FIELD_INT:
         case FIELD_ATTACK_KIND:
         case FIELD_SUPER_KIND:
+        case FIELD_SECONDARY_KIND:
             return *(int *)a->ptr == *(int *)b->ptr;
         case FIELD_BOOL:
             return *(bool *)a->ptr == *(bool *)b->ptr;
@@ -738,6 +1031,7 @@ static void CopyFieldValue(Field *destination, const Field *source)
         case FIELD_INT:
         case FIELD_ATTACK_KIND:
         case FIELD_SUPER_KIND:
+        case FIELD_SECONDARY_KIND:
             *(int *)destination->ptr = *(int *)source->ptr;
             break;
         case FIELD_BOOL: *(bool *)destination->ptr = *(bool *)source->ptr; break;
@@ -764,6 +1058,10 @@ static void WriteField(FILE *file, const Field *field)
         case FIELD_SUPER_KIND:
             fprintf(file, "%s %s\n", field->key,
                     SUPER_KIND_NAMES[*(int *)field->ptr]);
+            break;
+        case FIELD_SECONDARY_KIND:
+            fprintf(file, "%s %s\n", field->key,
+                    SECONDARY_KIND_NAMES[*(int *)field->ptr]);
             break;
     }
 }
@@ -794,7 +1092,7 @@ static FILE *OpenAtomicFile(const char *path, char *temporaryPath, int temporary
 static bool SaveProjectSnapshot(App *w)
 {
     char validation[160];
-    if (!ValidateValues(&w->config.projectTuning, w->config.projectPresentation,
+    if (!ValidateValues(&w->config.projectTuning, &w->config.projectShowcase,
                         w->config.projectWeapons,
                         validation, sizeof(validation)))
     {
@@ -816,7 +1114,7 @@ static bool SaveProjectSnapshot(App *w)
 
     Field fields[MAX_FIELDS];
     int count = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                            w->config.projectPresentation,
+                            &w->config.projectShowcase,
                             w->config.projectWeapons, fields);
     for (int i = 0; i < count; i++)
         if (fields[i].scope == SCOPE_PROJECT) WriteField(file, &fields[i]);
@@ -843,9 +1141,9 @@ static bool SaveLocalDraft(App *w)
 
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
-                                w->content.presentation, w->content.weapons, live);
+                                &w->content.showcase, w->content.weapons, live);
     int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                                   w->config.projectPresentation,
+                                   &w->config.projectShowcase,
                                    w->config.projectWeapons, project);
 
     for (int i = 0; i < liveCount && i < projectCount; i++)
@@ -869,7 +1167,7 @@ static bool SaveProfile(App *w)
 
     Field fields[MAX_FIELDS];
     int count = BuildFields(&w->tune, &w->uiPreferences,
-                            w->content.presentation, w->content.weapons, fields);
+                            &w->content.showcase, w->content.weapons, fields);
     for (int i = 0; i < count; i++)
         if (fields[i].scope == SCOPE_PROFILE) WriteField(file, &fields[i]);
 
@@ -897,23 +1195,21 @@ bool ConfigInitialize(App *w)
     memset(&w->config, 0, sizeof(w->config));
 
     Tuning candidateTuning = w->tune;
-    CharacterPresentationDefinition candidatePresentation[CLASS_COUNT];
-    memcpy(candidatePresentation, w->content.presentation, sizeof(candidatePresentation));
+    CharacterShowcaseDefinition candidateShowcase = w->content.showcase;
     WeaponDef candidateWeapons[CLASS_COUNT];
     memcpy(candidateWeapons, w->content.weapons, sizeof(candidateWeapons));
 
     char message[160];
     UiPreferences candidatePreferences = w->uiPreferences;
     bool projectOk = LoadTypedFile(ProjectPath(), &candidateTuning, &candidatePreferences,
-                                   candidatePresentation, candidateWeapons,
+                                   &candidateShowcase, candidateWeapons,
                                    SCOPE_PROJECT, true, message, sizeof(message));
     if (!projectOk)
     {
         w->config.projectTuning = w->tune;
         memcpy(w->config.projectWeapons, w->content.weapons,
                sizeof(w->config.projectWeapons));
-        memcpy(w->config.projectPresentation, w->content.presentation,
-               sizeof(w->config.projectPresentation));
+        w->config.projectShowcase = w->content.showcase;
         w->config.projectLoaded = false;
         w->config.recoveryDefaults = true;
         ContentCatalogRebuildTyped(&w->content);
@@ -922,11 +1218,10 @@ bool ConfigInitialize(App *w)
     }
 
     w->tune = candidateTuning;
-    memcpy(w->content.presentation, candidatePresentation, sizeof(candidatePresentation));
+    w->content.showcase = candidateShowcase;
     memcpy(w->content.weapons, candidateWeapons, sizeof(candidateWeapons));
     w->config.projectTuning = candidateTuning;
-    memcpy(w->config.projectPresentation, candidatePresentation,
-           sizeof(candidatePresentation));
+    w->config.projectShowcase = candidateShowcase;
     memcpy(w->config.projectWeapons, candidateWeapons, sizeof(candidateWeapons));
     w->config.projectLoaded = true;
 
@@ -935,17 +1230,16 @@ bool ConfigInitialize(App *w)
     if (PathExists(LocalPath()))
     {
         Tuning localTuning = w->tune;
-        CharacterPresentationDefinition localPresentation[CLASS_COUNT];
-        memcpy(localPresentation, w->content.presentation, sizeof(localPresentation));
+        CharacterShowcaseDefinition localShowcase = w->content.showcase;
         WeaponDef localWeapons[CLASS_COUNT];
         memcpy(localWeapons, w->content.weapons, sizeof(localWeapons));
         UiPreferences localPreferences = w->uiPreferences;
         if (LoadTypedFile(LocalPath(), &localTuning, &localPreferences,
-                          localPresentation, localWeapons,
+                          &localShowcase, localWeapons,
                           SCOPE_LOCAL, false, message, sizeof(message)))
         {
             w->tune = localTuning;
-            memcpy(w->content.presentation, localPresentation, sizeof(localPresentation));
+            w->content.showcase = localShowcase;
             memcpy(w->content.weapons, localWeapons, sizeof(localWeapons));
             localLoaded = true;
         }
@@ -959,7 +1253,7 @@ bool ConfigInitialize(App *w)
             Tuning legacyTuning = w->tune;
             WeaponDef legacyWeapons[CLASS_COUNT];
             memcpy(legacyWeapons, w->content.weapons, sizeof(legacyWeapons));
-            if (LoadLegacyFile(legacyPath, &legacyTuning, w->content.presentation,
+            if (LoadLegacyFile(legacyPath, &legacyTuning, &w->content.showcase,
                                legacyWeapons,
                                w->config.projectWeapons, message, sizeof(message)))
             {
@@ -977,14 +1271,12 @@ bool ConfigInitialize(App *w)
     if (PathExists(ProfilePath()))
     {
         Tuning profileTuning = w->tune;
-        CharacterPresentationDefinition unchangedPresentation[CLASS_COUNT];
-        memcpy(unchangedPresentation, w->content.presentation,
-               sizeof(unchangedPresentation));
+        CharacterShowcaseDefinition unchangedShowcase = w->content.showcase;
         WeaponDef unchangedWeapons[CLASS_COUNT];
         memcpy(unchangedWeapons, w->content.weapons, sizeof(unchangedWeapons));
         UiPreferences profilePreferences = w->uiPreferences;
         if (LoadTypedFile(ProfilePath(), &profileTuning, &profilePreferences,
-                          unchangedPresentation, unchangedWeapons,
+                          &unchangedShowcase, unchangedWeapons,
                           SCOPE_PROFILE, false, message, sizeof(message)))
         {
             w->tune = profileTuning;
@@ -1043,16 +1335,15 @@ void ConfigAutoSave(App *w, float realDt)
 bool ConfigPromoteAll(App *w)
 {
     Tuning oldTuning = w->config.projectTuning;
-    CharacterPresentationDefinition oldPresentation[CLASS_COUNT];
-    memcpy(oldPresentation, w->config.projectPresentation, sizeof(oldPresentation));
+    CharacterShowcaseDefinition oldShowcase = w->config.projectShowcase;
     WeaponDef oldWeapons[CLASS_COUNT];
     memcpy(oldWeapons, w->config.projectWeapons, sizeof(oldWeapons));
 
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
-                                w->content.presentation, w->content.weapons, live);
+                                &w->content.showcase, w->content.weapons, live);
     int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                                   w->config.projectPresentation,
+                                   &w->config.projectShowcase,
                                    w->config.projectWeapons, project);
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT) CopyFieldValue(&project[i], &live[i]);
@@ -1060,7 +1351,7 @@ bool ConfigPromoteAll(App *w)
     if (!SaveProjectSnapshot(w))
     {
         w->config.projectTuning = oldTuning;
-        memcpy(w->config.projectPresentation, oldPresentation, sizeof(oldPresentation));
+        w->config.projectShowcase = oldShowcase;
         memcpy(w->config.projectWeapons, oldWeapons, sizeof(oldWeapons));
         return false;
     }
@@ -1082,14 +1373,14 @@ bool ConfigPromoteKit(App *w, BrawlerClass cls)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return false;
     WeaponDef old = w->config.projectWeapons[cls];
-    CharacterPresentationDefinition oldPresentation = w->config.projectPresentation[cls];
+    CharacterShowcaseDefinition oldShowcase = w->config.projectShowcase;
     w->config.projectWeapons[cls] = w->content.weapons[cls];
-    w->config.projectPresentation[cls] = w->content.presentation[cls];
+    w->config.projectShowcase = w->content.showcase;
 
     if (!SaveProjectSnapshot(w))
     {
         w->config.projectWeapons[cls] = old;
-        w->config.projectPresentation[cls] = oldPresentation;
+        w->config.projectShowcase = oldShowcase;
         return false;
     }
 
@@ -1113,9 +1404,9 @@ void ConfigResetAllToProject(App *w)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
-                                w->content.presentation, w->content.weapons, live);
+                                &w->content.showcase, w->content.weapons, live);
     int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                                   w->config.projectPresentation,
+                                   &w->config.projectShowcase,
                                    w->config.projectWeapons, project);
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT) CopyFieldValue(&live[i], &project[i]);
@@ -1129,7 +1420,7 @@ void ConfigResetKitToProject(App *w, BrawlerClass cls)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return;
     w->content.weapons[cls] = w->config.projectWeapons[cls];
-    w->content.presentation[cls] = w->config.projectPresentation[cls];
+    w->content.showcase = w->config.projectShowcase;
     ContentCatalogRebuildTyped(&w->content);
     ConfigMarkDirty();
 
@@ -1142,9 +1433,9 @@ int ConfigProjectOverrideCount(App *w)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
-                                w->content.presentation, w->content.weapons, live);
+                                &w->content.showcase, w->content.weapons, live);
     int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                                   w->config.projectPresentation,
+                                   &w->config.projectShowcase,
                                    w->config.projectWeapons, project);
     int different = 0;
     for (int i = 0; i < liveCount && i < projectCount; i++)
@@ -1157,13 +1448,15 @@ int ConfigKitOverrideCount(App *w, BrawlerClass cls)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
-                                w->content.presentation, w->content.weapons, live);
+                                &w->content.showcase, w->content.weapons, live);
     int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
-                                   w->config.projectPresentation,
+                                   &w->config.projectShowcase,
                                    w->config.projectWeapons, project);
     int different = 0;
     for (int i = 0; i < liveCount && i < projectCount; i++)
-        if (live[i].scope == SCOPE_PROJECT && live[i].kit == (int)cls &&
+        if (live[i].scope == SCOPE_PROJECT &&
+            (live[i].kit == (int)cls ||
+             strncmp(live[i].key, "preview.showcase.", 17) == 0) &&
             !SameFieldValue(&live[i], &project[i]))
             different++;
     return different;
@@ -1182,6 +1475,6 @@ bool ConfigValidateProjectFile(const char *path, char *message, int messageSize)
     ContentCatalogResetAll(&catalog);
     UiPreferences preferences = { .scale = 1.0f };
     return LoadTypedFile(path, &tuning, &preferences,
-                         catalog.presentation, catalog.weapons,
+                         &catalog.showcase, catalog.weapons,
                          SCOPE_PROJECT, true, message, messageSize);
 }

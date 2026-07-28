@@ -84,21 +84,41 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     // Clicks meant for the command center must not also fire the weapon.
     if (input->actionsBlocked)
     {
+        if (b->shieldActive || b->shieldRearmRequired)
+            BrawlerReleaseShield(game, idx);
         w->controller.charging = false;
         w->controller.aimingSuper = false;
         b->deliberateAim = false;
         return;
     }
 
-    // Optional character mobility favors the current movement direction. With no
-    // movement input it follows the aim, so a stationary Tank can still pop forward.
-    if (input->mobilityPressed)
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(&w->content, b->cls);
+
+    // Shift/LB is a typed secondary: Tank triggers immediately, while Scrapper keeps
+    // its full-body shell raised for exactly as long as the control is held.
+    if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD &&
+        (input->secondaryReleased || !input->secondaryHeld))
+        BrawlerReleaseShield(game, idx);
+
+    if (b->shieldActive)
     {
-        Vector3 direction = input->moveIntent;
+        w->controller.charging = false;
+        w->controller.aimingSuper = false;
+        b->deliberateAim = false;
+        return;
+    }
+
+    if (input->secondaryPressed || input->mobilityPressed)
+    {
+        Vector3 direction =
+            secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD
+            ? (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) }
+            : input->moveIntent;
         if (Vector3Length(direction) < 0.001f)
             direction = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
 
-        if (BrawlerTryMobility(game, idx, direction))
+        if (BrawlerTrySecondary(game, idx, direction))
         {
             w->controller.charging = false;
             w->controller.aimingSuper = false;
@@ -149,6 +169,8 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
                     (mainAbility->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
                      mainAbility->behavior == ABILITY_BEHAVIOR_LOB)
                     ? mainAbility->data.projectile.speed : 0.0f;
+                if (mainAbility->behavior == ABILITY_BEHAVIOR_RETURNING)
+                    shotSpeed = mainAbility->data.returning.outboundSpeed;
                 float travel = (shotSpeed > 0.1f) ? Vector3Length(d)/shotSpeed : 0.0f;
                 Vector3 lead = Vector3Add(t, Vector3Scale(w->session.brawlers[target].velocity, travel * 0.7f));
                 Vector3 ld = Vector3Subtract(lead, b->position);

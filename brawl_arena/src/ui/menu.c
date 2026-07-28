@@ -106,6 +106,14 @@ static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int s
                  ability->damage, ability->healing);
     else if (ability->behavior == ABILITY_BEHAVIOR_DASH)
         snprintf(buffer, size, "Armored drive // %d impact damage", ability->damage);
+    else if (ability->behavior == ABILITY_BEHAVIOR_SHIELD)
+        snprintf(buffer, size,
+                 "Hold 360 shell // %d capacity // %.0f%% absorb healing",
+                 ability->data.shield.capacity,
+                 ability->data.shield.healRatio*100.0f);
+    else if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
+        snprintf(buffer, size, "%d outbound + %d return // piercing disc",
+                 ability->damage, ability->damage);
     else if (ability->behavior == ABILITY_BEHAVIOR_LOB)
         snprintf(buffer, size, "Arcing payload // %.1f splash radius", ability->radius);
     else if (ability->healing > 0)
@@ -253,7 +261,8 @@ static void DrawRoster(App *w)
         ContentCharacter(&w->content, g_candidate);
     const AbilityDefinition *main = ContentMainAbility(&w->content, g_candidate);
     const AbilityDefinition *super = ContentSuperAbility(&w->content, g_candidate);
-    const AbilityDefinition *mobility = ContentMobilityAbility(&w->content, g_candidate);
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(&w->content, g_candidate);
     Color accent = CharacterAccent(g_candidate);
 
     // The former launch-deck readout belongs here: this is the moment where
@@ -268,10 +277,10 @@ static void DrawRoster(App *w)
     UiDrawTextFit(UI_TEXT_BODY, candidate->flavor, UiRefRect(48, 255, 248, 34),
                   UI_ALIGN_LEFT, t->mist);
     DrawAbilityBlock(UiRefRect(46, 306, 252, 88), "MAIN ATTACK", main, t->ion);
-    if (mobility)
+    if (secondary)
         DrawAbilityBlock(UiRefRect(46, 404, 252, 88),
-                         "BRAWLER ABILITY", mobility, t->safety);
-    DrawAbilityBlock(UiRefRect(46, mobility ? 502 : 404, 252, 88),
+                         "SECONDARY", secondary, t->safety);
+    DrawAbilityBlock(UiRefRect(46, secondary ? 502 : 404, 252, 88),
                      "ULTIMATE", super, t->reactor);
 
     Rectangle telemetry = UiRefRect(956, 166, 300, 454);
@@ -288,6 +297,8 @@ static void DrawRoster(App *w)
     if (main->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
         main->behavior == ABILITY_BEHAVIOR_LOB)
         totalDamage *= main->data.projectile.pellets;
+    else if (main->behavior == ABILITY_BEHAVIOR_RETURNING)
+        totalDamage *= 2;
     snprintf(value, sizeof(value), "%d", totalDamage);
     DrawMetric(UiRefRect(980, 306, 250, 42), UI_ICON_DAMAGE,
                "Attack output", value, t->enemy);
@@ -348,7 +359,8 @@ static void DrawControlsOverlay(App *w)
 
     UiDrawText(UI_TEXT_LABEL, "MOVEMENT", UiRefPoint(232, 192), t->ion);
     DrawControlRow(232, 218, UiBindingLabel("WASD / ARROWS", "LEFT STICK"), "Move");
-    DrawControlRow(232, 264, UiBindingLabel("LEFT SHIFT", "LEFT BUMPER"), "Brawler mobility");
+    DrawControlRow(232, 264, UiBindingLabel("LEFT SHIFT", "LEFT BUMPER"),
+                   "Secondary — press dash / hold shield");
 
     UiDrawText(UI_TEXT_LABEL, "COMBAT", UiRefPoint(232, 326), t->safety);
     DrawControlRow(232, 352, UiBindingLabel("HOLD LMB", "HOLD RT"), "Aim main attack");

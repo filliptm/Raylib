@@ -1,6 +1,6 @@
 # Brawl Arena architecture
 
-Last code-verified: 2026-07-27
+Last code-verified: 2026-07-28
 
 This is the implemented ownership and dependency contract for Brawl Arena. The project is
 a modular C application with fixed-capacity simulation storage. It is not a reusable
@@ -127,23 +127,30 @@ eliminations leave camera shake unchanged.
 
 - Five compatibility `WeaponDef` authoring records.
 - Five typed `CharacterDefinition` records.
-- Eleven active typed `AbilityDefinition` records in a fifteen-slot fixed array: two per
-  character plus Tank's optional mobility ability.
-- Five `CharacterPresentationDefinition` records with independent home/select yaw,
-  scale, and offsets plus camera height and distance.
+- Twelve active typed `AbilityDefinition` records in a fifteen-slot fixed array: two per
+  character plus Tank and Scrapper secondary abilities.
+- One `CharacterShowcaseDefinition` with a shared model transform, camera position,
+  target, and vertical FOV for every character and menu screen.
 - Up to eight validated `MapDefinition` records and selected map state.
 
 `WeaponDef` preserves the stable configuration schema. After configuration load or a
 live authoring edit, `ContentCatalogRebuildTyped()` produces the runtime definitions used
 by game, AI, menus, HUD summaries, and aim previews.
 
-An ability has a behavior tag and a typed projectile, area, or dash payload. Characters
-may expose main, super, and optional mobility handles. Projectile definitions can
-snapshot a self-heal ratio, while dash payloads carry speed, duration, knockback, and
-crate-breaking policy. Generic
+An ability has a behavior tag and a typed projectile, area, dash, returning, or shield
+payload. Characters may expose main, super, and optional secondary handles. Projectile
+definitions can snapshot a self-heal ratio, dash payloads carry speed, duration,
+knockback, and crate-breaking policy, returning payloads carry outbound/return phase
+rules, and shield payloads carry capacity, movement, absorb-healing, recharge, and break
+lockout values. Generic
 periodic `StatusEffect` slots support both ally healing-over-time and enemy
 damage-over-time. New abilities should add reusable behavior handlers rather than
 character-specific fields to `Brawler`.
+
+`BrawlerApplyDamageDetailed()` is the common shield-before-health gateway for hostile
+projectiles, fields, dashes, and periodic damage. Its separate `shieldAbsorbed` and
+`healthRemoved` results let hit-confirm and crowd-control rules accept shield contact
+while health-only mechanics such as Tank Reclaim remain tied to actual health loss.
 
 Out-of-combat regeneration is a global reusable actor rule rather than an ability or
 character field. Successful main/ultimate casts and actual health loss stamp centralized
@@ -166,13 +173,15 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   state restoration.
 - `render_state.h`: batch-safe depth-write transitions shared by transparent,
   additive, billboard, decal, field, and preview passes.
-- `ability_visuals.c`: active rain/sound fields and all aim previews.
+- `ability_visuals.c`: active rain/sound fields, Scrapper Shell, and all aim previews.
 - `character_animation.c`: pure match clip selection from life, dash, velocity, and
   facing, plus presentation-only action-state timing/blend envelopes. Concealment reveal
   and attack cooldown timers never double as animation state.
 - `menu_scene.c`: hangar, podium, lights, non-rotating preview brawler, and application
-  of per-character presentation profiles. Its stage and brawler passes are separate so
-  tintable 2D station motifs can sit behind the model without entering world rendering.
+  of the shared showcase. Its stage clock is independent of model-preview time, so
+  candidate changes do not restart the background. Stage and brawler passes remain
+  separate so tintable 2D station motifs can sit behind the model without entering
+  world rendering.
 - `render.c`: world-pass orchestration and brawler/projectile/grass drawing.
 
 The renderer reads simulation snapshots and presentation events. Ability VFX can name a
@@ -221,7 +230,7 @@ Place a change according to the state it owns:
 | Particle/light/float text response | game event + `presentation/effects` |
 | Aim shape or field visualization | `presentation/ability_visuals` |
 | Menu/HUD display | `ui` |
-| Menu podium/hangar/model framing | `presentation/menu_scene` + content presentation profile |
+| Menu podium/hangar/model framing | `presentation/menu_scene` + content showcase |
 | UI theme, text, focus, and components | `ui/ui_system` |
 | UI texture lifetime, slicing, and decoration | `ui/ui_skin` |
 | Shader/model/texture lifetime | `presentation/assets` |

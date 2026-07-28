@@ -37,6 +37,13 @@ void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 p
     b->renderYaw = b->aimAngle;
     b->shotYaw = b->aimAngle;
     b->dashAbility = -1;
+    b->shieldAbility = -1;
+    const AbilityDefinition *secondary = ContentSecondaryAbility(w.content, cls);
+    if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD)
+    {
+        b->shieldAbility = def->mobilityAbility;
+        b->shieldCharge = (float)secondary->data.shield.capacity;
+    }
     InterruptHealthRegeneration(w, b);
     b->bobPhase = GameRandomInt(&w.session->random, 0, 628) / 100.0f;
     b->aiTarget = -1;
@@ -68,29 +75,99 @@ void BrawlerAwardSuper(GameContext w, int idx, float amount)
     if (b->superCharge > 1.0f) b->superCharge = 1.0f;
 }
 
-int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3 hitPos)
+BrawlerDamageResult BrawlerApplyDamageDetailed(
+    GameContext w, int idx, int damage, int attacker, Vector3 hitPos)
 {
-    if (idx < 0 || idx >= w.session->brawlerCount || damage <= 0) return 0;
+    BrawlerDamageResult result = { 0 };
+    if (idx < 0 || idx >= w.session->brawlerCount || damage <= 0)
+        return result;
     Brawler *b = &w.session->brawlers[idx];
-    if (!b->alive) return 0;
+    if (!b->alive) return result;
 
     // God mode still flashes and shows numbers, so feedback stays readable.
     if (b->isPlayer && w.tuning->godMode)
     {
         b->hitFlash = 1.0f;
-        return 0;
+        return result;
     }
 
-    int before = b->health;
-    b->health -= damage;
-    if (b->health < 0) b->health = 0;
-    int removed = before - b->health;
-    b->hitFlash = 1.0f;
-    if (removed > 0) InterruptHealthRegeneration(w, b);
+    const AbilityDefinition *shield =
+        ContentAbility(w.content, b->shieldAbility);
+    bool hostileAttacker =
+        attacker >= 0 && attacker < w.session->brawlerCount &&
+        attacker != idx &&
+        w.session->brawlers[attacker].team != b->team;
+    if (b->shieldActive && hostileAttacker && b->shieldCharge > 0.0f &&
+        shield && shield->behavior == ABILITY_BEHAVIOR_SHIELD)
+    {
+        result.shieldAbsorbed =
+            (int)fminf((float)damage, b->shieldCharge);
+        b->shieldCharge -= (float)result.shieldAbsorbed;
+        if (b->shieldCharge < 0.001f) b->shieldCharge = 0.0f;
+        damage -= result.shieldAbsorbed;
+        b->shieldRechargeDelay = shield->data.shield.rechargeDelay;
+        b->hitFlash = 1.0f;
+        InterruptHealthRegeneration(w, b);
 
-    char buf[16];
-    snprintf(buf, sizeof(buf), "%d", damage);
-    GameEmitFloatText(w.session, hitPos, buf, (attacker == w.session->playerIdx) ? (Color){ 255, 235, 140, 255 } : (Color){ 255, 150, 150, 255 });
+        char shieldText[16];
+        snprintf(shieldText, sizeof(shieldText), "SH -%d",
+                 result.shieldAbsorbed);
+        GameEmitFloatText(w.session, hitPos, shieldText,
+                          (Color){ 112, 232, 255, 255 });
+        GameEmitImpact(w.session, hitPos, (Color){ 104, 226, 255, 255 }, 10);
+        GameEmitVfxAttached(
+            w.session, VFX_SCRAPPER_SHIELD_HIT,
+            hitPos, b->position, b->aimAngle,
+            0.95f + result.shieldAbsorbed/
+                    (float)shield->data.shield.capacity,
+            (Color){ 104, 226, 255, 255 },
+            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+
+        int healing = (int)floorf(
+            result.shieldAbsorbed*shield->data.shield.healRatio + 0.5f);
+        if (healing > 0)
+            BrawlerApplyHealing(w, idx, healing, idx,
+                                (Vector3){ b->position.x, 1.0f,
+                                           b->position.z });
+
+        if (b->shieldCharge <= 0.0f)
+        {
+            b->shieldActive = false;
+            b->shieldBrokenTimer = shield->data.shield.breakLockout;
+            b->shieldRearmRequired = true;
+            GameEmitVfxAttached(
+                w.session, VFX_SCRAPPER_SHIELD_BREAK,
+                (Vector3){ b->position.x, 1.0f, b->position.z },
+                (Vector3){ b->position.x, 1.0f, b->position.z },
+                b->aimAngle, 1.65f, (Color){ 104, 226, 255, 255 },
+                idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+            GameEmitShockwave(w.session, b->position, 2.0f, 0.30f,
+                              (Color){ 104, 226, 255, 220 });
+        }
+    }
+
+    if (damage > 0)
+    {
+        int before = b->health;
+        b->health -= damage;
+        if (b->health < 0) b->health = 0;
+        result.healthRemoved = before - b->health;
+        b->hitFlash = 1.0f;
+        if (result.healthRemoved > 0)
+        {
+            InterruptHealthRegeneration(w, b);
+            if (shield && shield->behavior == ABILITY_BEHAVIOR_SHIELD)
+                b->shieldRechargeDelay = shield->data.shield.rechargeDelay;
+        }
+
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", damage);
+        GameEmitFloatText(
+            w.session, hitPos, buf,
+            (attacker == w.session->playerIdx)
+                ? (Color){ 255, 235, 140, 255 }
+                : (Color){ 255, 150, 150, 255 });
+    }
 
     if (b->health == 0)
     {
@@ -98,6 +175,8 @@ int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3
         b->respawnTimer = b->isPlayer ? w.tuning->playerRespawn : w.tuning->enemyRespawn;
         b->dashTimer = 0.0f;
         b->dashAbility = -1;
+        b->shieldActive = false;
+        b->shieldAbility = -1;
 
         GameEmitDeath(w.session, b->position, TEAM_COLORS[b->team]);
 
@@ -113,7 +192,14 @@ int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3
         }
         if (b->isPlayer) w.session->deaths++;
     }
-    return removed;
+    return result;
+}
+
+int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker,
+                       Vector3 hitPos)
+{
+    return BrawlerApplyDamageDetailed(w, idx, damage, attacker,
+                                      hitPos).healthRemoved;
 }
 
 int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 hitPos)
@@ -240,7 +326,9 @@ void BrawlerFaceShot(GameContext w, int idx, float yaw, float holdTime)
 bool BrawlerTryAttack(GameContext w, int idx, float aimDist)
 {
     Brawler *b = &w.session->brawlers[idx];
-    if (!b->alive || b->attackCd > 0.0f || b->dashTimer > 0.0f) return false;
+    if (!b->alive || b->attackCd > 0.0f || b->dashTimer > 0.0f ||
+        b->shieldActive)
+        return false;
 
     bool freeAmmo = b->isPlayer && w.tuning->infiniteAmmo;
     if (!freeAmmo && b->ammo < 1.0f) return false;
@@ -254,7 +342,9 @@ bool BrawlerTryAttack(GameContext w, int idx, float aimDist)
 bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
 {
     Brawler *b = &w.session->brawlers[idx];
-    if (!b->alive || b->superCharge < 1.0f || b->dashTimer > 0.0f) return false;
+    if (!b->alive || b->superCharge < 1.0f || b->dashTimer > 0.0f ||
+        b->shieldActive)
+        return false;
 
     if (!(b->isPlayer && w.tuning->infiniteAmmo)) b->superCharge = 0.0f;
     b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown;
@@ -263,20 +353,50 @@ bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
     return true;
 }
 
-bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
+void BrawlerReleaseShield(GameContext w, int idx)
+{
+    if (idx < 0 || idx >= w.session->brawlerCount) return;
+    Brawler *b = &w.session->brawlers[idx];
+    b->shieldActive = false;
+    b->shieldRearmRequired = false;
+}
+
+bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
 {
     if (idx < 0 || idx >= w.session->brawlerCount) return false;
 
     Brawler *b = &w.session->brawlers[idx];
     const CharacterDefinition *character = ContentCharacter(w.content, b->cls);
-    const AbilityDefinition *ability = ContentMobilityAbility(w.content, b->cls);
+    const AbilityDefinition *ability = ContentSecondaryAbility(w.content, b->cls);
     if (!b->alive || !character || !ability ||
-        ability->behavior != ABILITY_BEHAVIOR_DASH ||
-        b->mobilityCooldown > 0.0f || b->dashTimer > 0.0f)
+        b->mobilityCooldown > 0.0f || b->dashTimer > 0.0f ||
+        b->shieldActive)
         return false;
 
     direction.y = 0.0f;
-    if (Vector3Length(direction) < 0.001f) return false;
+    if (ability->behavior == ABILITY_BEHAVIOR_SHIELD)
+    {
+        if (b->shieldRearmRequired || b->shieldBrokenTimer > 0.0f ||
+            b->shieldCharge <= 0.0f)
+            return false;
+        if (Vector3Length(direction) > 0.001f)
+            b->aimAngle = atan2f(direction.x, direction.z);
+        b->shieldActive = true;
+        b->shieldAbility = character->mobilityAbility;
+        b->revealTimer = w.tuning->fireReveal;
+        GameEmitVfxAttached(
+            w.session, VFX_SCRAPPER_SHIELD_START,
+            (Vector3){ b->position.x, 0.85f, b->position.z },
+            (Vector3){ b->position.x, 0.85f, b->position.z },
+            b->aimAngle, 1.35f, (Color){ 104, 226, 255, 255 },
+            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_GUARD);
+        return true;
+    }
+
+    if (ability->behavior != ABILITY_BEHAVIOR_DASH ||
+        Vector3Length(direction) < 0.001f)
+        return false;
 
     b->dashTimer = ability->data.dash.duration;
     b->dashDir = Vector3Normalize(direction);
@@ -306,6 +426,51 @@ bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
         idx, VFX_SOCKET_RIGHT_SHOULDER, -1, VFX_SOCKET_NONE);
     GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_MOBILITY);
     return true;
+}
+
+bool BrawlerTryMobility(GameContext w, int idx, Vector3 direction)
+{
+    if (idx < 0 || idx >= w.session->brawlerCount) return false;
+    const AbilityDefinition *ability =
+        ContentSecondaryAbility(w.content, w.session->brawlers[idx].cls);
+    if (!ability || ability->behavior != ABILITY_BEHAVIOR_DASH) return false;
+    return BrawlerTrySecondary(w, idx, direction);
+}
+
+bool BrawlerProjectileThreat(GameContext w, int idx, float horizon)
+{
+    if (idx < 0 || idx >= w.session->brawlerCount || horizon <= 0.0f)
+        return false;
+    Brawler *b = &w.session->brawlers[idx];
+    const AbilityDefinition *ability =
+        ContentSecondaryAbility(w.content, b->cls);
+    if (!b->alive || b->shieldBrokenTimer > 0.0f ||
+        b->shieldCharge <= 0.0f ||
+        !ability || ability->behavior != ABILITY_BEHAVIOR_SHIELD)
+        return false;
+
+    for (int projectile = 0; projectile < MAX_PROJECTILES; projectile++)
+    {
+        Projectile *p = &w.session->projectiles[projectile];
+        if (!p->active || p->team == b->team) continue;
+        float speedSq = p->velocity.x*p->velocity.x +
+                        p->velocity.z*p->velocity.z;
+        if (speedSq <= 0.001f) continue;
+
+        Vector3 relative = Vector3Subtract(b->position, p->position);
+        relative.y = 0.0f;
+        float time = (relative.x*p->velocity.x +
+                      relative.z*p->velocity.z)/speedSq;
+        if (time < 0.0f || time > horizon) continue;
+        Vector3 closest = Vector3Add(
+            p->position, Vector3Scale(p->velocity, time));
+        if (Vector3Distance(closest, b->position) >
+            BRAWLER_RADIUS + p->radius)
+            continue;
+
+        return true;
+    }
+    return false;
 }
 
 bool BrawlerCanSee(GameContext w, int viewer, int target)
@@ -505,6 +670,60 @@ void BrawlersUpdate(GameContext w, float dt)
         UpdateStatuses(w, i, dt);
         if (!b->alive) continue;
 
+        const AbilityDefinition *shield =
+            ContentAbility(w.content, b->shieldAbility);
+        if (b->shieldActive)
+            b->revealTimer = fmaxf(b->revealTimer, 0.1f);
+        if (shield && shield->behavior == ABILITY_BEHAVIOR_SHIELD)
+        {
+            if (b->shieldCharge > shield->data.shield.capacity)
+                b->shieldCharge = (float)shield->data.shield.capacity;
+            if (b->shieldBrokenTimer > 0.0f)
+            {
+                b->shieldBrokenTimer =
+                    fmaxf(0.0f, b->shieldBrokenTimer - dt);
+                if (b->shieldBrokenTimer <= 0.0f)
+                {
+                    b->shieldCharge = (float)shield->data.shield.capacity;
+                    b->shieldRechargeDelay = 0.0f;
+                    GameEmitVfxAttached(
+                        w.session, VFX_SCRAPPER_SHIELD_RESTORE,
+                        (Vector3){ b->position.x, 1.0f, b->position.z },
+                        (Vector3){ b->position.x, 1.0f, b->position.z },
+                        b->aimAngle, 1.45f,
+                        (Color){ 104, 226, 255, 255 },
+                        i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                }
+            }
+            else if (!b->shieldActive &&
+                     b->shieldCharge < shield->data.shield.capacity)
+            {
+                if (b->shieldRechargeDelay > 0.0f)
+                    b->shieldRechargeDelay =
+                        fmaxf(0.0f, b->shieldRechargeDelay - dt);
+                else
+                {
+                    float before = b->shieldCharge;
+                    b->shieldCharge = fminf(
+                        (float)shield->data.shield.capacity,
+                        b->shieldCharge +
+                            shield->data.shield.rechargeRate*dt);
+                    if (before < shield->data.shield.capacity &&
+                        b->shieldCharge >= shield->data.shield.capacity)
+                        GameEmitVfxAttached(
+                            w.session, VFX_SCRAPPER_SHIELD_RESTORE,
+                            (Vector3){ b->position.x, 1.0f,
+                                       b->position.z },
+                            (Vector3){ b->position.x, 1.0f,
+                                       b->position.z },
+                            b->aimAngle, 1.25f,
+                            (Color){ 104, 226, 255, 255 },
+                            i, VFX_SOCKET_CHEST, -1,
+                            VFX_SOCKET_NONE);
+                }
+            }
+        }
+
         // Ammo regenerates continuously, one pip at a time.
         if (b->ammo > (float)character->maxAmmo) b->ammo = (float)character->maxAmmo;
         if (b->ammo < (float)character->maxAmmo)
@@ -523,7 +742,18 @@ void BrawlersUpdate(GameContext w, float dt)
         }
 
         // Movement: accelerate toward the controller's intent, then resolve collisions.
-        Vector3 desired = Vector3Scale(b->moveIntent, w.tuning->moveSpeed);
+        float moveMultiplier = 1.0f;
+        if (b->shieldActive)
+        {
+            const AbilityDefinition *activeShield =
+                ContentAbility(w.content, b->shieldAbility);
+            if (activeShield &&
+                activeShield->behavior == ABILITY_BEHAVIOR_SHIELD)
+                moveMultiplier =
+                    activeShield->data.shield.moveMultiplier;
+        }
+        Vector3 desired =
+            Vector3Scale(b->moveIntent, w.tuning->moveSpeed*moveMultiplier);
         b->velocity.x = Lerp(b->velocity.x, desired.x, w.tuning->moveAccel * dt);
         b->velocity.z = Lerp(b->velocity.z, desired.z, w.tuning->moveAccel * dt);
 

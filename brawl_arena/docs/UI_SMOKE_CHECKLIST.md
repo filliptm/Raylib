@@ -1,6 +1,6 @@
 # Helios Broadcast UI smoke checklist
 
-Last code-verified: 2026-07-27
+Last code-verified: 2026-07-28
 
 Use this checklist after UI, rendering, input, character, or configuration changes.
 Automated checks establish geometry and policy; this pass verifies the parts that need a
@@ -47,8 +47,9 @@ At every size verify:
 - Controls: correct keyboard/mouse and gamepad bindings; Back restores prior focus.
 - Settings: UI scale, reduced motion, high contrast, tutorial hints, glyph mode, and
   tutorial reset all apply immediately and survive restart.
-- Match HUD: objective, vitals, ammo, mobility/super state, team shape cues, downed state,
-  and action-specific tutorials.
+- Match HUD: objective, vitals, ammo, secondary/super state, Scrapper Shell charge and
+  broken lockout above health, team shape cues, downed state, and action-specific
+  tutorials.
 - Result: explicit Continue works; timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay
   commands, provenance, Restore Project, Save All, and Preview / UI framing.
@@ -60,7 +61,7 @@ At every size verify:
   Shift fine slider adjustment.
 - Gamepad: D-pad/left-stick focus, A activation, B back, bumpers/category movement,
   left-stick move, right-stick aim, triggers/main, right bumper/super, and left
-  bumper/mobility.
+  bumper/secondary.
 - Switch between pointer, keyboard, and gamepad; focus visibility and binding glyphs
   should follow the active/forced modality without moving control bounds.
 
@@ -72,10 +73,11 @@ screens:
 - Preview never rotates automatically.
 - Idle animation remains active unless reduced motion is enabled.
 - Feet remain on the podium and the full silhouette remains inside protected space.
-- Tank is 205° on home and front-facing/smaller in roster; its shield and feet are fully
-  visible in both.
-- Preview / UI edits apply live, Reset restores project framing, and Save Kit + Framing
-  produces a validated tracked `config/gameplay.cfg` change.
+- Every model has identical yaw, scale, offset, camera, and target framing on home and
+  roster; rapidly changing candidates does not move/restart the hangar background.
+- Tank's shield and every character's feet remain fully visible under that one framing.
+- Preview / UI edits apply live, Reset restores the project showcase, and Save Kit +
+  Showcase produces a validated tracked `config/gameplay.cfg` change.
 
 ## Accessibility and comfort
 
@@ -97,8 +99,11 @@ screens:
 - Temporarily missing station/character assets use coherent procedural fallbacks.
 - Temporarily missing individual UI skin textures fall back independently to the
   code-drawn Helios geometry without changing layout or preventing startup.
-- Imported animation selection, grass, aim previews, rain, Resonance, and result overlays
-  remain aligned with the world.
+- Imported animation selection, grass, aim previews, Scrapper saw/Shell visuals, rain,
+  Resonance, and result overlays remain aligned with the world.
+- Scrapper's procedural saw is readable on both legs; the full spherical Shell cage,
+  low-charge instability, start/hit/collapse/restore recipes, world/HUD charge bars, and
+  braced pose are visible without rectangular outline artifacts.
 
 Record the sizes, input devices, kits, and fallback cases actually exercised when handing
 off a change. Do not report this graphical matrix as complete based only on headless

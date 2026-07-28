@@ -55,12 +55,12 @@ is disabled so this navigation remains explicit.
 | Input | Action |
 |-------|--------|
 | `WASD` / arrows or left stick | Move |
-| `Left Shift` | Tank: fire Shoulder Jets along movement input, or toward aim while stationary |
+| `Left Shift` | Use the active secondary: Tank fires Shoulder Jets; Scrapper holds Magnetic Scrap Shell as a 360-degree damage bubble |
 | Mouse or right stick | Aim |
 | Hold/release `LMB` or right trigger | Preview/fire the main attack |
 | Tap `LMB`, `SPACE`, or gamepad A | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
 | Hold/release `RMB` or right bumper | Preview/fire the super |
-| Left bumper | Tank Shoulder Jets |
+| Left bumper | Use the active secondary |
 | `1` – `5` | Swap kit on the spot |
 | `TAB` | Open / close the command center |
 | `ESC` | Back a screen — select to menu, match to menu, menu quits |
@@ -72,7 +72,7 @@ is disabled so this navigation remains explicit.
 as a solid shape, matched to how the weapon behaves:
 
 - **A filled cone** for spread weapons, opening to the real spread angle.
-- **A thick beam** for single-shot weapons like the sniper, and for the dash charge.
+- **A thick beam** for single-shot weapons, returning saws, and the dash charge.
 - **A filled disc** for lobbed shots, one per shell, sitting where the splash will land —
   plus a dotted arc showing the flight path over any wall in between.
 - **A green target disc** for Guardian's growing rain field.
@@ -100,10 +100,29 @@ pulses arrive once per gameplay second until full. Real damage—including each
 damage-over-time pulse—restarts the delay; failed attacks, movement, aiming, Shoulder
 Jets, and receiving healing do not. Recovery caps at maximum health and never revives.
 
-**Tank sustain and mobility.** Tank's Reclamation Rounds restore 20% of the enemy health
-actually removed by each main-attack pellet. Overkill cannot create extra healing,
-healing stops at maximum health, and hits against crates, Charge damage, and shots fired
-by other kits do not feed it.
+**Scrapper return-and-shell loop.** Ripsaw deals 700 damage outbound and can damage each
+target once again while returning to Scrapper's current position. Its 13-unit outbound
+path turns at range, walls, or crates; the ordinary saw never damages cover. Catching
+the saw is visual only—ammo begins reloading from the cast as usual.
+
+Wrecking Disc extends that pattern to 18 units and 1,100 damage per leg. It breaks and
+passes through crates, pulls enemies toward the outbound line, and knocks them along the
+return path. Permanent walls turn its outbound leg or destroy its returning leg.
+
+Hold Left Shift/left bumper for Magnetic Scrap Shell, a 1,200-point bubble that catches
+hostile combat damage from every direction. Scrapper moves at 65% speed and cannot fire
+another ability while the shell is raised. Every absorbed point spends one point of
+charge and restores health equal to 30% of the absorbed damage; overflow alone reaches
+health, so Tank lifesteal still keys off real health removed. Releasing preserves the
+remaining charge. After three seconds without shield or health damage it refills at 300
+points per second. A full break forces the shell down for five seconds, restores it to
+full, and requires release before it can be raised again. Pulls and knockback still
+apply on shield contact, and shield hits interrupt ordinary out-of-combat regeneration.
+
+**Tank sustain and mobility.** Tank's tracked Reclamation Rounds restore about 49.9% of
+the enemy health actually removed by each main-attack pellet. Overkill cannot create
+extra healing, healing stops at maximum health, and hits against crates, Charge damage,
+and shots fired by other kits do not feed it.
 
 Shoulder Jets is a separate Left Shift mobility ability on a 2.5-second cooldown. It
 travels for 0.18 seconds at 22 world units per second (about four world units), using
@@ -165,8 +184,10 @@ never have to think about which is which mid-fight:
 - `ROAM` — they wander the arena but never open fire, for testing tracking and aim.
 - `FIGHT` — the full state machine: patrol when blind, chase to weapon range, then hold
   that range while strafing and firing with lead prediction. They retreat toward the
-  nearest bush below 30% health, use optional mobility to close meaningful gaps or
-  retreat, and fire supers only when the shot will connect.
+  nearest bush below 30% health, use dash secondaries to close meaningful gaps or
+  retreat, raise Scrapper's Shell for projectiles predicted to arrive within roughly
+  0.5 seconds, lower it after the threat passes so it can recharge, and fire supers only
+  when the shot will connect.
 
 ## The command center
 
@@ -183,10 +204,10 @@ independently when its controls are taller than the window.
 | **MATCH** | Gem Grab toggle, team size, target count, countdown/vent timing, match state, and objective actions |
 | **BOTS** | Behaviour mode, bot count (0–7), mixed or fixed kits, respawn delay, AI health thresholds/probe distance, and respawn / kill / heal buttons |
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
-| **KIT** | Live edit of the active kit, including ammo capacity and main-shot self-healing. Tank exposes Shoulder Jets cooldown/duration/speed; Guardian exposes rain duration/pulse/growth and Resonance duration/tick/wave controls, plus reset/save-as-project actions |
+| **KIT** | Live edit of the active kit, including ammo capacity and behavior-specific main/super values. Scrapper exposes returning speeds, Wrecking Disc pull/knockback, and Shell capacity/healing/recharge/break timing; Tank exposes Shoulder Jets and self-healing; Guardian exposes rain and Resonance timing, plus reset/save-as-project actions |
 | **VISUAL** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
 | **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, live VFX diagnostics, direct effect/action previews, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
-| **PREVIEW / UI** | Per-character home/select framing plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
+| **PREVIEW / UI** | One shared home/roster showcase transform and camera plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
 
 Editing a kit's max health updates living brawlers of that class immediately, keeping
 their health ratio, so you can feel a change without respawning.
@@ -222,18 +243,23 @@ personal UI preferences, and completed tutorial actions.
 
 The command center shows `PROJECT DEFAULTS` or `PROJECT + LOCAL DRAFT (N)`:
 
-- `SAVE KIT + FRAMING AS PROJECT DEFAULT` promotes the active kit and its menu framing.
+- `SAVE KIT + SHOWCASE AS PROJECT DEFAULT` promotes the active kit and shared showcase.
 - `SAVE ALL AS PROJECT DEFAULTS` promotes all live project-scoped values.
 - Reset/discard actions restore the tracked project values and clear matching draft keys.
 
 Promotion validates and atomically writes the tracked file. It creates an ordinary Git
 working-tree modification but does not run `git commit`.
 
-If the new local file is absent, an existing version-1/version-2 `tuning.cfg` is imported
-once into the split draft/profile files without modifying the original. Version-1
-Guardian bolt/Sanctuary numbers are discarded because they do not describe the new
-rain/Resonance behavior. See [`config/README.md`](config/README.md) for the schema and
-authoring workflow.
+If the new local file is absent, an existing `tuning.cfg` is imported once into the
+split draft/profile files without modifying the original. Version-1 Tank mobility is
+migrated to a dash secondary, its old Scrapper weapon fields are discarded in favor of
+the current Ripsaw/Shell kit, and its shared showcase is derived from Scrapper's former
+home framing. Version-1 Guardian bolt/Sanctuary numbers are also discarded because they
+do not describe the current rain/Resonance behavior. The next save writes the complete
+version-3 schema. Version-2 typed files migrate the old Guard kind/capacity/movement
+values to Shell while using the new healing and recharge defaults. See
+[`config/README.md`](config/README.md) for the schema and authoring
+workflow.
 
 ## Look
 
@@ -282,10 +308,11 @@ source sheets; `make check-ui` verifies dimensions, hashes, provenance files, ow
 and the absence of downloaded archives.
 
 **Ability VFX** are a reusable presentation library rather than art embedded in a
-character model. Stable gameplay events select one of 28 recipes, and each recipe layers
+character model. Stable gameplay events select one of 34 recipes, and each recipe layers
 CC0 flipbooks or particle shapes over the existing procedural particles, lights, rings,
-and authoritative telegraphs. Scrapper uses compact industrial sparks, Longshot uses
-clean cyan rail energy, Mortar adds animated explosions/smoke/scorch, Tank distinguishes
+and authoritative telegraphs. Scrapper adds saw return/catch and Shell
+start/hit/collapse/restore feedback to its industrial sparks, Longshot uses clean cyan rail
+energy, Mortar adds animated explosions/smoke/scorch, Tank distinguishes
 blue non-damaging Shoulder Jets from gold destructive Charge and draws teal reclaim
 energy back from successful hits, and Guardian layers restorative rain and resonance
 marks over its real field geometry. Imported recipe layers render at a shared `4.0×`
@@ -372,11 +399,12 @@ invisible.
 
 SCRAPPER, LONGSHOT, TANK, and GUARDIAN are played as rigged, animated character models -
 on the menu podium, in character select, and in the arena. Mortar keeps its primitive
-brawler in its accent colour. Menu and character-select previews hold a
-fixed direction while their idle animation continues. Every character has independently
-authorable home/select yaw, scale, offset, camera height, and distance. Tank's tracked
-profile uses a 25-degree right-facing home offset, then returns to a smaller direct-front
-character-select pose so its full stance fits the roster stage. In a match each model
+brawler in its accent colour. Menu and character-select previews hold a fixed direction
+while their idle animation continues. Every candidate on both screens uses one
+project-authorable showcase: 180° yaw, 0.90 scale, zero offset, camera
+`(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV. Candidate changes swap
+only the model, so character placement and the hangar background remain stable. In a
+match each model
 picks its clip from movement (idle, walking, running or dashing), flashes on hit, ghosts
 in bushes like everything else, and carries a red cast on enemies and a blue one on
 allied bots so a grey model still reads friend-or-foe at a glance. The WORLD-tab toggle
@@ -403,11 +431,11 @@ to each model's animation rest pose, and writes self-contained raylib assets und
 `make check-character-assets` validates the model, animation, generated-output, root
 motion, mesh-index, and texture contracts. Dense imports are split into raylib-safe
 16-bit indexed primitives automatically; Longshot is the current high-detail example.
-The current twelve-clip libraries do not contain authored attack clips, so all current
-rigged characters use those shared procedural `MAIN`, `SUPER`, `CAST`, and `MOBILITY`
-overlays. Optional future clips may replace an overlay by using `attack_main` (or
-`shoot`), `attack_super`, `cast`, or `mobility`. raylib has no locomotion crossfade, so
-base clip changes restart the cycle - a known small pop.
+The current twelve-clip libraries do not contain authored action clips, so all current
+rigged characters use those shared procedural `MAIN`, `SUPER`, `CAST`, `MOBILITY`, and
+`GUARD` overlays. Optional future clips may replace an overlay by using `attack_main`
+(or `shoot`), `attack_super`, `cast`, `mobility`, or `guard`. raylib has no locomotion
+crossfade, so base clip changes restart the cycle - a known small pop.
 
 Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
 check and then render as a collapsed spike-ball. The full story of why (raylib's
@@ -425,11 +453,11 @@ is sufficient; repeated animation exports are not required):
 
 | Kit | HP | Attack | Super |
 |-----|----|--------|-------|
-| **SCRAPPER** | 3800 | 5-pellet spread, short range | `BUCKSHOT` — 9 pellets, breaks walls |
+| **SCRAPPER** | 3800 | `RIPSAW` — 700 out + 700 back; Shift Shell absorbs 1,200 damage from 360° and heals 30% absorbed | `WRECKING DISC` — 1,100 per leg, breaks crates, outbound pull, return knockback |
 | **LONGSHOT** | 2800 | Single shot, scales from 50% to 100% damage with travel distance | `RAILGUN` — piercing, hits everyone in a line |
 | **MORTAR** | 3200 | Arcing lob that clears walls, splash on landing | `BARRAGE` — three shells in a fan |
-| **TANK** | 5600 | 4-pellet burst; heals 20% of actual damage; Shift jets every 2.5s | `CHARGE` — dash that damages, knocks back and smashes crates |
-| **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 100-point damage/healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
+| **TANK** | 8009 | 6-pellet burst; heals about 49.9% of actual damage; Shift jets every 2.5s | `CHARGE` — dash that damages, knocks back and smashes crates |
+| **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 255-damage/263-healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
 
 Health and damage use Brawl Stars' numeric scale, so the damage numbers read familiarly.
 
@@ -527,7 +555,8 @@ sandbox it started as, with the static training bots.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
 - Locomotion clips switch without crossfading; explicit action overlays blend in and out.
 - Mortar still uses the primitive fallback character.
-- Headless tests cover configuration, Guardian behavior, Tank sustain/mobility/Charge,
+- Headless tests cover version-3 configuration plus v1/v2 migration, Guardian behavior,
+  Tank sustain/mobility/Charge, Scrapper returning discs/Shell lifecycle/AI/cover/ownership,
   out-of-combat regeneration timing and interruption, all-kit camera isolation, external
   maps, deterministic replay, events, presentation isolation, and deterministic
   character retargeting/asset contracts and stationary-fire animation isolation, plus

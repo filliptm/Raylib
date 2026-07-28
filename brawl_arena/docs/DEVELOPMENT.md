@@ -1,6 +1,6 @@
 # Brawl Arena development guide
 
-Last code-verified: 2026-07-27
+Last code-verified: 2026-07-28
 
 ## Build targets
 
@@ -14,7 +14,7 @@ make ui-assets          # rebuild tracked tintable UI motifs from retained sourc
 make character-assets   # bake mesh library + shared animations into runtime GLBs
 make check-character-assets # validate rigs, clips, outputs, and 1K textures
 make validate-config    # validate tracked canonical project values
-make test               # Python asset-pipeline tests + eleven C test executables
+make test               # Python asset-pipeline tests + twelve C test executables
 make sanitize           # clean sanitizer headless run
 make clean
 ```
@@ -149,10 +149,11 @@ test exist to keep simulation usable without a window.
 | `test_gameplay` | identical input replay and simulation event/presentation isolation |
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
-| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and presentation profiles |
-| `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit action blend timing |
+| `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
+| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and the shared showcase |
+| `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit action/held-Shell pose blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
-| `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Tank reclaim/jets, and Guardian rain feedback |
+| `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell events, Tank reclaim/jets, and Guardian rain feedback |
 | `test_character_pipeline.py` | rig rejection, merged-source rest-pose fallback, bind-relative math, deterministic baking, canonical clips, raylib-safe mesh indices, and 1K model/output validation |
 | `test_vfx_pipeline.py` | deterministic atlas generation, source provenance, and manifest validation |
 
@@ -166,6 +167,9 @@ matrix. At minimum, after changes to runtime/presentation:
 
 - Main menu, Brawlers, Practice, Play, Escape/back, and fade transitions.
 - All five kit previews and both main/ultimate firing.
+- Shared home/roster showcase framing while rapidly changing candidates.
+- Scrapper Ripsaw/Wrecking Disc two-leg hits, cover interaction, held Shell,
+  absorb healing/recharge/break recovery, and Fight-bot raise/lower timing.
 - Tank Reclamation healing, Shift Shoulder Jets cooldown/cover stop, and Charge.
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.
 - Three-second out-of-combat regeneration, one-second pulses, and attack/damage resets.

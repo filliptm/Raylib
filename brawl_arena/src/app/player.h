@@ -13,6 +13,10 @@ typedef struct PlayerInput {
     bool attackReleased;
     bool superHeld;
     bool autoAttackPressed;
+    bool secondaryPressed;
+    bool secondaryHeld;
+    bool secondaryReleased;
+    // Legacy replay field: treated as a secondary press.
     bool mobilityPressed;
     bool actionsBlocked;        // UI owns the pointer this frame
 } PlayerInput;

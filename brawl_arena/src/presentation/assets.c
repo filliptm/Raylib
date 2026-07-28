@@ -581,6 +581,7 @@ static void ResetOptionalClips(RiggedCharacter *character)
     character->clipActionSuper = -1;
     character->clipActionCast = -1;
     character->clipActionMobility = -1;
+    character->clipActionGuard = -1;
 }
 
 static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
@@ -639,6 +640,7 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->clipActionSuper = FindCharacterClip(character, "attack_super");
     character->clipActionCast = FindCharacterClip(character, "cast");
     character->clipActionMobility = FindCharacterClip(character, "mobility");
+    character->clipActionGuard = FindCharacterClip(character, "guard");
 
     // Meshy's rig chains Hips -> Spine02 -> Spine01 -> Spine, with "Spine" as the
     // CHEST joint parenting both shoulders and the neck. The whole-torso pivot is
@@ -1169,6 +1171,7 @@ static int ActionClipFor(const RiggedCharacter *character, CharacterActionId act
         case CHARACTER_ACTION_SUPER: return character->clipActionSuper;
         case CHARACTER_ACTION_CAST: return character->clipActionCast;
         case CHARACTER_ACTION_MOBILITY: return character->clipActionMobility;
+        case CHARACTER_ACTION_GUARD: return character->clipActionGuard;
         default: return -1;
     }
 }
@@ -1285,6 +1288,17 @@ static void ApplyProceduralAction(const RiggedCharacter *character, Transform *p
         AimPoseArm(character, pose, character->boneRightShoulder,
                    character->boneRightHand, (Vector3){ 0.30f, -0.18f, -1.0f },
                    kick*0.70f);
+    }
+    else if (action == CHARACTER_ACTION_GUARD)
+    {
+        AimPoseArm(character, pose, character->boneLeftShoulder,
+                   character->boneLeftHand, (Vector3){ -0.70f, 0.36f, 0.70f },
+                   kick*0.92f);
+        AimPoseArm(character, pose, character->boneRightShoulder,
+                   character->boneRightHand, (Vector3){ 0.70f, 0.36f, 0.70f },
+                   kick*0.92f);
+        RotatePoseSubtree(character, pose, character->boneSpine,
+                         QuaternionFromEuler(-0.16f, 0.0f, 0.0f), kick*0.85f);
     }
 }
 

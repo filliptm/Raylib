@@ -249,13 +249,26 @@ static void TabKit(CommandUi *ui)
     }
     else
     {
-        CommandUiSliderI(ui, "Damage / pellet", &k->damage, 20, 4000);
+        CommandUiSliderI(ui,
+                         k->mainKind == ATTACK_RETURNING
+                             ? "Damage / leg" : "Damage / pellet",
+                         &k->damage, 20, 4000);
         if (k->healing > 0) CommandUiSliderI(ui, "Healing / ally", &k->healing, 20, 4000);
-        CommandUiSliderI(ui, "Pellets", &k->pellets, 1, 20);
-        CommandUiSliderF(ui, "Spread", &k->spreadDeg, 0.0f, 90.0f, "%.0f deg");
-        CommandUiSliderF(ui, "Projectile speed", &k->speed, 6.0f, 90.0f, "%.0f");
+        if (k->mainKind != ATTACK_RETURNING)
+        {
+            CommandUiSliderI(ui, "Pellets", &k->pellets, 1, 20);
+            CommandUiSliderF(ui, "Spread", &k->spreadDeg,
+                             0.0f, 90.0f, "%.0f deg");
+        }
+        CommandUiSliderF(ui,
+                         k->mainKind == ATTACK_RETURNING
+                             ? "Outbound speed" : "Projectile speed",
+                         &k->speed, 6.0f, 90.0f, "%.0f");
         CommandUiSliderF(ui, "Range", &k->range, 2.0f, 40.0f, "%.1f");
         CommandUiSliderF(ui, "Shot size", &k->projRadius, 0.05f, 4.0f, "%.2f");
+        if (k->mainKind == ATTACK_RETURNING)
+            CommandUiSliderF(ui, "Return speed", &k->returnSpeed,
+                             6.0f, 120.0f, "%.1f");
     }
     CommandUiSliderF(ui, "Cooldown", &k->cooldown, 0.05f, 2.0f, "%.2fs");
     CommandUiSliderF(ui, "Reload / ammo", &k->reloadPerAmmo, 0.15f, 5.0f, "%.2fs");
@@ -265,14 +278,42 @@ static void TabKit(CommandUi *ui)
     if (k->mainKind == ATTACK_PROJECTILE || k->mainKind == ATTACK_LOB)
         CommandUiSliderF(ui, "Self-heal / damage", &k->selfHealRatio, 0.0f, 1.0f, "%.2f");
 
-    if (k->mobilityName && k->mobilityDuration > 0.0f)
+    if (k->secondaryKind != SECONDARY_NONE)
     {
-        CommandUiSection(ui, "MOBILITY");
+        CommandUiSection(ui, "SECONDARY");
         CommandUiText(ui, k->mobilityName, COMMAND_TEXT_MAIN);
-        CommandUiSliderF(ui, "Cooldown", &k->mobilityCooldown, 0.25f, 10.0f, "%.2fs");
-        CommandUiSliderF(ui, "Duration", &k->mobilityDuration, 0.05f, 1.0f, "%.2fs");
-        CommandUiSliderF(ui, "Speed", &k->mobilitySpeed, 4.0f, 60.0f, "%.1f");
-        CommandUiText(ui, "Shift boosts along movement, then aim.", COMMAND_TEXT_DIM);
+        if (k->secondaryKind == SECONDARY_DASH)
+        {
+            CommandUiSliderF(ui, "Cooldown", &k->mobilityCooldown,
+                             0.25f, 10.0f, "%.2fs");
+            CommandUiSliderF(ui, "Duration", &k->mobilityDuration,
+                             0.05f, 1.0f, "%.2fs");
+            CommandUiSliderF(ui, "Speed", &k->mobilitySpeed,
+                             4.0f, 60.0f, "%.1f");
+            CommandUiText(ui, "Shift boosts along movement, then aim.",
+                          COMMAND_TEXT_DIM);
+        }
+        else
+        {
+            CommandUiSliderI(ui, "Capacity", &k->secondaryCapacity, 100, 5000);
+            CommandUiSliderF(ui, "Move multiplier",
+                             &k->secondaryMoveMultiplier,
+                             0.10f, 1.0f, "%.2fx");
+            CommandUiSliderF(ui, "Healing / absorbed",
+                             &k->secondaryHealRatio,
+                             0.0f, 1.0f, "%.2f");
+            CommandUiSliderF(ui, "Recharge delay",
+                             &k->secondaryRechargeDelay,
+                             0.25f, 10.0f, "%.2fs");
+            CommandUiSliderF(ui, "Recharge / second",
+                             &k->secondaryRechargeRate,
+                             25.0f, 2000.0f, "%.0f");
+            CommandUiSliderF(ui, "Break lockout",
+                             &k->secondaryBreakLockout,
+                             0.25f, 12.0f, "%.2fs");
+            CommandUiText(ui, "Hold Shift/LB for a 360-degree damage shell.",
+                          COMMAND_TEXT_DIM);
+        }
     }
 
     CommandUiSection(ui, "SUPER");
@@ -294,10 +335,28 @@ static void TabKit(CommandUi *ui)
     }
     else if (k->superKind != SUPER_DASH)
     {
-        CommandUiSliderI(ui, "Damage", &k->sDamage, 50, 6000);
-        CommandUiSliderI(ui, "Pellets", &k->sPellets, 1, 24);
-        CommandUiSliderF(ui, "Spread", &k->sSpreadDeg, 0.0f, 90.0f, "%.0f deg");
+        CommandUiSliderI(ui,
+                         k->superKind == SUPER_RETURNING
+                             ? "Damage / leg" : "Damage",
+                         &k->sDamage, 50, 6000);
+        if (k->superKind != SUPER_RETURNING)
+        {
+            CommandUiSliderI(ui, "Pellets", &k->sPellets, 1, 24);
+            CommandUiSliderF(ui, "Spread", &k->sSpreadDeg,
+                             0.0f, 90.0f, "%.0f deg");
+        }
         CommandUiSliderF(ui, "Range", &k->sRange, 2.0f, 45.0f, "%.1f");
+        if (k->superKind == SUPER_RETURNING)
+        {
+            CommandUiSliderF(ui, "Outbound speed", &k->sSpeed,
+                             6.0f, 120.0f, "%.1f");
+            CommandUiSliderF(ui, "Return speed", &k->sReturnSpeed,
+                             6.0f, 120.0f, "%.1f");
+            CommandUiSliderF(ui, "Outbound pull", &k->sOutboundPull,
+                             0.0f, 8.0f, "%.2f");
+            CommandUiSliderF(ui, "Return knockback", &k->sReturnKnockback,
+                             0.0f, 8.0f, "%.2f");
+        }
     }
     else
     {
@@ -308,12 +367,12 @@ static void TabKit(CommandUi *ui)
     CommandUiSection(ui, "");
     int kitOverrides = ConfigKitOverrideCount(w, cls);
     CommandUiText(ui, TextFormat("%d local project-value changes", kitOverrides), COMMAND_TEXT_DIM);
-    if (CommandUiButton(ui, "Reset kit to PROJECT default"))
+    if (CommandUiButton(ui, "Reset kit + showcase to PROJECT"))
     {
         ConfigResetKitToProject(w, cls);
         GameCommandExecute(w, (GameCommand){ GAME_COMMAND_SYNC_CLASS_HEALTH, cls });
     }
-    if (CommandUiButton(ui, "SAVE KIT + FRAMING AS PROJECT DEFAULT"))
+    if (CommandUiButton(ui, "SAVE KIT + SHOWCASE AS PROJECT DEFAULT"))
         ConfigPromoteKit(w, cls);
 }
 
@@ -479,10 +538,10 @@ static void TabWorld(CommandUi *ui)
     }
 
     static const char *ACTION_NAMES[] = {
-        "MAIN", "SUPER", "CAST", "MOBILITY"
+        "MAIN", "SUPER", "CAST", "MOBILITY", "GUARD"
     };
     CommandUiCycler(ui, "Character action", &g_command.actionPreview,
-                    4, ACTION_NAMES);
+                    5, ACTION_NAMES);
     if (CommandUiButton(ui, "Play selected action"))
         CharacterActionStart(
             &w->presentation, w->session.playerIdx,
@@ -534,25 +593,32 @@ static void TabPreview(CommandUi *ui)
 {
     App *w = ui->world;
     BrawlerClass cls = w->session.brawlers[w->session.playerIdx].cls;
-    CharacterPresentationDefinition *profile = &w->content.presentation[cls];
+    CharacterShowcaseDefinition *showcase = &w->content.showcase;
 
-    CommandUiSection(ui, "CHARACTER PRESENTATION");
-    CommandUiText(ui, TextFormat("%s // project-authorable framing",
-                                 CLASS_NAMES[cls]), COMMAND_TEXT_MAIN);
-    CommandUiText(ui, "Home and roster poses are independent. No automatic rotation.",
+    CommandUiSection(ui, "SHARED CHARACTER SHOWCASE");
+    CommandUiText(ui, "One transform and camera for every model and menu screen.",
+                  COMMAND_TEXT_MAIN);
+    CommandUiText(ui, "Changing candidates never moves or restarts the stage.",
                   COMMAND_TEXT_DIM);
-    CommandUiSliderF(ui, "Home yaw", &profile->homeYawDegrees,
+    CommandUiSliderF(ui, "Yaw", &showcase->yawDegrees,
                      -360.0f, 360.0f, "%.0f deg");
-    CommandUiSliderF(ui, "Roster yaw", &profile->selectYawDegrees,
-                     -360.0f, 360.0f, "%.0f deg");
-    CommandUiSliderF(ui, "Home scale", &profile->homeScale, 0.50f, 1.50f, "%.2f");
-    CommandUiSliderF(ui, "Roster scale", &profile->selectScale, 0.50f, 1.50f, "%.2f");
-    CommandUiSliderF(ui, "Home offset X", &profile->homeOffset.x, -8.0f, 8.0f, "%.2f");
-    CommandUiSliderF(ui, "Home offset Y", &profile->homeOffset.y, -4.0f, 4.0f, "%.2f");
-    CommandUiSliderF(ui, "Roster offset X", &profile->selectOffset.x, -8.0f, 8.0f, "%.2f");
-    CommandUiSliderF(ui, "Roster offset Y", &profile->selectOffset.y, -4.0f, 4.0f, "%.2f");
-    CommandUiSliderF(ui, "Camera target Y", &profile->cameraTargetY, 0.20f, 4.0f, "%.2f");
-    CommandUiSliderF(ui, "Camera distance", &profile->cameraDistance, 4.0f, 14.0f, "%.2f");
+    CommandUiSliderF(ui, "Scale", &showcase->scale, 0.50f, 1.50f, "%.2f");
+    CommandUiSliderF(ui, "Offset X", &showcase->offset.x, -8.0f, 8.0f, "%.2f");
+    CommandUiSliderF(ui, "Offset Y", &showcase->offset.y, -4.0f, 4.0f, "%.2f");
+    CommandUiSliderF(ui, "Camera X", &showcase->cameraPosition.x,
+                     -20.0f, 20.0f, "%.2f");
+    CommandUiSliderF(ui, "Camera Y", &showcase->cameraPosition.y,
+                     0.20f, 12.0f, "%.2f");
+    CommandUiSliderF(ui, "Camera Z", &showcase->cameraPosition.z,
+                     -20.0f, -2.0f, "%.2f");
+    CommandUiSliderF(ui, "Target X", &showcase->cameraTarget.x,
+                     -8.0f, 8.0f, "%.2f");
+    CommandUiSliderF(ui, "Target Y", &showcase->cameraTarget.y,
+                     0.20f, 4.0f, "%.2f");
+    CommandUiSliderF(ui, "Target Z", &showcase->cameraTarget.z,
+                     -8.0f, 8.0f, "%.2f");
+    CommandUiSliderF(ui, "Vertical FOV", &showcase->verticalFov,
+                     20.0f, 80.0f, "%.0f deg");
 
     CommandUiSection(ui, "PERSONAL UI PROFILE");
     CommandUiText(ui, "These values save to profile.cfg, never gameplay.cfg.",
@@ -571,12 +637,12 @@ static void TabPreview(CommandUi *ui)
     }
 
     CommandUiSection(ui, "PROJECT AUTHORING");
-    CommandUiText(ui, TextFormat("%d kit/profile values differ from PROJECT",
+    CommandUiText(ui, TextFormat("%d kit/showcase values differ from PROJECT",
                                  ConfigKitOverrideCount(w, cls)),
                   ConfigKitOverrideCount(w, cls) > 0 ? COMMAND_WARN : COMMAND_TEXT_DIM);
-    if (CommandUiButton(ui, "Reset kit + framing to PROJECT"))
+    if (CommandUiButton(ui, "Reset kit + showcase to PROJECT"))
         ConfigResetKitToProject(w, cls);
-    if (CommandUiButton(ui, "SAVE KIT + FRAMING AS PROJECT DEFAULT"))
+    if (CommandUiButton(ui, "SAVE KIT + SHOWCASE AS PROJECT DEFAULT"))
         ConfigPromoteKit(w, cls);
 }
 

@@ -20,26 +20,37 @@ static const CharacterRole CHARACTER_ROLES[CLASS_COUNT] = {
     CHARACTER_ROLE_SUPPORT
 };
 
-static const CharacterPresentationDefinition PRESENTATION_DEFAULTS[CLASS_COUNT] = {
-    { 180.0f, 180.0f, 1.00f, 0.94f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.30f, 7.60f },
-    { 180.0f, 180.0f, 1.00f, 0.94f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.30f, 7.60f },
-    { 180.0f, 180.0f, 0.96f, 0.91f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.34f, 7.75f },
-    { 205.0f, 180.0f, 0.86f, 0.78f, { 0.0f, 0.0f }, { 3.28f, 0.0f }, 1.62f, 8.25f },
-    { 180.0f, 180.0f, 0.94f, 0.88f, { 0.0f, 0.0f }, { 3.08f, 0.0f }, 1.42f, 7.90f }
+static const CharacterShowcaseDefinition SHOWCASE_DEFAULT = {
+    .yawDegrees = 180.0f,
+    .scale = 0.90f,
+    .offset = { 0.0f, 0.0f },
+    .cameraPosition = { 0.0f, 2.7f, -7.6f },
+    .cameraTarget = { 0.0f, 1.4f, 0.0f },
+    .verticalFov = 40.0f
 };
 
 const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
     {
-        .name = "SCRAPPER", .flavor = "Close-range spread", .maxHealth = 3800,
-        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_PROJECTILE,
-        .pellets = 5, .spreadDeg = 24.0f, .speed = 34.0f, .range = 13.0f,
-        .damage = 320, .projRadius = 0.22f, .cooldown = 0.36f,
-        .reloadPerAmmo = 1.35f, .superPerHit = 0.085f,
+        .name = "SCRAPPER", .flavor = "Returning ripsaws and a restorative shell",
+        .mobilityName = "MAGNETIC SCRAP SHELL", .maxHealth = 3800,
+        .maxAmmo = DEFAULT_MAX_AMMO, .mainKind = ATTACK_RETURNING,
+        .pellets = 1, .spreadDeg = 0.0f, .speed = 26.0f, .range = 13.0f,
+        .damage = 700, .projRadius = 0.42f, .cooldown = 0.40f,
+        .reloadPerAmmo = 1.45f, .superPerHit = 0.14f,
         .rangeScaled = false,
-        .superName = "BUCKSHOT", .superKind = SUPER_PROJECTILE,
-        .sPellets = 9, .sSpreadDeg = 34.0f, .sSpeed = 36.0f,
-        .sRange = 15.0f, .sDamage = 460, .sProjRadius = 0.26f,
-        .sPiercing = false
+        .returnSpeed = 32.0f,
+        .secondaryKind = SECONDARY_SHIELD,
+        .secondaryCapacity = 1200,
+        .secondaryMoveMultiplier = 0.65f,
+        .secondaryHealRatio = 0.30f,
+        .secondaryRechargeDelay = 3.0f,
+        .secondaryRechargeRate = 300.0f,
+        .secondaryBreakLockout = 5.0f,
+        .superName = "WRECKING DISC", .superKind = SUPER_RETURNING,
+        .sPellets = 1, .sSpreadDeg = 0.0f, .sSpeed = 22.0f,
+        .sRange = 18.0f, .sDamage = 1100, .sProjRadius = 0.75f,
+        .sPiercing = true, .sReturnSpeed = 30.0f,
+        .sOutboundPull = 1.25f, .sReturnKnockback = 2.25f
     },
     {
         .name = "LONGSHOT", .flavor = "Damage grows with distance", .maxHealth = 2800,
@@ -73,6 +84,7 @@ const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
         .damage = 440, .projRadius = 0.24f, .cooldown = 0.42f,
         .reloadPerAmmo = 1.25f, .superPerHit = 0.095f,
         .selfHealRatio = 0.20f, .rangeScaled = false,
+        .secondaryKind = SECONDARY_DASH,
         .mobilityCooldown = 2.50f, .mobilityDuration = 0.18f,
         .mobilitySpeed = 22.0f,
         .superName = "CHARGE", .superKind = SUPER_DASH,
@@ -186,6 +198,7 @@ static AbilityBehavior MainBehavior(MainAttackKind kind)
     {
         case ATTACK_LOB: return ABILITY_BEHAVIOR_LOB;
         case ATTACK_RAIN: return ABILITY_BEHAVIOR_RAIN;
+        case ATTACK_RETURNING: return ABILITY_BEHAVIOR_RETURNING;
         default: return ABILITY_BEHAVIOR_PROJECTILE;
     }
 }
@@ -197,6 +210,7 @@ static AbilityBehavior SuperBehavior(SuperKind kind)
         case SUPER_DASH: return ABILITY_BEHAVIOR_DASH;
         case SUPER_HEALING_BURST: return ABILITY_BEHAVIOR_HEALING_BURST;
         case SUPER_SOUND_WAVE: return ABILITY_BEHAVIOR_SOUND_WAVE;
+        case SUPER_RETURNING: return ABILITY_BEHAVIOR_RETURNING;
         default: return ABILITY_BEHAVIOR_PROJECTILE;
     }
 }
@@ -206,7 +220,8 @@ static void BuildMain(const WeaponDef *source, const char *characterId,
 {
     *ability = (AbilityDefinition){ 0 };
     snprintf(ability->id, sizeof(ability->id), "%s.main", characterId);
-    snprintf(ability->name, sizeof(ability->name), "%s", "MAIN ATTACK");
+    snprintf(ability->name, sizeof(ability->name), "%s",
+             strcmp(characterId, "scrapper") == 0 ? "RIPSAW" : "MAIN ATTACK");
     ability->behavior = MainBehavior(source->mainKind);
     ability->range = source->range;
     ability->radius = source->projRadius;
@@ -216,8 +231,16 @@ static void BuildMain(const WeaponDef *source, const char *characterId,
     ability->reloadPerAmmo = source->reloadPerAmmo;
     ability->superPerHit = source->superPerHit;
     ability->selfHealRatio = source->selfHealRatio;
-    if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
-        ability->behavior == ABILITY_BEHAVIOR_LOB)
+    if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
+    {
+        ability->data.returning = (ReturningAbility){
+            .outboundSpeed = source->speed,
+            .returnSpeed = source->returnSpeed,
+            .breaksCrates = false
+        };
+    }
+    else if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+             ability->behavior == ABILITY_BEHAVIOR_LOB)
     {
         ability->data.projectile = (ProjectileAbility){
             source->pellets, source->spreadDeg, source->speed, false, source->rangeScaled
@@ -244,8 +267,18 @@ static void BuildSuper(const WeaponDef *source, const char *characterId,
     ability->radius = source->sProjRadius;
     ability->damage = source->sDamage;
     ability->healing = source->sHealing;
-    if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
-        ability->behavior == ABILITY_BEHAVIOR_LOB)
+    if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
+    {
+        ability->data.returning = (ReturningAbility){
+            .outboundSpeed = source->sSpeed,
+            .returnSpeed = source->sReturnSpeed,
+            .outboundPull = source->sOutboundPull,
+            .returnKnockback = source->sReturnKnockback,
+            .breaksCrates = true
+        };
+    }
+    else if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+             ability->behavior == ABILITY_BEHAVIOR_LOB)
     {
         ability->data.projectile = (ProjectileAbility){
             source->sPellets, source->sSpreadDeg, source->sSpeed,
@@ -270,22 +303,37 @@ static void BuildSuper(const WeaponDef *source, const char *characterId,
     }
 }
 
-static void BuildMobility(const WeaponDef *source, const char *characterId,
-                          AbilityDefinition *ability)
+static void BuildSecondary(const WeaponDef *source, const char *characterId,
+                           AbilityDefinition *ability)
 {
     *ability = (AbilityDefinition){ 0 };
-    snprintf(ability->id, sizeof(ability->id), "%s.mobility", characterId);
+    snprintf(ability->id, sizeof(ability->id), "%s.secondary", characterId);
     snprintf(ability->name, sizeof(ability->name), "%s",
-             source->mobilityName ? source->mobilityName : "MOBILITY");
-    ability->behavior = ABILITY_BEHAVIOR_DASH;
-    ability->range = source->mobilitySpeed*source->mobilityDuration;
+             source->mobilityName ? source->mobilityName : "SECONDARY");
     ability->cooldown = source->mobilityCooldown;
-    ability->data.dash = (DashAbility){
-        .duration = source->mobilityDuration,
-        .speed = source->mobilitySpeed,
-        .knockback = 0.0f,
-        .breaksCrates = false
-    };
+    if (source->secondaryKind == SECONDARY_DASH)
+    {
+        ability->behavior = ABILITY_BEHAVIOR_DASH;
+        ability->range = source->mobilitySpeed*source->mobilityDuration;
+        ability->data.dash = (DashAbility){
+            .duration = source->mobilityDuration,
+            .speed = source->mobilitySpeed,
+            .knockback = 0.0f,
+            .breaksCrates = false
+        };
+    }
+    else
+    {
+        ability->behavior = ABILITY_BEHAVIOR_SHIELD;
+        ability->data.shield = (ShieldAbility){
+            .capacity = source->secondaryCapacity,
+            .moveMultiplier = source->secondaryMoveMultiplier,
+            .healRatio = source->secondaryHealRatio,
+            .rechargeDelay = source->secondaryRechargeDelay,
+            .rechargeRate = source->secondaryRechargeRate,
+            .breakLockout = source->secondaryBreakLockout
+        };
+    }
 }
 
 void ContentCatalogRebuildTyped(ContentCatalog *catalog)
@@ -313,14 +361,17 @@ void ContentCatalogRebuildTyped(ContentCatalog *catalog)
         BuildMain(source, character->id, &catalog->abilities[mainId]);
         BuildSuper(source, character->id, &catalog->abilities[superId]);
 
-        if (source->mobilityCooldown > 0.0f &&
-            source->mobilityDuration > 0.0f &&
-            source->mobilitySpeed > 0.0f &&
+        bool secondaryReady =
+            source->secondaryKind == SECONDARY_SHIELD
+            ? source->secondaryCapacity > 0
+            : source->mobilityCooldown > 0.0f &&
+              source->mobilityDuration > 0.0f;
+        if (source->secondaryKind != SECONDARY_NONE && secondaryReady &&
             catalog->abilityCount < MAX_ABILITIES)
         {
             character->mobilityAbility = catalog->abilityCount++;
-            BuildMobility(source, character->id,
-                          &catalog->abilities[character->mobilityAbility]);
+            BuildSecondary(source, character->id,
+                           &catalog->abilities[character->mobilityAbility]);
         }
     }
 }
@@ -328,7 +379,7 @@ void ContentCatalogRebuildTyped(ContentCatalog *catalog)
 void ContentCatalogResetAll(ContentCatalog *catalog)
 {
     memcpy(catalog->weapons, WEAPON_DEFAULTS, sizeof(catalog->weapons));
-    memcpy(catalog->presentation, PRESENTATION_DEFAULTS, sizeof(catalog->presentation));
+    catalog->showcase = SHOWCASE_DEFAULT;
     ContentCatalogRebuildTyped(catalog);
 }
 
@@ -368,30 +419,40 @@ const AbilityDefinition *ContentMobilityAbility(const ContentCatalog *catalog,
     return ContentAbility(catalog, definition->mobilityAbility);
 }
 
+const AbilityDefinition *ContentSecondaryAbility(const ContentCatalog *catalog,
+                                                 BrawlerClass character)
+{
+    return ContentMobilityAbility(catalog, character);
+}
+
 const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abilityId)
 {
     if (!catalog || abilityId < 0 || abilityId >= catalog->abilityCount) return 0;
     return &catalog->abilities[abilityId];
 }
 
-const CharacterPresentationDefinition *ContentCharacterPresentation(
-    const ContentCatalog *catalog, BrawlerClass character)
+const CharacterShowcaseDefinition *ContentCharacterShowcase(
+    const ContentCatalog *catalog)
 {
-    if (!catalog || character < 0 || character >= CLASS_COUNT) return 0;
-    return &catalog->presentation[character];
+    return catalog ? &catalog->showcase : 0;
 }
 
-bool ContentPresentationValid(const CharacterPresentationDefinition *presentation)
+bool ContentShowcaseValid(const CharacterShowcaseDefinition *showcase)
 {
-    if (!presentation) return false;
-    return isfinite(presentation->homeYawDegrees) &&
-           isfinite(presentation->selectYawDegrees) &&
-           presentation->homeScale >= 0.50f && presentation->homeScale <= 1.50f &&
-           presentation->selectScale >= 0.50f && presentation->selectScale <= 1.50f &&
-           fabsf(presentation->homeOffset.x) <= 8.0f &&
-           fabsf(presentation->homeOffset.y) <= 4.0f &&
-           fabsf(presentation->selectOffset.x) <= 8.0f &&
-           fabsf(presentation->selectOffset.y) <= 4.0f &&
-           presentation->cameraTargetY >= 0.2f && presentation->cameraTargetY <= 4.0f &&
-           presentation->cameraDistance >= 4.0f && presentation->cameraDistance <= 14.0f;
+    if (!showcase) return false;
+    return isfinite(showcase->yawDegrees) &&
+           showcase->scale >= 0.50f && showcase->scale <= 1.50f &&
+           fabsf(showcase->offset.x) <= 8.0f &&
+           fabsf(showcase->offset.y) <= 4.0f &&
+           fabsf(showcase->cameraPosition.x) <= 20.0f &&
+           showcase->cameraPosition.y >= 0.2f &&
+           showcase->cameraPosition.y <= 12.0f &&
+           showcase->cameraPosition.z >= -20.0f &&
+           showcase->cameraPosition.z <= -2.0f &&
+           fabsf(showcase->cameraTarget.x) <= 8.0f &&
+           showcase->cameraTarget.y >= 0.2f &&
+           showcase->cameraTarget.y <= 4.0f &&
+           fabsf(showcase->cameraTarget.z) <= 8.0f &&
+           showcase->verticalFov >= 20.0f &&
+           showcase->verticalFov <= 80.0f;
 }

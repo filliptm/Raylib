@@ -118,13 +118,15 @@ brief casts, jets, beams, and healing returns stay attached while a character mo
 The WORLD command-center tab exposes the runtime observability used for interactive
 checks: loaded atlas count, active/capacity/dropped layers, consumed event and spawned
 layer totals, the last recipe, direct recipe spawning, and `MAIN`, `SUPER`, `CAST`, and
-`MOBILITY` character-action previews with live action progress/blend readout.
+`MOBILITY`, and `GUARD` character-action previews with live action progress/blend
+readout.
 
 ## Current recipe coverage
 
-There are 28 runtime recipes:
+There are 34 runtime recipes:
 
-- Scrapper main/super cast and impact.
+- Scrapper main/super cast and impact, Ripsaw/Wrecking Disc return and catch, and
+  Magnetic Scrap Shell start/hit/collapse/restore.
 - Longshot main/super cast and impact.
 - Mortar main/super cast and impact, including explosion, smoke, and scorch layers.
 - Tank main cast/impact, Reclamation path, Shoulder Jets start/trail, and Charge
@@ -140,6 +142,12 @@ boost never reads like the destructive super.
 Persistent Guardian field boundaries remain procedural in `ability_visuals.c`. Imported
 art decorates each cast and tick without replacing the true growing rain radius or
 Resonance cone.
+
+Returning discs also keep a procedural metal body and trail, while an active Shell draws
+a procedural full sphere tied to authoritative charge. Its energy cage uses the shared
+flushed no-depth-write pass and becomes unstable at low charge. Imported recipes
+decorate phase changes and hit outcomes; they do not define collision, healing,
+recharge, or capacity.
 
 All imported recipe layers use the shared `VFX_RENDER_SCALE` value of `4.0`. This makes
 billboard dimensions, flipbook dimensions, ground-art dimensions, smoke dimensions, and
@@ -195,6 +203,7 @@ Automated checks cover:
 - One-shot/looping frame selection and delayed layers.
 - Fixed-pool expiry, saturation, and priority replacement.
 - Cast IDs for all five kits.
+- Scrapper return/catch and Shell start/hit/collapse/restore events.
 - Tank reclaim, Shoulder Jets trail, Tank impact, and Guardian rain pulse events.
 
 Interactive checks remain required for camera-facing alignment, occlusion, perceived

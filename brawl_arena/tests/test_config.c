@@ -41,6 +41,24 @@ static bool WriteText(const char *path, const char *text)
     return ok;
 }
 
+static bool FileContains(const char *path, const char *needle)
+{
+    FILE *file = fopen(path, "r");
+    if (!file) return false;
+    char line[320];
+    bool found = false;
+    while (fgets(line, sizeof(line), file))
+    {
+        if (strstr(line, needle))
+        {
+            found = true;
+            break;
+        }
+    }
+    fclose(file);
+    return found;
+}
+
 static void SetPaths(const char *project, const char *local,
                      const char *profile, const char *legacy)
 {
@@ -92,21 +110,36 @@ int main(int argc, char **argv)
     CHECK(first.content.weapons[CLASS_HEALER].duration == 1.35f &&
           first.content.weapons[CLASS_HEALER].sTickRate == 0.35f,
           "Guardian timing did not load from canonical config");
-    CHECK(first.content.weapons[CLASS_BRUISER].selfHealRatio == 0.20f &&
+    CHECK(first.content.weapons[CLASS_BRUISER].secondaryKind == SECONDARY_DASH &&
+          first.content.weapons[CLASS_BRUISER].selfHealRatio > 0.0f &&
           first.content.weapons[CLASS_BRUISER].mobilityCooldown == 2.50f &&
           first.content.weapons[CLASS_BRUISER].mobilityDuration == 0.18f &&
           first.content.weapons[CLASS_BRUISER].mobilitySpeed == 22.0f,
-          "Tank sustain/mobility did not load from canonical config");
-    CHECK(first.content.presentation[CLASS_BRUISER].homeYawDegrees == 205.0f &&
-          first.content.presentation[CLASS_BRUISER].selectYawDegrees == 180.0f &&
-          first.content.presentation[CLASS_BRUISER].selectScale == 0.78f,
-          "Tank presentation profile did not load from canonical config");
+          "Tank sustain/secondary did not load from canonical config");
+    CHECK(first.content.weapons[CLASS_SHOTGUNNER].mainKind == ATTACK_RETURNING &&
+          first.content.weapons[CLASS_SHOTGUNNER].superKind == SUPER_RETURNING &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryKind == SECONDARY_SHIELD &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryCapacity == 1200 &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryHealRatio == 0.30f &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryRechargeDelay == 3.0f &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryRechargeRate == 300.0f &&
+          first.content.weapons[CLASS_SHOTGUNNER].secondaryBreakLockout == 5.0f,
+          "Scrapper rework did not load from canonical config");
+    CHECK(first.content.showcase.yawDegrees == 180.0f &&
+          first.content.showcase.scale == 0.90f &&
+          first.content.showcase.cameraPosition.y == 2.70f &&
+          first.content.showcase.cameraPosition.z == -7.60f &&
+          first.content.showcase.cameraTarget.y == 1.40f &&
+          first.content.showcase.verticalFov == 40.0f,
+          "shared showcase did not load from canonical config");
     CHECK(first.tune.healthRegenDelay == 3.0f &&
           first.tune.healthRegenInterval == 1.0f &&
           first.tune.healthRegenRatio == 0.13f,
           "health regeneration did not load from canonical config");
     CHECK(ConfigProjectOverrideCount(&first) == 0, "clean load reported draft overrides");
 
+    int projectGuardianDamage =
+        first.content.weapons[CLASS_HEALER].damage;
     first.content.weapons[CLASS_HEALER].damage = 123;
     ConfigMarkDirty();
     ConfigFlush(&first);
@@ -122,7 +155,8 @@ int main(int argc, char **argv)
 
     ConfigResetKitToProject(&draftReload, CLASS_HEALER);
     ConfigFlush(&draftReload);
-    CHECK(draftReload.content.weapons[CLASS_HEALER].damage == 100,
+    CHECK(draftReload.content.weapons[CLASS_HEALER].damage ==
+              projectGuardianDamage,
           "kit reset did not restore project value");
     CHECK(ConfigKitOverrideCount(&draftReload, CLASS_HEALER) == 0,
           "kit reset left a project override");
@@ -183,7 +217,7 @@ int main(int argc, char **argv)
           "profile state polluted project provenance");
 
     CHECK(WriteText(local,
-        "format_version 1\n"
+        "format_version 3\n"
         "kit.guardian.main.tick_interval 9.0\n"),
         "could not create invalid draft");
     App rejectedDraft = { 0 };
@@ -196,17 +230,119 @@ int main(int argc, char **argv)
 
     char invalidProject[512];
     snprintf(invalidProject, sizeof(invalidProject), "%s/invalid-project.cfg", directory);
-    CHECK(WriteText(invalidProject, "format_version 1\ngameplay.move_speed 11\n"),
+    CHECK(WriteText(invalidProject, "format_version 3\ngameplay.move_speed 11\n"),
           "could not create invalid project fixture");
     CHECK(!ConfigValidateProjectFile(invalidProject, validation, sizeof(validation)),
           "incomplete canonical file unexpectedly validated");
 
     char duplicateVersion[512];
     snprintf(duplicateVersion, sizeof(duplicateVersion), "%s/duplicate-version.cfg", directory);
-    CHECK(WriteText(duplicateVersion, "format_version 1\nformat_version 1\n"),
+    CHECK(WriteText(duplicateVersion, "format_version 3\nformat_version 3\n"),
           "could not create duplicate-version fixture");
     CHECK(!ConfigValidateProjectFile(duplicateVersion, validation, sizeof(validation)),
           "duplicate canonical format version unexpectedly validated");
+
+    char v1Project[512], v1Local[512], v1Profile[512];
+    snprintf(v1Project, sizeof(v1Project), "%s/v1-project.cfg", directory);
+    snprintf(v1Local, sizeof(v1Local), "%s/v1-local.cfg", directory);
+    snprintf(v1Profile, sizeof(v1Profile), "%s/v1-profile.cfg", directory);
+    CHECK(WriteText(v1Project,
+        "format_version 1\n"
+        "gameplay.move_speed 7.250000\n"
+        "preview.scrapper.home_yaw_degrees 171.000000\n"
+        "preview.scrapper.select_yaw_degrees 120.000000\n"
+        "preview.scrapper.home_scale 0.880000\n"
+        "preview.scrapper.select_scale 1.200000\n"
+        "preview.scrapper.home_offset_x 0.400000\n"
+        "preview.scrapper.home_offset_y -0.200000\n"
+        "preview.scrapper.select_offset_x 3.000000\n"
+        "preview.scrapper.select_offset_y 1.000000\n"
+        "preview.scrapper.camera_target_y 1.550000\n"
+        "preview.scrapper.camera_distance 8.200000\n"
+        "preview.tank.home_yaw_degrees 205.000000\n"
+        "kit.tank.mobility.cooldown 2.750000\n"
+        "kit.tank.mobility.duration 0.200000\n"
+        "kit.tank.mobility.speed 24.000000\n"
+        "kit.longshot.main.damage 1111\n"
+        "kit.scrapper.main.kind projectile\n"),
+        "could not create v1 typed migration fixture");
+    SetPaths(v1Project, v1Local, v1Profile, absent);
+    App migrated = { 0 };
+    CHECK(ConfigInitialize(&migrated), "v1 typed project migration failed");
+    CHECK(migrated.tune.moveSpeed == 7.25f &&
+          migrated.content.weapons[CLASS_SNIPER].damage == 1111,
+          "v1 migration did not preserve unrelated project values");
+    CHECK(migrated.content.weapons[CLASS_BRUISER].secondaryKind ==
+              SECONDARY_DASH &&
+          migrated.content.weapons[CLASS_BRUISER].mobilityCooldown == 2.75f &&
+          migrated.content.weapons[CLASS_BRUISER].mobilityDuration == 0.20f &&
+          migrated.content.weapons[CLASS_BRUISER].mobilitySpeed == 24.0f,
+          "v1 Tank mobility did not migrate to a dash secondary");
+    CHECK(migrated.content.weapons[CLASS_SHOTGUNNER].mainKind ==
+              ATTACK_RETURNING &&
+          migrated.content.weapons[CLASS_SHOTGUNNER].secondaryKind ==
+              SECONDARY_SHIELD,
+          "obsolete v1 Scrapper weapon values replaced the reworked kit");
+    CHECK(migrated.content.showcase.yawDegrees == 171.0f &&
+          migrated.content.showcase.scale == 0.88f &&
+          migrated.content.showcase.offset.x == 0.40f &&
+          migrated.content.showcase.offset.y == -0.20f &&
+          migrated.content.showcase.cameraTarget.y == 1.55f &&
+          migrated.content.showcase.cameraPosition.z == -8.20f,
+          "v1 Scrapper home framing did not derive the global showcase");
+    CHECK(ConfigPromoteAll(&migrated),
+          "migrated v1 project could not be saved as v3");
+    CHECK(FileContains(v1Project, "format_version 3"),
+          "save after v1 migration did not emit schema v3");
+
+    char v2Project[512], v2Local[512], v2Profile[512];
+    snprintf(v2Project, sizeof(v2Project), "%s/v2-project.cfg", directory);
+    snprintf(v2Local, sizeof(v2Local), "%s/v2-local.cfg", directory);
+    snprintf(v2Profile, sizeof(v2Profile), "%s/v2-profile.cfg", directory);
+    CHECK(WriteText(v2Project,
+        "format_version 2\n"
+        "gameplay.move_speed 8.500000\n"
+        "kit.longshot.main.damage 1337\n"
+        "kit.scrapper.secondary.kind guard\n"
+        "kit.scrapper.secondary.cooldown 4.000000\n"
+        "kit.scrapper.secondary.duration 0.750000\n"
+        "kit.scrapper.secondary.speed 0.000000\n"
+        "kit.scrapper.secondary.capacity 900\n"
+        "kit.scrapper.secondary.arc_degrees 110.000000\n"
+        "kit.scrapper.secondary.move_multiplier 0.700000\n"
+        "kit.scrapper.secondary.counter_range 3.250000\n"
+        "kit.scrapper.secondary.counter_damage_min 100\n"
+        "kit.scrapper.secondary.counter_damage_max 340\n"
+        "kit.scrapper.secondary.counter_knockback_min 1.500000\n"
+        "kit.scrapper.secondary.counter_knockback_max 3.000000\n"),
+        "could not create v2 typed migration fixture");
+    SetPaths(v2Project, v2Local, v2Profile, absent);
+    App migratedV2 = { 0 };
+    CHECK(ConfigInitialize(&migratedV2), "v2 typed project migration failed");
+    CHECK(migratedV2.tune.moveSpeed == 8.50f &&
+          migratedV2.content.weapons[CLASS_SNIPER].damage == 1337,
+          "v2 migration did not preserve unrelated project values");
+    CHECK(migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryKind ==
+              SECONDARY_SHIELD &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryCapacity == 900 &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryMoveMultiplier ==
+              0.70f &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryHealRatio ==
+              0.30f &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryRechargeDelay ==
+              3.0f &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryRechargeRate ==
+              300.0f &&
+          migratedV2.content.weapons[CLASS_SHOTGUNNER].secondaryBreakLockout ==
+              5.0f,
+          "v2 Guard values did not migrate to the renewable shield");
+    CHECK(ConfigPromoteAll(&migratedV2),
+          "migrated v2 project could not be saved as v3");
+    CHECK(FileContains(v2Project, "format_version 3") &&
+          FileContains(v2Project, "kit.scrapper.secondary.kind shield") &&
+          FileContains(v2Project,
+                       "kit.scrapper.secondary.recharge_rate 300.000000"),
+          "save after v2 migration did not emit canonical shield schema");
 
     char importedLocal[512], importedProfile[512];
     snprintf(importedLocal, sizeof(importedLocal), "%s/imported.local.cfg", directory);
@@ -227,6 +363,6 @@ int main(int argc, char **argv)
     CHECK(FileExists(importedLocal) && FileExists(importedProfile),
           "legacy import did not create split local/profile files");
 
-    puts("configuration layering, promotion, reset, rejection, profile, and migration passed");
+    puts("configuration v3 layering, promotion, rejection, profile, and migrations passed");
     return 0;
 }

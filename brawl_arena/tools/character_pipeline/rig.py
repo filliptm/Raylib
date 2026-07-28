@@ -46,6 +46,7 @@ OPTIONAL_CLIPS = (
     "attack_super",
     "cast",
     "mobility",
+    "guard",
 )
 CHARACTER_METADATA_KEY = "brawlArenaCharacter"
 LIBRARY_METADATA_KEY = "brawlArenaAnimationLibrary"

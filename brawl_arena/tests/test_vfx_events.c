@@ -38,8 +38,17 @@ static void SetupBrawler(const ContentCatalog *content, Brawler *brawler,
         .visible = true,
         .spawnScale = 1.0f,
         .dashAbility = -1,
+        .shieldAbility = -1,
         .aiTarget = -1
     };
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(content, cls);
+    if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD)
+    {
+        brawler->shieldAbility =
+            ContentCharacter(content, cls)->mobilityAbility;
+        brawler->shieldCharge = (float)secondary->data.shield.capacity;
+    }
 }
 
 static void SetupDuel(GameSession *session, const ContentCatalog *content,
@@ -84,6 +93,21 @@ static bool HasAction(const GameSession *session, CharacterActionId action)
             session->events.items[i].sourceBrawler == 0)
             return true;
     return false;
+}
+
+static void SpawnIncomingProjectile(GameSession *session)
+{
+    session->projectiles[0] = (Projectile){
+        .position = { 0.0f, 0.75f, 3.0f },
+        .origin = { 0.0f, 0.75f, 3.0f },
+        .velocity = { 0.0f, 0.0f, -20.0f },
+        .range = 20.0f,
+        .damage = 300,
+        .radius = 0.18f,
+        .team = TEAM_ENEMY,
+        .owner = 1,
+        .active = true
+    };
 }
 
 int main(void)
@@ -180,6 +204,42 @@ int main(void)
     CHECK(HasVfx(&session, VFX_TANK_JETS_TRAIL),
           "Shoulder Jets did not emit its throttled trail");
 
+    // Scrapper's saw legs and held shell have distinct event identities so the
+    // renderer does not have to infer ability phases from projectile state.
+    SetupDuel(&session, &content, CLASS_SHOTGUNNER);
+    game.session = &session;
+    WeaponsFire(game, 0, false, 5.0f);
+    for (int frame = 0; frame < 180; frame++)
+        ProjectilesUpdate(game, 1.0f/120.0f);
+    CHECK(HasVfx(&session, VFX_SCRAPPER_RETURN),
+          "Ripsaw did not emit its outbound-to-return transition");
+    CHECK(HasVfx(&session, VFX_SCRAPPER_CATCH),
+          "Ripsaw did not emit its owner catch");
+
+    SetupDuel(&session, &content, CLASS_SHOTGUNNER);
+    game.session = &session;
+    CHECK(BrawlerTrySecondary(game, 0, (Vector3){ 0, 0, 1 }),
+          "Magnetic Scrap Shell did not activate in the VFX test");
+    CHECK(HasVfx(&session, VFX_SCRAPPER_SHIELD_START),
+          "Magnetic Scrap Shell did not emit its start recipe");
+    CHECK(HasAction(&session, CHARACTER_ACTION_GUARD),
+          "Magnetic Scrap Shell did not emit its braced pose");
+    session.events.count = 0;
+    SpawnIncomingProjectile(&session);
+    for (int frame = 0; frame < 30; frame++)
+        ProjectilesUpdate(game, 1.0f/120.0f);
+    CHECK(HasVfx(&session, VFX_SCRAPPER_SHIELD_HIT),
+          "Magnetic Scrap Shell did not emit hit feedback");
+    session.events.count = 0;
+    session.brawlers[0].shieldCharge = 100.0f;
+    BrawlerApplyDamage(game, 0, 200, 1, session.brawlers[0].position);
+    CHECK(HasVfx(&session, VFX_SCRAPPER_SHIELD_BREAK),
+          "Magnetic Scrap Shell did not emit collapse feedback");
+    session.events.count = 0;
+    BrawlersUpdate(game, 5.10f);
+    CHECK(HasVfx(&session, VFX_SCRAPPER_SHIELD_RESTORE),
+          "Magnetic Scrap Shell did not emit restore feedback");
+
     // A rain field emits the authoritative field pulse plus target feedback.
     SetupDuel(&session, &content, CLASS_HEALER);
     game.session = &session;
@@ -191,6 +251,6 @@ int main(void)
     CHECK(HasVfx(&session, VFX_GUARDIAN_RAIN_DAMAGE),
           "Guardian rain did not emit target damage feedback");
 
-    printf("VFX event tests passed: all kits, reclaim, jets, and rain are mapped\n");
+    printf("VFX event tests passed: all kits, saw, shield, reclaim, jets, and rain are mapped\n");
     return 0;
 }

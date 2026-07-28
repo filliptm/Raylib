@@ -65,6 +65,12 @@ typedef struct Brawler {
     float lastHealthRegenPulseTime;
     float spawnScale;
     float mobilityCooldown;
+    bool shieldActive;
+    bool shieldRearmRequired;
+    float shieldCharge;
+    float shieldRechargeDelay;
+    float shieldBrokenTimer;
+    int shieldAbility;
     float dashTimer;
     float dashVfxTimer;
     Vector3 dashDir;
@@ -89,12 +95,20 @@ typedef struct Brawler {
     bool deliberateAim;
 } Brawler;
 
+typedef enum {
+    PROJECTILE_MOTION_STRAIGHT = 0,
+    PROJECTILE_MOTION_RETURNING
+} ProjectileMotion;
+
 typedef struct Projectile {
     Vector3 position;
     Vector3 velocity;
     Vector3 origin;
     float traveled;
     float range;
+    float returnSpeed;
+    float outboundPull;
+    float returnKnockback;
     int damage;
     int healing;
     float selfHealRatio;
@@ -111,6 +125,10 @@ typedef struct Projectile {
     bool breaksWalls;
     bool isSuper;
     bool rangeScaled;
+    bool outbound;
+    bool breaksCrates;
+    ProjectileMotion motion;
+    BrawlerClass ownerClass;
     int hitMask;
     Color color;
     bool active;

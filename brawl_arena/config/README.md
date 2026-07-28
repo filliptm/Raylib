@@ -28,11 +28,11 @@ Command-center sliders take effect immediately and autosave to `tuning.local.cfg
 
 Use:
 
-- `SAVE KIT + FRAMING AS PROJECT DEFAULT` on KIT or PREVIEW / UI to promote the active
-  kit and its menu presentation profile.
+- `SAVE KIT + SHOWCASE AS PROJECT DEFAULT` on KIT or PREVIEW / UI to promote the active
+  kit and the shared menu showcase.
 - `SAVE ALL AS PROJECT DEFAULTS` on the WORLD tab to promote every live project-scoped
   value.
-- `Reset kit to PROJECT default` to discard the active kit's draft.
+- `Reset kit + showcase to PROJECT` to discard the active kit/showcase draft.
 - `Discard draft / restore PROJECT` to restore every project value.
 
 Promotion validates the full candidate and atomically rewrites `gameplay.cfg`. This
@@ -46,26 +46,28 @@ project defaults.
 
 ## Format and validation
 
-The format is deterministic `key value` text with stable kit identifiers. Ability kinds
-are named values such as `projectile`, `lob`, `rain`, `dash`, and `sound_wave`.
+The canonical format is version 3 deterministic `key value` text with stable kit
+identifiers. Main/super kinds include `projectile`, `lob`, `rain`, `dash`,
+`sound_wave`, and `returning`; secondary kinds are `none`, `dash`, or `shield`.
 Global out-of-combat recovery is authored with
 `gameplay.health_regen_delay`, `gameplay.health_regen_interval`, and
 `gameplay.health_regen_max_ratio`; a zero ratio disables passive regeneration.
-Each kit also declares `main.self_heal_ratio` and the complete optional mobility triplet:
-`mobility.cooldown`, `mobility.duration`, and `mobility.speed`. All three mobility values
-must be zero to disable the ability, or all three must be positive. Tank's tracked
-mobility values create Shoulder Jets; other kits currently keep the triplet at zero.
+Each kit declares `main.self_heal_ratio`, `main.return_speed`, a complete
+`secondary.*` block, and returning-super speed/pull/knockback fields. Behavior-specific
+validation requires one disc and positive outbound/return speeds for returning attacks;
+positive cooldown/duration/speed for dash secondaries; and positive capacity, movement
+multiplier, recharge delay/rate, and break lockout plus a bounded healing ratio for
+shield secondaries.
 
-Every character also requires ten `preview.<stable-kit-id>.*` keys:
+One eleven-key `preview.showcase.*` record frames every non-rotating menu model:
 
-- `home_yaw_degrees`, `select_yaw_degrees`
-- `home_scale`, `select_scale`
-- `home_offset_x`, `home_offset_y`
-- `select_offset_x`, `select_offset_y`
-- `camera_target_y`, `camera_distance`
+- `yaw_degrees`, `scale`, `offset_x`, `offset_y`
+- `camera_position_x`, `camera_position_y`, `camera_position_z`
+- `camera_target_x`, `camera_target_y`, `camera_target_z`
+- `vertical_fov`
 
-These project-scoped values frame the non-rotating menu model and are validated with the
-same all-or-nothing transaction as gameplay. Profile-only keys are `profile.ui_scale`,
+The shared project-scoped record is validated with the same all-or-nothing transaction
+as gameplay. Profile-only keys are `profile.ui_scale`,
 `profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,
 `profile.input_glyph_mode`, and `profile.tutorial_flags`.
 
@@ -75,7 +77,8 @@ The loader rejects:
 - Unknown canonical keys.
 - Invalid types, enum names, NaN, or infinity.
 - Values outside the field registry's declared range.
-- Incomplete projectile abilities.
+- Incomplete projectile or returning abilities.
+- Incomplete or internally inconsistent dash/shield secondaries.
 - Invalid rain or sound-wave duration/tick relationships.
 
 Loading is transactional, so a rejected local draft cannot partially alter runtime
@@ -103,5 +106,12 @@ BRAWL_LEGACY_TUNING=/tmp/legacy.cfg \
 
 When `tuning.local.cfg` is absent, the normal runtime reads an existing version-1 or
 version-2 `tuning.cfg` once and splits it into the new draft/profile files. The original
-file is preserved. Version-1 Guardian projectile/Sanctuary values are not applied to the
-new rain/Resonance kit because their meanings are incompatible.
+file is preserved. Version-1 Tank `mobility.*` values become its dash secondary.
+Version-1 Scrapper weapon values are ignored so obsolete shotgun/Buckshot tuning cannot
+replace Ripsaw, Wrecking Disc, or Magnetic Scrap Shell; Guardian
+projectile/Sanctuary values are likewise ignored because their meanings are
+incompatible. The shared showcase is derived from Scrapper's old home yaw, scale,
+offset, target height, and distance. Typed version-2 files retain compatible kit and
+showcase values, translate the old `guard` kind to `shield`, preserve its capacity and
+movement multiplier, discard arc/counterblast/timed-hold values, and seed the new Shell
+healing/recharge defaults. A later promotion/save always emits version 3.

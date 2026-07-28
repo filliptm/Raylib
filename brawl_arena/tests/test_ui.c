@@ -94,17 +94,22 @@ int main(void)
 
     ContentCatalog catalog = { 0 };
     ContentCatalogResetAll(&catalog);
-    for (int i = 0; i < CLASS_COUNT; i++)
-        CHECK(ContentPresentationValid(&catalog.presentation[i]),
-              "compiled character presentation profile is invalid");
-    CHECK(Near(catalog.presentation[CLASS_BRUISER].homeYawDegrees, 205.0f),
-          "Tank home pose lost its approved 25-degree offset");
-    CHECK(Near(catalog.presentation[CLASS_BRUISER].selectYawDegrees, 180.0f),
-          "Tank roster pose is not front-facing");
-    CHECK(catalog.presentation[CLASS_BRUISER].selectScale <
-          catalog.presentation[CLASS_BRUISER].homeScale,
-          "Tank roster profile does not compensate for its broad silhouette");
+    CHECK(ContentShowcaseValid(&catalog.showcase),
+          "compiled character showcase is invalid");
+    CHECK(Near(catalog.showcase.yawDegrees, 180.0f) &&
+          Near(catalog.showcase.scale, 0.90f) &&
+          Near(catalog.showcase.offset.x, 0.0f) &&
+          Near(catalog.showcase.offset.y, 0.0f),
+          "shared character transform changed");
+    CHECK(Near(catalog.showcase.cameraPosition.x, 0.0f) &&
+          Near(catalog.showcase.cameraPosition.y, 2.70f) &&
+          Near(catalog.showcase.cameraPosition.z, -7.60f) &&
+          Near(catalog.showcase.cameraTarget.x, 0.0f) &&
+          Near(catalog.showcase.cameraTarget.y, 1.40f) &&
+          Near(catalog.showcase.cameraTarget.z, 0.0f) &&
+          Near(catalog.showcase.verticalFov, 40.0f),
+          "shared showcase camera changed");
 
-    puts("UI layout, skin, focus, motion, contrast, and presentation profiles passed");
+    puts("UI layout, skin, focus, motion, contrast, and shared showcase passed");
     return 0;
 }

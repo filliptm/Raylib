@@ -258,6 +258,58 @@ static void DrawActiveFields(App *world, Assets *assets)
     EndBlendMode();
 }
 
+static void DrawActiveShields(App *world)
+{
+    BeginBlendMode(BLEND_ADDITIVE);
+    RenderBeginNoDepthWrite();
+
+    for (int i = 0; i < world->session.brawlerCount; i++)
+    {
+        Brawler *brawler = &world->session.brawlers[i];
+        if (!brawler->alive || !brawler->visible || !brawler->shieldActive)
+            continue;
+        const AbilityDefinition *ability =
+            ContentAbility(&world->content, brawler->shieldAbility);
+        if (!ability || ability->behavior != ABILITY_BEHAVIOR_SHIELD) continue;
+
+        float charge = ability->data.shield.capacity > 0
+                     ? Clamp(brawler->shieldCharge/
+                             ability->data.shield.capacity, 0.0f, 1.0f)
+                     : 0.0f;
+        float lowCharge = Clamp((0.28f - charge)/0.28f, 0.0f, 1.0f);
+        float instability =
+            lowCharge*(0.035f*sinf(world->session.time*41.0f + i*1.7f));
+        float pulse =
+            1.0f + 0.018f*sinf(world->session.time*6.5f + i) + instability;
+        float radius = 1.65f*pulse;
+        Vector3 center = {
+            brawler->position.x, 1.45f, brawler->position.z
+        };
+        unsigned char flicker = (unsigned char)(
+            168.0f + 66.0f*charge -
+            lowCharge*48.0f*(0.5f + 0.5f*sinf(world->session.time*53.0f)));
+        Color shell = { 62, 205, 255,
+                        (unsigned char)(22 + 30*charge) };
+        Color cage = { 156, 242, 255, flicker };
+
+        rlDisableBackfaceCulling();
+        DrawSphere(center, radius, shell);
+        DrawSphereWires(center, radius, 10, 20, cage);
+        DrawCircle3D(center, radius*1.012f,
+                     (Vector3){ 1.0f, 0.0f, 0.0f },
+                     world->session.time*34.0f, cage);
+        DrawCircle3D(center, radius*1.018f,
+                     (Vector3){ 0.0f, 0.0f, 1.0f },
+                     -world->session.time*27.0f,
+                     (Color){ 92, 220, 255,
+                              (unsigned char)(flicker*0.72f) });
+        rlEnableBackfaceCulling();
+    }
+
+    RenderEndNoDepthWrite();
+    EndBlendMode();
+}
+
 static void FinishAimPass(void)
 {
     RenderEndNoDepthWrite();
@@ -268,7 +320,9 @@ static void DrawAimPreview(App *world, Assets *assets)
 {
     Brawler *brawler =
         &world->session.brawlers[world->session.playerIdx];
-    if (!brawler->alive || brawler->dashTimer > 0.0f) return;
+    if (!brawler->alive || brawler->dashTimer > 0.0f ||
+        brawler->shieldActive)
+        return;
     if (!world->controller.charging && !world->controller.aimingSuper) return;
 
     bool super = world->controller.aimingSuper;
@@ -285,6 +339,10 @@ static void DrawAimPreview(App *world, Assets *assets)
     {
         spreadDegrees = ability->data.projectile.spreadDegrees;
         pellets = ability->data.projectile.pellets;
+    }
+    else if (ability->behavior == ABILITY_BEHAVIOR_RETURNING)
+    {
+        pellets = 1;
     }
     else
     {
@@ -402,5 +460,6 @@ static void DrawAimPreview(App *world, Assets *assets)
 void AbilityVisualsDraw(App *world, Assets *assets)
 {
     DrawActiveFields(world, assets);
+    DrawActiveShields(world);
     DrawAimPreview(world, assets);
 }

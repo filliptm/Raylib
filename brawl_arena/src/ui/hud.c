@@ -46,7 +46,8 @@ void HudObservePlayerInput(App *w, const PlayerInput *input)
     if (input->attackPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_AIM;
     if (input->attackReleased) w->uiPreferences.tutorialFlags |= TUTORIAL_FIRE;
     if (input->autoAttackPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_QUICK;
-    if (input->mobilityPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_MOBILITY;
+    if (input->secondaryPressed || input->mobilityPressed)
+        w->uiPreferences.tutorialFlags |= TUTORIAL_MOBILITY;
     if (input->superHeld) w->uiPreferences.tutorialFlags |= TUTORIAL_SUPER;
     if (w->session.sandbox && CommandCenterIsOpen())
         w->uiPreferences.tutorialFlags |= TUTORIAL_COMMAND;
@@ -78,13 +79,51 @@ void HudDrawBars(App *w)
         float height = UiScale(mine ? 8.0f : 6.0f);
         Rectangle bar = { screen.x - width*0.5f, screen.y, width, height };
         float health = b->maxHealth > 0 ? (float)b->health/b->maxHealth : 0.0f;
+        const AbilityDefinition *shield =
+            ContentSecondaryAbility(&w->content, b->cls);
+        bool hasShield =
+            shield && shield->behavior == ABILITY_BEHAVIOR_SHIELD;
         Color team = b->team == TEAM_PLAYER ? CueColor(w, t->ally) : CueColor(w, t->enemy);
         if (health < 0.30f) team = t->enemy;
 
         char number[24];
         snprintf(number, sizeof(number), "%d", b->health);
-        CenteredWorldText(number, (int)screen.x, (int)(screen.y - UiScale(20)),
+        CenteredWorldText(number, (int)screen.x,
+                          (int)(screen.y - UiScale(hasShield ? 31 : 20)),
                           UI_TEXT_CAPTION, mine ? t->paper : t->mist);
+
+        if (hasShield)
+        {
+            float shieldRatio = shield->data.shield.capacity > 0
+                              ? b->shieldCharge/
+                                shield->data.shield.capacity : 0.0f;
+            Rectangle shellBar = {
+                bar.x, bar.y - UiScale(10), bar.width, UiScale(5)
+            };
+            DrawRectangleRec(
+                (Rectangle){ shellBar.x - UiScale(1),
+                             shellBar.y - UiScale(1),
+                             shellBar.width + UiScale(2),
+                             shellBar.height + UiScale(2) },
+                t->shadow);
+            DrawRectangleRec(shellBar, t->hull);
+            Rectangle shellFill = shellBar;
+            shellFill.width *= Clamp(shieldRatio, 0.0f, 1.0f);
+            DrawRectangleRec(
+                shellFill,
+                b->shieldBrokenTimer > 0.0f
+                    ? t->enemy : CueColor(w, t->ion));
+            if (b->shieldBrokenTimer > 0.0f)
+            {
+                char lockout[24];
+                snprintf(lockout, sizeof(lockout), "BROKEN %.1f",
+                         b->shieldBrokenTimer);
+                CenteredWorldText(
+                    lockout, (int)screen.x,
+                    (int)(shellBar.y - UiScale(12)),
+                    UI_TEXT_CAPTION, t->enemy);
+            }
+        }
 
         DrawRectangleRec((Rectangle){ bar.x - UiScale(2), bar.y - UiScale(2),
                                       bar.width + UiScale(4), bar.height + UiScale(4) },
@@ -231,20 +270,59 @@ static void DrawAbilities(App *w, const Brawler *player)
 {
     const UiTheme *t = UiSystemActive()->theme;
     const AbilityDefinition *super = ContentSuperAbility(&w->content, player->cls);
-    const AbilityDefinition *mobility = ContentMobilityAbility(&w->content, player->cls);
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(&w->content, player->cls);
     float superProgress = Clamp(player->superCharge, 0.0f, 1.0f);
     bool superReady = superProgress >= 1.0f;
     DrawAbilityTile(UiRefRect(920, 666, 336, 110), "ULTIMATE", super->name,
                     UiBindingLabel("RMB", "RB"), superProgress, superReady,
                     CueColor(w, t->ready));
 
-    if (mobility)
+    if (secondary)
     {
-        float progress = player->mobilityCooldown <= 0.0f ? 1.0f :
-            Clamp(1.0f - player->mobilityCooldown/mobility->cooldown, 0.0f, 1.0f);
-        DrawAbilityTile(UiRefRect(920, 548, 336, 104), "BRAWLER ABILITY", mobility->name,
+        float progress;
+        bool ready;
+        char secondaryName[96];
+        snprintf(secondaryName, sizeof(secondaryName), "%s",
+                 secondary->name);
+        if (secondary->behavior == ABILITY_BEHAVIOR_SHIELD)
+        {
+            if (player->shieldBrokenTimer > 0.0f)
+            {
+                progress = Clamp(
+                    1.0f - player->shieldBrokenTimer/
+                           secondary->data.shield.breakLockout,
+                    0.0f, 1.0f);
+                snprintf(secondaryName, sizeof(secondaryName),
+                         "%s // BROKEN %.1fs", secondary->name,
+                         player->shieldBrokenTimer);
+                ready = false;
+            }
+            else
+            {
+                progress = Clamp(
+                    player->shieldCharge/
+                    secondary->data.shield.capacity, 0.0f, 1.0f);
+                snprintf(secondaryName, sizeof(secondaryName),
+                         "%s // %.0f", secondary->name,
+                         player->shieldCharge);
+                ready = player->shieldActive ||
+                        (player->shieldCharge > 0.0f &&
+                         !player->shieldRearmRequired);
+            }
+        }
+        else
+        {
+            progress = player->mobilityCooldown <= 0.0f ? 1.0f :
+                Clamp(1.0f - player->mobilityCooldown/secondary->cooldown,
+                      0.0f, 1.0f);
+            ready = player->mobilityCooldown <= 0.0f;
+        }
+        DrawAbilityTile(UiRefRect(920, 548, 336, 104), "SECONDARY",
+                        secondaryName,
                         UiBindingLabel("SHIFT", "LB"), progress,
-                        player->mobilityCooldown <= 0.0f, CueColor(w, t->ion));
+                        ready,
+                        CueColor(w, t->ion));
     }
 }
 
@@ -272,7 +350,7 @@ static const char *NextTutorial(const App *w, const Brawler *player,
         *binding = UiBindingLabel("SPACE", "A");
         return "Try a quick auto-aim shot";
     }
-    if (ContentMobilityAbility(&w->content, player->cls) &&
+    if (ContentSecondaryAbility(&w->content, player->cls) &&
         !(flags & TUTORIAL_MOBILITY))
     {
         *binding = UiBindingLabel("SHIFT", "LB");

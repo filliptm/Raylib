@@ -6,6 +6,7 @@
 #include <math.h>
 
 static bool g_gamepadAttackHeld = false;
+static bool g_gamepadSecondaryHeld = false;
 
 static int ActiveGamepad(void)
 {
@@ -92,8 +93,14 @@ PlayerInput PlayerCaptureInput(const App *w)
         input.superHeld |= IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
         input.autoAttackPressed |=
             IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_RIGHT_FACE_DOWN);
-        input.mobilityPressed |=
-            IsGamepadButtonPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
+        bool secondaryHeld =
+            IsGamepadButtonDown(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
+        input.secondaryPressed |=
+            secondaryHeld && !g_gamepadSecondaryHeld;
+        input.secondaryReleased |=
+            !secondaryHeld && g_gamepadSecondaryHeld;
+        input.secondaryHeld |= secondaryHeld;
+        g_gamepadSecondaryHeld = secondaryHeld;
     }
 
     for (int classId = 0; classId < CLASS_COUNT; classId++)
@@ -103,8 +110,13 @@ PlayerInput PlayerCaptureInput(const App *w)
     input.attackReleased = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     input.superHeld = IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
     input.autoAttackPressed = IsKeyPressed(KEY_SPACE);
-    input.mobilityPressed = IsKeyPressed(KEY_LEFT_SHIFT) ||
-                            IsKeyPressed(KEY_RIGHT_SHIFT);
+    input.secondaryPressed |= IsKeyPressed(KEY_LEFT_SHIFT) ||
+                              IsKeyPressed(KEY_RIGHT_SHIFT);
+    input.secondaryHeld |= IsKeyDown(KEY_LEFT_SHIFT) ||
+                           IsKeyDown(KEY_RIGHT_SHIFT);
+    input.secondaryReleased |= IsKeyReleased(KEY_LEFT_SHIFT) ||
+                               IsKeyReleased(KEY_RIGHT_SHIFT);
+    input.mobilityPressed = input.secondaryPressed;
     input.actionsBlocked = CommandCenterCapturesMouse();
     return input;
 }

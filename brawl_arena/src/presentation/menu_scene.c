@@ -28,7 +28,7 @@ static void RebuildPreview(MenuScene *scene, const App *app, BrawlerClass kit)
     scene->previewKit = kit;
     // The idle preview restarts from frame zero, matching the match renderer's
     // policy that a fresh clip never lands mid-stride.
-    scene->time = 0.0f;
+    scene->previewTime = 0.0f;
 }
 
 void MenuSceneInit(MenuScene *scene, Assets *assets)
@@ -44,21 +44,23 @@ void MenuSceneInit(MenuScene *scene, Assets *assets)
 void MenuSceneUpdate(MenuScene *scene, const App *app, BrawlerClass candidate,
                      AppScreen screen, float dt)
 {
+    (void)screen;
     if (candidate < 0 || candidate >= CLASS_COUNT) candidate = CLASS_SHOTGUNNER;
     if (scene->previewKit != candidate) RebuildPreview(scene, app, candidate);
-    scene->time += dt;
+    scene->stageTime += dt;
+    scene->previewTime += dt;
     scene->preview.bobPhase += dt*3.4f;
 
-    const CharacterPresentationDefinition *profile =
-        ContentCharacterPresentation(&app->content, candidate);
-    bool select = screen == SCREEN_BRAWLERS;
-    Vector2 offset = select ? profile->selectOffset : profile->homeOffset;
-    float yaw = (select ? profile->selectYawDegrees : profile->homeYawDegrees)*DEG2RAD;
-    scene->preview.position = (Vector3){ offset.x, offset.y, 0.0f };
+    const CharacterShowcaseDefinition *showcase =
+        ContentCharacterShowcase(&app->content);
+    float yaw = showcase->yawDegrees*DEG2RAD;
+    scene->preview.position =
+        (Vector3){ showcase->offset.x, showcase->offset.y, 0.0f };
     scene->preview.renderYaw = yaw;
     scene->preview.aimAngle = yaw;
-    scene->camera.position = (Vector3){ 0.0f, 2.7f, -profile->cameraDistance };
-    scene->camera.target = (Vector3){ 0.0f, profile->cameraTargetY, 0.0f };
+    scene->camera.position = showcase->cameraPosition;
+    scene->camera.target = showcase->cameraTarget;
+    scene->camera.fovy = showcase->verticalFov;
 }
 
 static void DrawHangar(MenuScene *scene)
@@ -137,7 +139,8 @@ void MenuSceneDrawStage(MenuScene *scene, const App *app, BrawlerClass candidate
         Matrix glow = MatrixMultiply(MatrixScale(1.34f, 0.02f, 1.34f),
                                      MatrixTranslate(px, 0.02f, 0));
         Color teamGlow = TEAM_COLORS[TEAM_PLAYER];
-        teamGlow.a = (unsigned char)(75 + (0.5f + 0.5f*sinf(scene->time*1.6f))*45);
+        teamGlow.a = (unsigned char)(
+            75 + (0.5f + 0.5f*sinf(scene->stageTime*1.6f))*45);
         DrawLit(a, a->cylinder, glow, a->texGlow, teamGlow, (Vector2){ 1, 1 }, 1.0f);
     EndMode3D();
 }
@@ -149,18 +152,19 @@ void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candida
     Vector3 lightCol[2];
     if (!PrepareScene(scene, app, candidate, lightPos, lightCol)) return;
     Assets *a = scene->assets;
-    const CharacterPresentationDefinition *profile =
-        ContentCharacterPresentation(&app->content, candidate);
-    bool select = screen == SCREEN_BRAWLERS;
-    float scale = select ? profile->selectScale : profile->homeScale;
-    float yaw = (select ? profile->selectYawDegrees : profile->homeYawDegrees)*DEG2RAD;
+    (void)screen;
+    const CharacterShowcaseDefinition *showcase =
+        ContentCharacterShowcase(&app->content);
+    float scale = showcase->scale;
+    float yaw = showcase->yawDegrees*DEG2RAD;
 
     BeginMode3D(scene->camera);
         RiggedCharacter *character = &a->characters[candidate];
         if (character->ok && app->tune.modelCharacter)
         {
             AssetsDrawCharacter(a, candidate, scene->preview.position, yaw, scale,
-                                character->clipIdle, scene->time*CHARACTER_CLIP_FPS,
+                                character->clipIdle,
+                                scene->previewTime*CHARACTER_CLIP_FPS,
                                 true, WHITE,
                                 0.0f, 0.0f, CHARACTER_ACTION_NONE, 0.0f, 0.0f,
                                 0, lightPos, lightCol, 2, scene->camera.position);
@@ -172,7 +176,7 @@ void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candida
             fallback.aimAngle = yaw;
             fallback.spawnScale = scale;
             Color accent = KIT_ACCENT[candidate];
-            RenderBrawlerModel(a, &fallback, scene->time, 0.0f, &accent);
+            RenderBrawlerModel(a, &fallback, scene->previewTime, 0.0f, &accent);
         }
     EndMode3D();
 }
