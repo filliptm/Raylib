@@ -97,6 +97,14 @@ int main(int argc, char **argv)
           first.content.weapons[CLASS_BRUISER].mobilityDuration == 0.18f &&
           first.content.weapons[CLASS_BRUISER].mobilitySpeed == 22.0f,
           "Tank sustain/mobility did not load from canonical config");
+    CHECK(first.content.presentation[CLASS_BRUISER].homeYawDegrees == 205.0f &&
+          first.content.presentation[CLASS_BRUISER].selectYawDegrees == 180.0f &&
+          first.content.presentation[CLASS_BRUISER].selectScale == 0.78f,
+          "Tank presentation profile did not load from canonical config");
+    CHECK(first.tune.healthRegenDelay == 3.0f &&
+          first.tune.healthRegenInterval == 1.0f &&
+          first.tune.healthRegenRatio == 0.13f,
+          "health regeneration did not load from canonical config");
     CHECK(ConfigProjectOverrideCount(&first) == 0, "clean load reported draft overrides");
 
     first.content.weapons[CLASS_HEALER].damage = 123;
@@ -134,6 +142,7 @@ int main(int argc, char **argv)
           "promotion did not clear the matching draft override");
 
     promotedReload.tune.moveSpeed = 12.25f;
+    promotedReload.tune.healthRegenRatio = 0.18f;
     promotedReload.tune.godMode = true;
     promotedReload.content.weapons[CLASS_LOBBER].maxAmmo = 4;
     ConfigMarkDirty();
@@ -143,6 +152,7 @@ int main(int argc, char **argv)
     App allReload = { 0 };
     CHECK(ConfigInitialize(&allReload), "full promotion reload failed");
     CHECK(allReload.tune.moveSpeed == 12.25f &&
+          allReload.tune.healthRegenRatio == 0.18f &&
           allReload.content.weapons[CLASS_LOBBER].maxAmmo == 4,
           "full promotion was not reproducible from project config");
     CHECK(allReload.tune.godMode,
@@ -151,11 +161,24 @@ int main(int argc, char **argv)
           "full promotion left project overrides");
 
     allReload.tune.statWins = 9;
+    allReload.uiPreferences.scale = 1.30f;
+    allReload.uiPreferences.reducedMotion = true;
+    allReload.uiPreferences.highContrast = true;
+    allReload.uiPreferences.showTutorialHints = false;
+    allReload.uiPreferences.inputGlyphMode = 2;
+    allReload.uiPreferences.tutorialFlags = 37;
     ConfigMarkDirty();
     ConfigFlush(&allReload);
     App profileReload = { 0 };
     CHECK(ConfigInitialize(&profileReload), "profile reload failed");
     CHECK(profileReload.tune.statWins == 9, "profile state was not isolated/persisted");
+    CHECK(profileReload.uiPreferences.scale == 1.30f &&
+          profileReload.uiPreferences.reducedMotion &&
+          profileReload.uiPreferences.highContrast &&
+          !profileReload.uiPreferences.showTutorialHints &&
+          profileReload.uiPreferences.inputGlyphMode == 2 &&
+          profileReload.uiPreferences.tutorialFlags == 37,
+          "UI preferences did not round-trip through profile scope");
     CHECK(ConfigProjectOverrideCount(&profileReload) == 0,
           "profile state polluted project provenance");
 

@@ -1,11 +1,14 @@
 # Importing rigged characters (and why AI exports collapse in raylib)
 
-This documents a full day of debugging so nobody repeats it. If you only remember one
-thing: **never load a raw Meshy/Tripo export directly — run it through
-`tools/fix_meshy_glb.py` first.**
+This documents the raylib repair and reusable-animation pipeline. If you only remember
+one thing: **never load a raw Meshy/Tripo export directly. Import the rigged
+`Character_output` model into the tracked model library, then let the build retarget the
+shared clips.**
 
 ```
-python3 tools/fix_meshy_glb.py <meshy-export-dir> resources/<character>.glb
+python3 tools/import_character.py <meshy-zip-dir-or-glb> \
+  resources/characters/models/<character>.glb --id <character>
+make character-assets
 ```
 
 The symptom of skipping this step is not an error. The model loads "successfully"
@@ -67,9 +70,9 @@ AI exports don't.
 
 None of this is corrupt — it is legal glTF. It is simply outside raylib's contract.
 
-## What the fixer does
+## What the low-level fixer does
 
-`tools/fix_meshy_glb.py` (self-contained, stdlib + optional Pillow):
+`tools/fix_meshy_glb.py` (stdlib + Pillow):
 
 - Computes the uniform scale `k` hidden in the IBMs (here: exactly 100).
 - Rewrites every joint's static TRS so the node hierarchy composes to
@@ -79,114 +82,169 @@ None of this is corrupt — it is legal glTF. It is simply outside raylib's cont
 - Strips transforms from all non-joint nodes (Armature wrapper, mesh node).
 - Adds constant filler channels for any unkeyed joint path, so the static rewrite can
   never leak into animation.
-- Merges either per-animation GLBs or a merged-animation GLB into one runtime file,
-  preserving normalized, lower-case clip names.
-- Downscales the texture (512 px is generous at this camera distance).
+- Can merge either per-animation GLBs or a merged-animation GLB for legacy conversion
+  and animation-library authoring. Normal character imports stage only the
+  `Character_output` GLB because repeated clips are no longer required.
+- Standardizes every embedded texture to exactly **1024×1024 (1K)**. This is the
+  runtime character-texture contract; do not generate 512px character assets.
 - Verifies numerically: TRS reconstruction error and world-vs-inverse-IBM error are
   printed and should be ~1e-5 or better.
 
-Current tracked runtime assets:
+`tools/import_character.py` accepts a Meshy ZIP, directory, or individual
+`Character_output` GLB. It stages only that model through the fixer, records the original
+animation-coordinate T-pose needed for retargeting, strips all animation clips, compacts
+the GLB, and validates the mesh-only result.
 
-| Kit | Runtime file | Mesh | Rig | Clips | Size |
-|---|---|---:|---:|---:|---:|
-| Scrapper | `resources/sentinel.glb` | 5,210 vertices | 24 bones | 13 | about 4.3 MiB |
-| Tank | `resources/ironclad_guardian.glb` | 4,888 vertices | 24 bones | 13 | about 1.6 MiB |
-| Guardian | `resources/gaia_guardian.glb` | 5,070 vertices | 24 bones | 13 | about 1.7 MiB |
+## Asset ownership and build flow
+
+Tracked source assets and generated runtime files are deliberately different:
+
+```text
+resources/characters/models/<id>.glb
+        + resources/characters/animations/meshy_humanoid_v1.glb
+        + optional resources/characters/animations/overrides/<id>.glb
+        + data/characters/asset_manifest.json
+        |
+        v  tools/build_character_assets.py
+build/assets/characters/<id>.glb
+```
+
+The tracked model is the character library: mesh, materials, skin, repaired bind nodes,
+two 1K embedded PNGs, and animation-rest-pose metadata, with no clips. The tracked
+animation files are mesh-free libraries containing a donor skeleton, reference pose, and
+full-TRS clips. The generated output bakes the selected clips onto the target rig and is
+self-contained because that is the most reliable format for raylib.
+
+Current assets:
+
+| Kit | Tracked model | Mesh | Rig | Generated output |
+|---|---|---:|---:|---|
+| Scrapper | `resources/characters/models/sentinel.glb` | 5,210 vertices | 24 bones | `build/assets/characters/sentinel.glb` |
+| Tank | `resources/characters/models/ironclad_guardian.glb` | 4,888 vertices | 24 bones | `build/assets/characters/ironclad_guardian.glb` |
+| Guardian | `resources/characters/models/gaia_guardian.glb` | 5,070 vertices | 24 bones | `build/assets/characters/gaia_guardian.glb` |
+
+The canonical library contains twelve clips and is about 0.37 MiB. Scrapper has a small
+override pack for idle, hit reaction, and backpedal; Guardian has one for its distinctive
+idle. Generated outputs are about 4.3–4.4 MiB and contain twelve clips. Build outputs are
+ignored and recreated after `make clean`.
+
+To author a new library or override, first use the low-level fixer to create a compatible
+combined donor GLB from the relevant Meshy animation export, then map source names to
+canonical names:
+
+```bash
+python3 tools/build_animation_library.py donor.glb output.glb \
+  --id library_version \
+  --clip Meshy_Source_Name=canonical_name \
+  --clip Another_Source_Name=another_canonical_name
+```
+
+The base library must provide all twelve canonical clips. An override may provide any
+subset; later libraries listed for a character replace earlier clips with the same
+canonical name.
 
 `AssetsLoad()` measures the GPU-equivalent idle pose and normalizes every character to
 `CHARACTER_TARGET_H` (currently 3.1 world units).
 
 ## Standard animation set
 
-Every character export should use the same clips, chosen from Meshy's library under the
-same names. Runtime clip lookup then works without kit-specific animation code; the new
-runtime model still needs to be registered to its class in `CHARACTER_MODEL_PATHS`.
+The generated runtime contract uses exact semantic names:
 
-Core - required:
-
-| Clip | Used for |
+| Canonical clip | Used for |
 |---|---|
-| Idle | standing |
-| Run forward | moving toward facing |
-| Run backward | backpedaling while aiming |
-| Strafe left / Strafe right | circle-strafing (export both; do not rely on mirroring) |
-| Shoot | standing fire / recoil |
-| Death (knockdown) | played on KO before the respawn |
-| Emote / victory | result screen and select podium |
+| `idle` | standing and podium |
+| `combat_stance` | recently fired |
+| `walk_forward` | lower-speed forward movement |
+| `run_forward` | forward movement and dash fallback |
+| `run_backward` | backpedaling while aiming |
+| `run_forward_left`, `run_forward_right` | forward diagonals |
+| `run_back_left`, `run_back_right` | rear diagonals |
+| `hit_reaction` | available for future hit one-shot |
+| `launched_hit` | available for future knockback one-shot |
+| `death` | KO pose held until respawn |
 
-Optional, grab when available: walk forward (else run is play-rate scaled for slow
-movement), dash/charge lunge (dash supers), hit flinch.
-
-Deliberately excluded: a generic jump. There is no jump mechanic, and a leap belongs
-to whichever kit's super eventually needs it.
+Future library versions may add `shoot`, `dash`, and `victory`. A generic jump remains
+excluded because the game has no jump mechanic.
 
 Rules that matter more than the list:
 
 - **Every clip must be in-place - no root motion.** The game moves the character; a
   clip that translates its root makes the feet slide.
-- **Same library animations, same names, every character.** Clip names come from the
-  Meshy filenames (`Animation_<Name>_withSkin`) and the game resolves clips by name.
+- **One versioned library, exact semantic output names.** Raw Meshy names are mapped once
+  when authoring the library, not rediscovered for every character.
 - Locomotion and idle loop; shoot, death and emote are one-shots.
 
 Engine-side status: implemented. The clip is chosen from the movement direction
 relative to facing (forward, backward and four diagonals - a pure strafe picks the
 nearest diagonal), playback rate follows actual speed so feet track the ground, death
 plays as a one-shot that holds its final pose until just before respawn, and a
-recently-fired brawler holds the combat stance instead of relaxing to idle. Clips are
-resolved by substring (idle, combat, running, walking, backward, forwardleft/right,
-backleft/right, dead) with graceful fallbacks when a set is incomplete. Still open:
-shoot and emote one-shots, and crossfade blending.
+recently-fired brawler holds the combat stance instead of relaxing to idle. Runtime clips
+are resolved by exact canonical name with compatible movement fallbacks. Still open:
+shoot/emote one-shots and crossfade blending.
 
 The tool accepts both Meshy export styles: one GLB per animation (clip named from the
 filename) and the newer single merged-animations GLB (each clip keeps its own name,
 lowercased). The file carrying the most clips becomes the base.
 
-## Can animations be reused between characters?
+## How shared animation retargeting works
 
-Yes, but the reusable unit is the **skeleton animation**, not the visible mesh. A clip can
-be applied safely to another character only when both assets have a compatible rig:
+Implemented build-time reuse maps joints by name and requires an identical name/parent
+topology fingerprint. It does **not** assume that equal bone count means equal pose. The
+three current Meshy rigs share the same topology, but measured local bind differences
+reach about 26 source units and 170 degrees.
 
-- The same joint names.
-- The same parent hierarchy.
-- A compatible rest/bind pose and joint orientation.
-- Compatible unit and root-transform conventions.
-- Vertex skin weights bound to that skeleton.
+Each model and animation library therefore stores the animation-coordinate reference
+pose that existed before raylib's bind repair. For every key:
 
-raylib does not retarget animations between different rigs. Matching a 24-bone count is
-not enough; a differently named or oriented skeleton can twist, collapse, or move joints
-in the wrong directions even when the file loads successfully. A model with a different
-rig therefore needs animations baked for that rig, or it must be retargeted in Blender,
-Meshy, or another DCC tool before export.
+```text
+motion delta = inverse(donor animation rest) × donor animated pose
+target pose  = target animation rest × motion delta
+```
 
-The Sentinel, Ironclad Guardian, and Gaia Guardian use the exact same 24 joint names and
-parent hierarchy. Their locomotion clips are therefore reusable in principle. The current
-runtime packages each model with its own included clips because that is the safest
-bind-pose pairing and keeps each GLB self-contained. A future shared animation library
-could store one copy of compatible clips and apply them across this Meshy rig, but it
-should first validate the full skeleton contract above. Regardless of where the clips
-come from, raw Meshy GLBs still need the fixer because animation compatibility does not
-solve raylib's bind-space limitations.
+Rotations and relative scales use that bind-relative delta. Translation keeps the
+target's bone lengths, maps motion through the donor/target parent reference axes, and
+scales motion by rig-height ratio. Horizontal root drift is removed while preserving
+in-place sway. The output keys every joint's translation, rotation, and scale.
+
+`tools/check_character_assets.py` rejects mismatched topology, incomplete channels,
+unsupported interpolation, non-finite keys, missing canonical clips, stale metadata,
+horizontal root drift, and invalid textures. raylib then validates every generated clip
+against the loaded model again before accepting the character.
 
 ## Checklist for adding a new character
 
-1. In Meshy, download the **GLB** (not FBX/USDZ — raylib loads neither) with skin,
-   plus either the merged-animation GLB or each animation as its own GLB. Keep polycount
-   modest (~4–8k tris).
-2. Extract/drop the GLBs in one directory. The T-pose file must contain
-   `Character_output` in its name (Meshy's default).
-3. `python3 tools/fix_meshy_glb.py <dir> resources/<name>.glb`
-4. Check the tool's output: reconstruction errors ~1e-5, expected clip list, texture
-   line present.
-5. Register the file for its kit in `CHARACTER_MODEL_PATHS` in
-   `src/presentation/assets.c` and run.
+1. In Meshy, download the rigged **GLB** `Character_output` model, or the ZIP containing
+   it. FBX/USDZ are not supported. Re-exporting the standard animation set is unnecessary.
+2. Keep polycount modest (~4–8k tris), then import:
+
+   ```bash
+   python3 tools/import_character.py /path/to/export.zip \
+     resources/characters/models/<name>.glb --id <name>
+   ```
+
+3. Add its ID, class, tracked model path, optional override packs, and generated output
+   to `data/characters/asset_manifest.json`.
+4. Register the generated `build/assets/characters/<name>.glb` for its kit in
+   `CHARACTER_MODEL_PATHS` in `src/presentation/assets.c`.
+5. Run `make character-assets` and `make check-character-assets`. Import errors should
+   report reconstruction error around 1e-5, 24 compatible joints, and two 1024×1024
+   textures. A topology mismatch is a hard failure, not an invitation to force the file.
+6. Run the Python pipeline test and normal C suite, then inspect every movement direction,
+   idle, combat stance, and death pose:
+
+   ```bash
+   python3 tests/test_character_pipeline.py
+   make test
+   ```
+
    The log line to look for is `CHARACTER <KIT>: <verts> verts, <bones> bones, <clips>
    clips, posed height <H>, scale <s>` — posed height should be a sane skeleton-space
    number (tens to hundreds), not thousands.
-6. Look at the menu podium. The model must stand on the disc, facing the camera,
+7. Look at the menu podium. The model must stand on the disc, facing the camera,
    idle-animating. If it's a spike-ball or invisible, re-read this document.
 
 Hard limits: ≤128 bones (`MAX_BONE_NUM` in the skinned shader), one skin per file,
-LINEAR/STEP keyframes, PNG textures.
+LINEAR/STEP keyframes, embedded PNG textures at exactly 1024×1024.
 
 ## The debugging playbook that cracked it
 

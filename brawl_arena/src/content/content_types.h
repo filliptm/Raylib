@@ -159,9 +159,23 @@ typedef struct CharacterDefinition {
     int mobilityAbility;
 } CharacterDefinition;
 
+// Content-owned framing for the non-interactive 3D character presentation. These
+// values belong to tracked project truth, while a player's UI preferences do not.
+typedef struct CharacterPresentationDefinition {
+    float homeYawDegrees;
+    float selectYawDegrees;
+    float homeScale;
+    float selectScale;
+    Vector2 homeOffset;
+    Vector2 selectOffset;
+    float cameraTargetY;
+    float cameraDistance;
+} CharacterPresentationDefinition;
+
 typedef struct ContentCatalog {
     WeaponDef weapons[CLASS_COUNT];
     CharacterDefinition characters[CLASS_COUNT];
+    CharacterPresentationDefinition presentation[CLASS_COUNT];
     AbilityDefinition abilities[MAX_ABILITIES];
     int abilityCount;
     MapDefinition maps[MAX_MAPS];
@@ -175,6 +189,9 @@ typedef struct Tuning {
     float dashSpeed;
     float bushReveal;
     float fireReveal;
+    float healthRegenDelay;
+    float healthRegenInterval;
+    float healthRegenRatio;
     float playerRespawn;
     float enemyRespawn;
     float matchResultHold;
@@ -229,6 +246,7 @@ void TuningSetDefaults(Tuning *tuning);
 typedef struct ConfigState {
     Tuning projectTuning;
     WeaponDef projectWeapons[CLASS_COUNT];
+    CharacterPresentationDefinition projectPresentation[CLASS_COUNT];
     bool projectLoaded;
     bool recoveryDefaults;
     bool legacyImported;

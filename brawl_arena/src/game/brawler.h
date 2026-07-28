@@ -40,5 +40,8 @@ int BrawlerNearestVisibleEnemy(GameContext game, int idx);
 int BrawlerMostWoundedAlly(GameContext game, int idx, float maxDistance);
 
 void BrawlersUpdate(GameContext game, float dt);
+// Runs after projectile/ability resolution so damage on this frame always interrupts
+// regeneration before a scheduled health pulse can be applied.
+void BrawlersUpdateRegeneration(GameContext game);
 
 #endif // BRAWLER_H

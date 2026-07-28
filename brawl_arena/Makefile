@@ -42,7 +42,19 @@ HEALER_TEST_TARGET = $(BUILD_DIR)/test_healer
 NO_SHAKE_TEST_TARGET = $(BUILD_DIR)/test_no_attack_shake
 ARENA_TEST_TARGET = $(BUILD_DIR)/test_arena
 GAMEPLAY_TEST_TARGET = $(BUILD_DIR)/test_gameplay
+REGEN_TEST_TARGET = $(BUILD_DIR)/test_regeneration
 TANK_TEST_TARGET = $(BUILD_DIR)/test_tank
+UI_TEST_TARGET = $(BUILD_DIR)/test_ui
+CHARACTER_MANIFEST = data/characters/asset_manifest.json
+CHARACTER_ASSET_STAMP = $(BUILD_DIR)/assets/characters/.built
+CHARACTER_PIPELINE_SOURCES = \
+	tools/build_character_assets.py \
+	tools/check_character_assets.py \
+	$(shell find tools/character_pipeline -name '*.py' -print)
+CHARACTER_ASSET_INPUTS = \
+	$(CHARACTER_MANIFEST) \
+	$(shell python3 tools/build_character_assets.py \
+		--manifest $(CHARACTER_MANIFEST) --print-inputs)
 GAME_CORE_OBJECTS = \
 	$(OBJ_DIR)/game/ai.o \
 	$(OBJ_DIR)/game/arena.o \
@@ -56,13 +68,13 @@ GAME_CORE_OBJECTS = \
 CONFIG_TEST_OBJECTS = $(GAME_CORE_OBJECTS) $(OBJ_DIR)/content/config.o
 DEPFILES = $(OBJECTS:.o=.d)
 
-all: check-architecture $(TARGET)
+all: check-architecture check-ui check-character-assets $(TARGET)
 
 # Order-only prerequisite, so `make rebuild` recreates the dir that `clean` removed.
 $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
-$(TARGET): $(OBJECTS)
+$(TARGET): $(CHARACTER_ASSET_STAMP) $(OBJECTS)
 	$(CC) $(CFLAGS) -o $@ $(OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(TEST_TARGET): tests/test_config.c $(CONFIG_TEST_OBJECTS)
@@ -88,9 +100,19 @@ $(GAMEPLAY_TEST_TARGET): tests/test_gameplay.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/a
 		$(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/player.o \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
+$(REGEN_TEST_TARGET): tests/test_regeneration.c $(GAME_CORE_OBJECTS)
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_regeneration.c \
+		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
 $(TANK_TEST_TARGET): tests/test_tank.c $(GAME_CORE_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_tank.c \
 		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
+$(UI_TEST_TARGET): tests/test_ui.c $(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o \
+		$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/content/content_catalog.o
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_ui.c \
+		$(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o $(OBJ_DIR)/ui/ui_icons.o \
+		$(OBJ_DIR)/content/content_catalog.o $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	mkdir -p $(@D)
@@ -98,39 +120,57 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 
 -include $(DEPFILES)
 
-run: $(TARGET)
+$(CHARACTER_ASSET_STAMP): $(CHARACTER_ASSET_INPUTS) $(CHARACTER_PIPELINE_SOURCES)
+	python3 tools/build_character_assets.py --manifest $(CHARACTER_MANIFEST)
+	touch $@
+
+character-assets: $(CHARACTER_ASSET_STAMP)
+
+run: check-character-assets $(TARGET)
 	./$(TARGET)
 
 debug: CFLAGS = -Wall -Wextra -std=c99 $(DEBUG_FLAGS)
-debug: clean $(TARGET)
+debug: clean check-ui check-character-assets $(TARGET)
 
 sanitize: CFLAGS = -Wall -Wextra -std=c99 $(SANITIZE_FLAGS)
-sanitize: clean check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(TANK_TEST_TARGET)
+sanitize: clean check-architecture check-ui check-character-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(UI_TEST_TARGET)
+	python3 tests/test_character_pipeline.py
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
 	$(SANITIZER_ENV) ./$(HEALER_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(NO_SHAKE_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(ARENA_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(GAMEPLAY_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(REGEN_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(TANK_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(UI_TEST_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 rebuild: clean all
 
-test: check-architecture $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(TANK_TEST_TARGET)
+test: check-architecture check-ui check-character-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(UI_TEST_TARGET)
+	python3 tests/test_character_pipeline.py
 	./$(TEST_TARGET)
 	./$(HEALER_TEST_TARGET)
 	./$(NO_SHAKE_TEST_TARGET)
 	./$(ARENA_TEST_TARGET)
 	./$(GAMEPLAY_TEST_TARGET)
+	./$(REGEN_TEST_TARGET)
 	./$(TANK_TEST_TARGET)
+	./$(UI_TEST_TARGET)
 
 validate-config: $(TEST_TARGET)
 	./$(TEST_TARGET) --validate config/gameplay.cfg
 
 check-architecture:
 	./tools/check_architecture.sh
+
+check-ui:
+	sh tools/check_ui.sh
+
+check-character-assets: character-assets
+	python3 tools/check_character_assets.py $(CHARACTER_MANIFEST)
 
 help:
 	@echo "Brawl Arena"
@@ -140,7 +180,10 @@ help:
 	@echo "  make test   - run headless config and combat tests"
 	@echo "  make sanitize - run headless tests under ASan/UBSan"
 	@echo "  make check-architecture - enforce source dependency boundaries"
+	@echo "  make check-ui - enforce Helios UI ownership and resource policy"
+	@echo "  make character-assets - bake shared animations into runtime GLBs"
+	@echo "  make check-character-assets - validate model, animation, and 1K texture contracts"
 	@echo "  make validate-config - validate tracked project defaults"
 	@echo "  make clean  - remove build artifacts"
 
-.PHONY: all run debug sanitize clean rebuild test validate-config check-architecture help
+.PHONY: all run debug sanitize clean rebuild test validate-config check-architecture check-ui character-assets check-character-assets help

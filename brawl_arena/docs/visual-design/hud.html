@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Brawl Arena combat HUD and command-center visual design concepts.">
+    <title>Brawl Arena — HUD and Command Center Concepts</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <nav class="site-nav" aria-label="Visual design documentation">
+        <a class="brand" href="index.html">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+                <strong>Brawl Arena</strong>
+                <small>Visual design field guide</small>
+            </span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">System</a>
+            <a href="menus.html">Menus</a>
+            <a href="hud.html" aria-current="page">HUD + Tools</a>
+            <a href="audit.html">Audit + Roadmap</a>
+        </div>
+        <span class="proposal-badge">Runtime reference — implemented July 2026</span>
+    </nav>
+
+    <main id="content" class="page">
+        <header class="section-heading">
+            <div>
+                <p class="eyebrow">Screen study / Match presentation</p>
+                <h1 style="font-size:clamp(54px,8vw,112px)">Read the fight</h1>
+            </div>
+            <p>
+                Brawl Arena pairs its world rendering with a grouped, priority-led HUD that
+                avoids adding decorative noise over the arena.
+            </p>
+        </header>
+
+        <section class="section" style="padding-top:48px">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">01 / Player HUD</p>
+                    <h2>Combat broadcast</h2>
+                </div>
+                <p>
+                    Objective state is the single top-center broadcast. Personal survival
+                    stays lower-left, abilities stay lower-right, and tutorials become
+                    action-based chips that disappear as the player demonstrates each input.
+                </p>
+            </div>
+            <div class="game-frame-wrap">
+                <div class="game-frame hud-frame" aria-label="Conceptual combat HUD">
+                    <div class="hud-arena" aria-hidden="true"></div>
+                    <span class="frame-corner top-left"></span>
+                    <span class="frame-corner top-right"></span>
+                    <span class="frame-corner bottom-left"></span>
+                    <span class="frame-corner bottom-right"></span>
+
+                    <div class="hud-score">
+                        <div class="score-side">07 ◆</div>
+                        <div class="score-center"><strong>00:38</strong><small>Gem grab</small></div>
+                        <div class="score-side enemy">◆ 05</div>
+                    </div>
+
+                    <div class="tutorial-chip">
+                        <span class="keycap">SHIFT</span>
+                        <span><strong class="frame-label" style="color:var(--paper-100)">Shoulder jets</strong><br><span class="frame-copy">Move or aim to choose direction</span></span>
+                    </div>
+
+                    <article class="player-vitals frame-panel">
+                        <div class="vitals-head"><strong>Tank</strong><span>4,620 / 5,400</span></div>
+                        <div class="progress-track" style="margin-top:6px;height:clamp(5px,.7cqw,10px)"><span style="--progress:86%;--progress-color:var(--ally-400)"></span></div>
+                        <div class="ammo-row" aria-label="Three of four ammo ready"><span></span><span></span><span></span><span style="opacity:.2"></span></div>
+                    </article>
+
+                    <div class="ability-dock">
+                        <div class="hud-ability">
+                            JETS
+                            <span class="keycap">⇧</span>
+                        </div>
+                        <div class="hud-ability ready">
+                            CHARGE<br>READY
+                            <span class="keycap">Q</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="screen-caption">
+                <span>Concept / player eye path stays on the arena</span>
+                <span>Team state uses position + symbol + color</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">02 / HUD rules</p>
+                    <h2>Every pixel has a job</h2>
+                </div>
+                <p>
+                    Combat UI answers four questions in order: What wins the mode?
+                    Am I safe? What can I use? What just happened?
+                </p>
+            </div>
+            <div class="grid-4">
+                <article class="panel">
+                    <span class="panel-kicker">Objective</span>
+                    <h3>Top center</h3>
+                    <p>Score, win pressure, countdown, and objective alerts share one stable container.</p>
+                </article>
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Survival</span>
+                    <h3>Body anchored</h3>
+                    <p>World health bars remain compact; personal detailed health and ammo live at the frame edge.</p>
+                </article>
+                <article class="panel" data-accent="violet">
+                    <span class="panel-kicker">Abilities</span>
+                    <h3>State, not spectacle</h3>
+                    <p>Cooldown, ready, active, and unavailable states use fill, border, label, and key binding.</p>
+                </article>
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Feedback</span>
+                    <h3>Near the cause</h3>
+                    <p>Damage, healing, gems, and ability results appear close to actors without shaking any player’s camera.</p>
+                </article>
+            </div>
+
+            <div class="table-scroll" style="margin-top:16px">
+                <table class="token-table">
+                    <thead>
+                        <tr><th>Previous behavior</th><th>Implemented treatment</th><th>Reason</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>Several independent high-frequency pulses</td><td>One shared ready/urgent cadence; reduced-motion alternative</td><td>Less visual noise and fatigue</td></tr>
+                        <tr><td>Tutorial shown for a fixed opening duration</td><td>Dismiss each prompt after the demonstrated action; remember progress</td><td>Teaches without covering repeat matches</td></tr>
+                        <tr><td>Victory/defeat then automatic return</td><td>Summary card plus explicit Continue, with a safe timeout fallback</td><td>Gives the match a satisfying close</td></tr>
+                        <tr><td>Team information leans on hue</td><td>Pair hue with side, icon, label, and bar silhouette</td><td>Improves rapid recognition and accessibility</td></tr>
+                        <tr><td>Screen shake hooks can affect attacks</td><td>Keep combat feedback in VFX, audio, hit stop, and UI response</td><td>Protects comfort and aiming clarity</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">03 / Command center</p>
+                    <h2>Inspector, not menu</h2>
+                </div>
+                <p>
+                    The command center remains deliberately denser than player UI. It shares
+                    fonts, semantic state colors, and focus behavior while keeping its own
+                    precise editing grammar.
+                </p>
+            </div>
+
+            <div class="command-shell" aria-label="Conceptual command-center layout">
+                <aside class="command-rail" aria-label="Tuning categories">
+                    <button class="active" type="button">Gameplay</button>
+                    <button type="button">Kit</button>
+                    <button type="button">Bots</button>
+                    <button type="button">World</button>
+                    <button type="button">Visual</button>
+                    <button type="button">System</button>
+                    <span class="rail-spacer"></span>
+                    <span class="spec-note">F1 closes<br>Helios tools 01</span>
+                </aside>
+                <div class="command-body">
+                    <header class="command-header">
+                        <span>
+                            <span class="eyebrow" style="display:block;margin:0">Gameplay / Match</span>
+                            <strong class="frame-title" style="font-size:30px">Command center</strong>
+                        </span>
+                        <span class="status-chip orange">Local draft · 3 changes</span>
+                    </header>
+                    <div class="command-controls">
+                        <div class="control-row">
+                            <label for="match-time">Match time</label>
+                            <div class="fake-slider" id="match-time"><span style="--value:68%"></span></div>
+                            <output class="value-box">180.0 s</output>
+                        </div>
+                        <div class="control-row">
+                            <label for="target-gems">Target gems</label>
+                            <div class="fake-slider" id="target-gems"><span style="--value:42%"></span></div>
+                            <output class="value-box">10</output>
+                        </div>
+                        <div class="control-row">
+                            <label for="hold-time">Gem hold time</label>
+                            <div class="fake-slider" id="hold-time"><span style="--value:54%"></span></div>
+                            <output class="value-box">15.0 s</output>
+                        </div>
+                        <div class="control-row">
+                            <label for="super-charge">Super charge</label>
+                            <div class="fake-slider" id="super-charge"><span style="--value:74%"></span></div>
+                            <output class="value-box">100%</output>
+                        </div>
+                        <div class="control-row">
+                            <label for="respawn">Respawn delay</label>
+                            <div class="fake-slider" id="respawn"><span style="--value:36%"></span></div>
+                            <output class="value-box">3.0 s</output>
+                        </div>
+                        <div class="control-row">
+                            <label for="return-hold">Result hold</label>
+                            <div class="fake-slider" id="return-hold"><span style="--value:48%"></span></div>
+                            <output class="value-box">4.0 s</output>
+                        </div>
+                    </div>
+                    <footer class="command-footer">
+                        <span>
+                            <span class="status-chip green">Project source loaded</span>
+                            <span class="spec-note" style="display:block;margin-top:7px">config/gameplay.cfg · local draft has unsaved overrides</span>
+                        </span>
+                        <span style="display:flex;gap:8px;flex-wrap:wrap">
+                            <button class="ui-button" type="button">Reset local</button>
+                            <button class="ui-button primary" type="button">Save project</button>
+                        </span>
+                    </footer>
+                </div>
+            </div>
+            <div class="screen-caption">
+                <span>Concept / wider workspace mode</span>
+                <span>Sticky provenance · stable labels · aligned numeric values</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="grid-3">
+                <article class="panel">
+                    <span class="panel-kicker">Information architecture</span>
+                    <h3>Vertical category rail</h3>
+                    <p>Six categories no longer compete inside a narrow horizontal strip. The active section stays obvious while scrolling.</p>
+                </article>
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Provenance</span>
+                    <h3>Ground truth is visible</h3>
+                    <p>Project source, local overrides, dirty count, reset scope, and save destination stay visible around every edit.</p>
+                </article>
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Precision</span>
+                    <h3>Numbers line up</h3>
+                    <p>Monospaced values, consistent units, editable text fields, and predictable increments make tuning fast and auditable.</p>
+                </article>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <div>
+                <strong>Next: evidence and implementation order</strong>
+                <p>The audit maps these visual decisions to current files, risks, and a staged implementation plan.</p>
+            </div>
+            <div class="footer-meta">
+                <a href="audit.html">Open audit + roadmap →</a><br>
+                Brawl Arena / Helios Broadcast
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

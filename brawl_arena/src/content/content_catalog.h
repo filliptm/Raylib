@@ -18,5 +18,8 @@ const AbilityDefinition *ContentSuperAbility(const ContentCatalog *catalog,
 const AbilityDefinition *ContentMobilityAbility(const ContentCatalog *catalog,
                                                 BrawlerClass character);
 const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abilityId);
+const CharacterPresentationDefinition *ContentCharacterPresentation(
+    const ContentCatalog *catalog, BrawlerClass character);
+bool ContentPresentationValid(const CharacterPresentationDefinition *presentation);
 
 #endif

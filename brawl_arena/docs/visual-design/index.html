@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Brawl Arena visual direction, design tokens, typography, components, and accessibility principles.">
+    <title>Brawl Arena — Helios Broadcast Visual System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <nav class="site-nav" aria-label="Visual design documentation">
+        <a class="brand" href="index.html">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+                <strong>Brawl Arena</strong>
+                <small>Visual design field guide</small>
+            </span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html" aria-current="page">System</a>
+            <a href="menus.html">Menus</a>
+            <a href="hud.html">HUD + Tools</a>
+            <a href="audit.html">Audit + Roadmap</a>
+        </div>
+        <span class="proposal-badge">Runtime reference — implemented July 2026</span>
+    </nav>
+
+    <main id="content" class="page">
+        <header class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Helios-9 / Presentation system 01</p>
+                <h1>Helios Broadcast</h1>
+                <p>
+                    A visual language for Brawl Arena that feels transmitted from a working
+                    orbital station: bold at a glance, technical where it matters, and quiet
+                    enough to let the brawlers own the screen.
+                </p>
+            </div>
+            <dl class="hero-side">
+                <div class="hero-stat">
+                    <dt>Player read</dt>
+                    <dd>Choice → readiness → action</dd>
+                </div>
+                <div class="hero-stat">
+                    <dt>Character</dt>
+                    <dd>Industrial broadcast</dd>
+                </div>
+                <div class="hero-stat">
+                    <dt>Signature</dt>
+                    <dd>Signal rail + hull cuts</dd>
+                </div>
+                <div class="hero-stat">
+                    <dt>Rule</dt>
+                    <dd>Glow means state</dd>
+                </div>
+            </dl>
+        </header>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">01 / North star</p>
+                    <h2>Built from the world</h2>
+                </div>
+                <p>
+                    The interface should look like the station is presenting the match, not
+                    like a generic sci-fi website was placed over the game. Materials, type,
+                    and motion all reinforce the same fiction.
+                </p>
+            </div>
+            <div class="grid-3">
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Hierarchy</span>
+                    <h3>One dominant decision</h3>
+                    <p>
+                        Every screen gets one obvious job. Character select chooses a
+                        brawler. Home launches a match. The HUD protects the combat view.
+                    </p>
+                </article>
+                <article class="panel">
+                    <span class="panel-kicker">Material</span>
+                    <h3>Cut hull, not glass</h3>
+                    <p>
+                        Chamfered panels, inset rails, thin structural lines, and safety
+                        markings replace the current collection of interchangeable rounded cards.
+                    </p>
+                </article>
+                <article class="panel" data-accent="violet">
+                    <span class="panel-kicker">Restraint</span>
+                    <h3>Effects earn meaning</h3>
+                    <p>
+                        Blue indicates interaction, gold indicates match-critical readiness,
+                        and role colors identify teams or abilities. Decorative glow stays rare.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">02 / Color</p>
+                    <h2>Station palette</h2>
+                </div>
+                <p>
+                    Dark values are cool and structural. Warm color belongs to action and
+                    industrial warning. Team state remains distinguishable by color, label,
+                    and shape—not hue alone.
+                </p>
+            </div>
+            <div class="swatch-grid" aria-label="Core visual palette">
+                <div class="swatch" style="--swatch:#050b14">
+                    <strong>Void</strong>
+                    <code>#050B14 / backdrop</code>
+                </div>
+                <div class="swatch" style="--swatch:#12233a">
+                    <strong>Deck</strong>
+                    <code>#12233A / panel</code>
+                </div>
+                <div class="swatch" style="--swatch:#29435e">
+                    <strong>Hull</strong>
+                    <code>#29435E / structure</code>
+                </div>
+                <div class="swatch" style="--swatch:#f3f7fb;--swatch-text:#050b14">
+                    <strong>Paper</strong>
+                    <code>#F3F7FB / primary text</code>
+                </div>
+                <div class="swatch" style="--swatch:#64b9ff;--swatch-text:#050b14">
+                    <strong>Ion</strong>
+                    <code>#64B9FF / interaction</code>
+                </div>
+                <div class="swatch" style="--swatch:#ff9d42;--swatch-text:#050b14">
+                    <strong>Safety</strong>
+                    <code>#FF9D42 / attention</code>
+                </div>
+                <div class="swatch" style="--swatch:#f6cf65;--swatch-text:#050b14">
+                    <strong>Ready</strong>
+                    <code>#F6CF65 / super + deploy</code>
+                </div>
+                <div class="swatch" style="--swatch:linear-gradient(90deg,#55d59a 0 50%,#ff6577 50%)">
+                    <strong>Teams</strong>
+                    <code>#55D59A / #FF6577</code>
+                </div>
+            </div>
+            <div class="callout warning" style="margin-top:16px">
+                <div>
+                    <strong>Color usage rule</strong>
+                    <p>
+                        Safety orange is not the universal button color. Ion blue marks focus and
+                        editable state; gold is reserved for super readiness and the primary match
+                        launch; orange marks selection rails, warnings, and physical station hardware.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">03 / Typography</p>
+                    <h2>Three voices, one system</h2>
+                </div>
+                <p>
+                    The runtime ships a deliberate display, reading, and data voice through
+                    one shared font and text system.
+                </p>
+            </div>
+            <div class="type-specimen">
+                <div class="type-meta">Barlow Condensed<br>700 / display</div>
+                <div class="type-display">Guardian ready</div>
+            </div>
+            <div class="type-specimen">
+                <div class="type-meta">Barlow<br>400–600 / body</div>
+                <div class="type-body">
+                    Growing rain pulses heal allies and damage enemies. Clear sentence case
+                    carries descriptions, tutorials, and settings help without looking mechanical.
+                </div>
+            </div>
+            <div class="type-specimen">
+                <div class="type-meta">IBM Plex Mono<br>500 / data</div>
+                <div class="type-data">HP 5,400 · RANGE 12.0 · 00:38</div>
+            </div>
+            <div class="grid-2" style="margin-top:16px">
+                <article class="panel">
+                    <span class="panel-kicker">Runtime loading</span>
+                    <h3>Ship local font assets</h3>
+                    <p>
+                        Vendor the approved open-font files in <code>resources/fonts/</code>,
+                        load them once with <code>LoadFontEx</code>, apply bilinear filtering,
+                        and draw through <code>DrawTextEx</code>/<code>MeasureTextEx</code>.
+                        The HTML web import mirrors the locally shipped runtime families.
+                    </p>
+                </article>
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Scale</span>
+                    <h3>Named roles, not magic sizes</h3>
+                    <p>
+                        Define display, title, section, body, label, caption, and data roles.
+                        Scale them from the 1280×800 reference canvas and test at narrow and
+                        high-density window sizes before making the window resizable.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">04 / Components</p>
+                    <h2>State is visible</h2>
+                </div>
+                <p>
+                    Controls retain their shape when hovered or pressed. State changes through
+                    border, fill, rail, and focus treatment instead of moving the hit box.
+                </p>
+            </div>
+            <div class="component-strip" aria-label="Implemented interface components">
+                <button class="ui-button primary" type="button">Deploy</button>
+                <button class="ui-button" type="button">Brawlers</button>
+                <button class="ui-button danger" type="button">Quit</button>
+                <button class="ui-button" type="button" disabled>Locked</button>
+                <span class="keycap">LMB</span>
+                <span class="keycap">SHIFT</span>
+                <span class="status-chip green">Project saved</span>
+                <span class="status-chip orange">Local draft</span>
+                <span class="status-chip violet">Super ready</span>
+            </div>
+            <div class="grid-3" style="margin-top:16px">
+                <article class="panel">
+                    <span class="panel-kicker">Input</span>
+                    <h3>Every control has focus</h3>
+                    <ul class="principle-list">
+                        <li>Mouse, keyboard, and controller share one focus model.</li>
+                        <li>Primary targets are at least 44 logical pixels.</li>
+                        <li>Focus is a bright outer edge, never color alone.</li>
+                    </ul>
+                </article>
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Feedback</span>
+                    <h3>Short and physical</h3>
+                    <ul class="principle-list">
+                        <li>Hover/focus settles in 160–180 ms.</li>
+                        <li>Press uses a 2 px surface compression, not a layout jump.</li>
+                        <li>Save feedback names the destination: local or project.</li>
+                    </ul>
+                </article>
+                <article class="panel" data-accent="violet">
+                    <span class="panel-kicker">Motion</span>
+                    <h3>One rhythm</h3>
+                    <ul class="principle-list">
+                        <li>Screen transitions use a single 220–280 ms sequence.</li>
+                        <li>Only ready/urgent state pulses, at a calm shared cadence.</li>
+                        <li>Reduced motion removes orbit, pulse, and screen sweeps.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">05 / Engineering bridge</p>
+                    <h2>Build the system first</h2>
+                </div>
+                <p>
+                    Repainting the existing calls one by one would preserve the inconsistency.
+                    Establish shared presentation primitives, then move screens onto them.
+                </p>
+            </div>
+            <div class="table-scroll">
+                <table class="token-table">
+                    <thead>
+                        <tr>
+                            <th>Module</th>
+                            <th>Owns</th>
+                            <th>Does not own</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><code>ui/ui_theme.[ch]</code></td>
+                            <td>Semantic colors, type roles, spacing, cuts, motion timings</td>
+                            <td>Screen flow or gameplay values</td>
+                        </tr>
+                        <tr>
+                            <td><code>ui/ui_text.[ch]</code></td>
+                            <td>Font lifetime, measurement, alignment, shadow/outline helpers</td>
+                            <td>Character or world assets</td>
+                        </tr>
+                        <tr>
+                            <td><code>ui/ui_layout.[ch]</code></td>
+                            <td>Reference-canvas scale, safe frame, anchors, text fitting</td>
+                            <td>Specific menu content</td>
+                        </tr>
+                        <tr>
+                            <td><code>ui/ui_components.[ch]</code></td>
+                            <td>Buttons, panels, keycaps, bars, stat rows, segmented controls</td>
+                            <td>Command-center mutations</td>
+                        </tr>
+                        <tr>
+                            <td><code>ui/ui_input.[ch]</code></td>
+                            <td>Focus, navigation, pointer/controller activation, focus memory</td>
+                            <td>Player movement or combat input</td>
+                        </tr>
+                        <tr>
+                            <td><code>devtools/command_widgets.[ch]</code></td>
+                            <td>Dense inspector widgets using shared fonts and semantic tokens</td>
+                            <td>Player-facing card composition</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <div>
+                <strong>Next: screen compositions</strong>
+                <p>
+                    See the menu, character-select, HUD, and command-center concepts before
+                    implementation. They are direction-setting layouts, not pixel-locked production art.
+                </p>
+            </div>
+            <div class="footer-meta">
+                <a href="menus.html">Open menu concepts →</a><br>
+                Brawl Arena / Helios Broadcast
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

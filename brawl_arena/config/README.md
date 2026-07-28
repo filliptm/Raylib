@@ -28,7 +28,8 @@ Command-center sliders take effect immediately and autosave to `tuning.local.cfg
 
 Use:
 
-- `SAVE KIT AS PROJECT DEFAULT` on the KIT tab to promote only the active kit.
+- `SAVE KIT + FRAMING AS PROJECT DEFAULT` on KIT or PREVIEW / UI to promote the active
+  kit and its menu presentation profile.
 - `SAVE ALL AS PROJECT DEFAULTS` on the WORLD tab to promote every live project-scoped
   value.
 - `Reset kit to PROJECT default` to discard the active kit's draft.
@@ -38,17 +39,35 @@ Promotion validates the full candidate and atomically rewrites `gameplay.cfg`. T
 creates a normal tracked Git modification; it does not automatically create a Git
 commit.
 
-`profile.cfg` owns the selected kit and win/loss/KO statistics. Cheats and the debug
-overlay are local-only values. Neither category is written into project defaults.
+`profile.cfg` owns the selected kit, win/loss/KO statistics, UI scale, reduced motion,
+high-contrast combat cues, tutorial visibility/completion, and input-glyph preference.
+Cheats and the debug overlay are local-only values. Neither category is written into
+project defaults.
 
 ## Format and validation
 
 The format is deterministic `key value` text with stable kit identifiers. Ability kinds
 are named values such as `projectile`, `lob`, `rain`, `dash`, and `sound_wave`.
+Global out-of-combat recovery is authored with
+`gameplay.health_regen_delay`, `gameplay.health_regen_interval`, and
+`gameplay.health_regen_max_ratio`; a zero ratio disables passive regeneration.
 Each kit also declares `main.self_heal_ratio` and the complete optional mobility triplet:
 `mobility.cooldown`, `mobility.duration`, and `mobility.speed`. All three mobility values
 must be zero to disable the ability, or all three must be positive. Tank's tracked
 mobility values create Shoulder Jets; other kits currently keep the triplet at zero.
+
+Every character also requires ten `preview.<stable-kit-id>.*` keys:
+
+- `home_yaw_degrees`, `select_yaw_degrees`
+- `home_scale`, `select_scale`
+- `home_offset_x`, `home_offset_y`
+- `select_offset_x`, `select_offset_y`
+- `camera_target_y`, `camera_distance`
+
+These project-scoped values frame the non-rotating menu model and are validated with the
+same all-or-nothing transaction as gameplay. Profile-only keys are `profile.ui_scale`,
+`profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,
+`profile.input_glyph_mode`, and `profile.tutorial_flags`.
 
 The loader rejects:
 

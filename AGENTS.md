@@ -18,7 +18,11 @@ Before changing code or documentation:
    `brawl_arena/docs/MAPS.md` and `brawl_arena/docs/CONTENT_AND_TUNING.md`.
 7. If changing Brawl Arena source organization, tests, or build workflow, also read
    `brawl_arena/docs/DEVELOPMENT.md`.
-8. If working on Hearthstone architecture or editor behavior, read the relevant file in
+8. If changing Brawl Arena menus, HUD, command center, fonts, focus, accessibility, or
+   presentation framing, also read `brawl_arena/docs/visual-design/index.html`,
+   `brawl_arena/docs/visual-design/IMPLEMENTATION_PLAN.md`, and
+   `brawl_arena/docs/UI_SMOKE_CHECKLIST.md`.
+9. If working on Hearthstone architecture or editor behavior, read the relevant file in
    `hearthstone/docs/` and verify it against the current implementation.
 
 `docs/PROJECT_OVERVIEW.md` is the maintained repository-level description. The code is
@@ -96,8 +100,9 @@ intentional, document it explicitly.
   not read platform input, call rendering/effect functions, or use raylib randomness.
   Run `make -C brawl_arena check-architecture` after dependency changes.
 - `App` owns the game session, player controller, presentation state, flow, tuning,
-  content catalog, and configuration provenance. Reset only the state region whose
-  lifetime ended.
+  content catalog, configuration provenance, and profile-scoped `UiPreferences`. The
+  process-lifetime `UiSystem` owns font resources, theme/text/layout services, modality,
+  and focus. Reset only the state region whose lifetime ended.
 - Capture device input into `PlayerInput` in the app layer. Communicate simulation
   presentation through `GameEvent`, and route developer gameplay mutations through
   application commands.
@@ -115,6 +120,9 @@ intentional, document it explicitly.
   destruction as permanent-wall destruction.
 - Raw Meshy/Tripo GLBs are not runtime-ready. Use the documented conversion pipeline and
   preserve primitive fallback behavior.
+- Player-facing UI text, focus, theme, and components route through `src/ui/ui_system`;
+  per-character menu framing belongs to tracked content, while personal UI preferences
+  belong only to `profile.cfg`. Run `make -C brawl_arena check-ui` after UI changes.
 
 ## Generated and user-owned files
 
@@ -170,6 +178,7 @@ Run `make -C hearthstone test_animation` and
 ```bash
 make -C brawl_arena
 make -C brawl_arena check-architecture
+make -C brawl_arena check-ui
 make -C brawl_arena validate-config
 make -C brawl_arena test
 make -C brawl_arena sanitize

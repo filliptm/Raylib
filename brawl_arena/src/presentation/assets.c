@@ -20,10 +20,12 @@
 static const float SCENE_CLIP_NEAR = 0.5f;
 static const float SCENE_CLIP_FAR = 120.0f;
 
+#define CHARACTER_RUNTIME_ROOT "build/assets/characters/"
+
 static const char *CHARACTER_MODEL_PATHS[CLASS_COUNT] = {
-    [CLASS_SHOTGUNNER] = "resources/sentinel.glb",
-    [CLASS_BRUISER] = "resources/ironclad_guardian.glb",
-    [CLASS_HEALER] = "resources/gaia_guardian.glb"
+    [CLASS_SHOTGUNNER] = CHARACTER_RUNTIME_ROOT "sentinel.glb",
+    [CLASS_BRUISER] = CHARACTER_RUNTIME_ROOT "ironclad_guardian.glb",
+    [CLASS_HEALER] = CHARACTER_RUNTIME_ROOT "gaia_guardian.glb"
 };
 
 #define STATION_ROOT "resources/environment/kenney_space_station/models/"
@@ -477,6 +479,13 @@ static const char *FS_GRASS =
 "    finalColor = vec4(color, 1.0);\n"
 "}\n";
 
+static int FindCharacterClip(const RiggedCharacter *character, const char *name)
+{
+    for (int i = 0; i < character->animCount; i++)
+        if (strcmp(character->anims[i].name, name) == 0) return i;
+    return -1;
+}
+
 static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
                                 const char *path, const char *label)
 {
@@ -491,26 +500,40 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     }
 
     character->anims = LoadModelAnimations(path, &character->animCount);
-    character->clipIdle = character->clipCombat = character->clipWalk = -1;
-    character->clipRunF = character->clipRunB = character->clipRunFL = character->clipRunFR = -1;
-    character->clipRunBL = character->clipRunBR = character->clipDeath = -1;
-
-    // Resolve by substring so reordered source tracks cannot silently swap clips.
+    bool animationsValid = character->anims && character->animCount > 0;
     for (int i = 0; i < character->animCount; i++)
     {
-        const char *n = character->anims[i].name;
-        if (strstr(n, "idle") && character->clipIdle < 0) character->clipIdle = i;
-        else if (strstr(n, "combat") && character->clipCombat < 0) character->clipCombat = i;
-        else if (strstr(n, "forwardleft") && character->clipRunFL < 0) character->clipRunFL = i;
-        else if (strstr(n, "forwardright") && character->clipRunFR < 0) character->clipRunFR = i;
-        else if (strstr(n, "backleft") && character->clipRunBL < 0) character->clipRunBL = i;
-        else if (strstr(n, "backright") && character->clipRunBR < 0) character->clipRunBR = i;
-        else if (strstr(n, "backward") && character->clipRunB < 0) character->clipRunB = i;
-        else if (strstr(n, "running") && character->clipRunF < 0) character->clipRunF = i;
-        else if (strstr(n, "walking") && character->clipWalk < 0) character->clipWalk = i;
-        else if ((strstr(n, "dead") || strstr(n, "death")) && character->clipDeath < 0)
-            character->clipDeath = i;
+        if (!IsModelAnimationValid(character->model, character->anims[i]))
+        {
+            TraceLog(LOG_WARNING, "CHARACTER %s: clip %s does not match the model skeleton",
+                     label, character->anims[i].name);
+            animationsValid = false;
+        }
     }
+    if (!animationsValid)
+    {
+        if (character->anims)
+            UnloadModelAnimations(character->anims, character->animCount);
+        UnloadModel(character->model);
+        *character = (RiggedCharacter){ 0 };
+        TraceLog(LOG_WARNING,
+                 "CHARACTER %s: generated animations invalid, falling back to primitives",
+                 label);
+        return;
+    }
+
+    // Generated assets use stable semantic names. Optional clips retain compatible
+    // fallbacks so an intentionally smaller future library can still render safely.
+    character->clipIdle = FindCharacterClip(character, "idle");
+    character->clipCombat = FindCharacterClip(character, "combat_stance");
+    character->clipWalk = FindCharacterClip(character, "walk_forward");
+    character->clipRunF = FindCharacterClip(character, "run_forward");
+    character->clipRunB = FindCharacterClip(character, "run_backward");
+    character->clipRunFL = FindCharacterClip(character, "run_forward_left");
+    character->clipRunFR = FindCharacterClip(character, "run_forward_right");
+    character->clipRunBL = FindCharacterClip(character, "run_back_left");
+    character->clipRunBR = FindCharacterClip(character, "run_back_right");
+    character->clipDeath = FindCharacterClip(character, "death");
 
     character->clipIdle = character->clipIdle < 0 ? 0 : character->clipIdle;
     character->clipRunF = character->clipRunF < 0 ? character->clipIdle : character->clipRunF;
@@ -612,6 +635,65 @@ static void LoadStationAssets(Assets *a)
 }
 
 //------------------------------------------------------------------------------------
+static void ReleaseSceneTarget(Assets *a)
+{
+    if (a->sceneTarget.id == 0) return;
+    if (a->depthOk)
+    {
+        rlUnloadFramebuffer(a->sceneTarget.id);
+        rlUnloadTexture(a->sceneTarget.texture.id);
+        rlUnloadTexture(a->sceneTarget.depth.id);
+    }
+    else UnloadRenderTexture(a->sceneTarget);
+    a->sceneTarget = (RenderTexture2D){ 0 };
+    a->depthOk = false;
+}
+
+static bool CreateSceneTarget(Assets *a, int screenW, int screenH)
+{
+    a->sceneTarget = (RenderTexture2D){ 0 };
+    a->depthOk = false;
+    if (screenW < 1 || screenH < 1) return false;
+
+    // LoadRenderTexture uses a depth renderbuffer. The outline pass samples depth, so
+    // prefer a hand-built target with a depth texture and keep a direct fallback.
+    a->sceneTarget.id = rlLoadFramebuffer();
+    if (a->sceneTarget.id > 0)
+    {
+        rlEnableFramebuffer(a->sceneTarget.id);
+        a->sceneTarget.texture.id = rlLoadTexture(NULL, screenW, screenH,
+                                                  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
+        a->sceneTarget.texture.width = screenW;
+        a->sceneTarget.texture.height = screenH;
+        a->sceneTarget.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+        a->sceneTarget.texture.mipmaps = 1;
+        a->sceneTarget.depth.id = rlLoadTextureDepth(screenW, screenH, false);
+        a->sceneTarget.depth.width = screenW;
+        a->sceneTarget.depth.height = screenH;
+        a->sceneTarget.depth.mipmaps = 1;
+        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.texture.id,
+                            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
+        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.depth.id,
+                            RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+        a->depthOk = rlFramebufferComplete(a->sceneTarget.id);
+        rlDisableFramebuffer();
+    }
+
+    if (!a->depthOk)
+    {
+        if (a->sceneTarget.id > 0) rlUnloadFramebuffer(a->sceneTarget.id);
+        if (a->sceneTarget.texture.id > 0) rlUnloadTexture(a->sceneTarget.texture.id);
+        if (a->sceneTarget.depth.id > 0) rlUnloadTexture(a->sceneTarget.depth.id);
+        a->sceneTarget = LoadRenderTexture(screenW, screenH);
+        TraceLog(LOG_WARNING, "TOON: depth texture unavailable, ink outlines disabled");
+    }
+    if (a->sceneTarget.texture.id == 0) return false;
+    SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
+    SetTextureWrap(a->sceneTarget.texture, TEXTURE_WRAP_CLAMP);
+    if (a->depthOk) SetTextureWrap(a->sceneTarget.depth, TEXTURE_WRAP_CLAMP);
+    return true;
+}
+
 bool AssetsLoad(Assets *a, int screenW, int screenH)
 {
     *a = (Assets){ 0 };
@@ -810,45 +892,7 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 
-    // Hand-built render target: LoadRenderTexture gives depth as a renderbuffer,
-    // which cannot be sampled. The ink-outline pass reads depth, so it needs a
-    // depth TEXTURE attached instead.
-    a->sceneTarget.id = rlLoadFramebuffer();
-    if (a->sceneTarget.id > 0)
-    {
-        rlEnableFramebuffer(a->sceneTarget.id);
-
-        a->sceneTarget.texture.id = rlLoadTexture(NULL, screenW, screenH,
-                                                  PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-        a->sceneTarget.texture.width = screenW;
-        a->sceneTarget.texture.height = screenH;
-        a->sceneTarget.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-        a->sceneTarget.texture.mipmaps = 1;
-
-        a->sceneTarget.depth.id = rlLoadTextureDepth(screenW, screenH, false);
-        a->sceneTarget.depth.width = screenW;
-        a->sceneTarget.depth.height = screenH;
-        a->sceneTarget.depth.mipmaps = 1;
-
-        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.texture.id,
-                            RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-        rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.depth.id,
-                            RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-
-        a->depthOk = rlFramebufferComplete(a->sceneTarget.id);
-        rlDisableFramebuffer();
-    }
-
-    if (!a->depthOk)
-    {
-        // No sampleable depth: outlines are off, everything else still works.
-        if (a->sceneTarget.id > 0) rlUnloadFramebuffer(a->sceneTarget.id);
-        a->sceneTarget = LoadRenderTexture(screenW, screenH);
-        TraceLog(LOG_WARNING, "TOON: depth texture unavailable, ink outlines disabled");
-    }
-    SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
-    SetTextureWrap(a->sceneTarget.texture, TEXTURE_WRAP_CLAMP);
-    if (a->depthOk) SetTextureWrap(a->sceneTarget.depth, TEXTURE_WRAP_CLAMP);
+    CreateSceneTarget(a, screenW, screenH);
 
     return a->lightingOk;
 }
@@ -880,13 +924,7 @@ void AssetsUnload(Assets *a)
     UnloadTexture(a->texGlow);
     UnloadTexture(a->texGrass);
 
-    if (a->depthOk)
-    {
-        rlUnloadFramebuffer(a->sceneTarget.id);
-        rlUnloadTexture(a->sceneTarget.texture.id);
-        rlUnloadTexture(a->sceneTarget.depth.id);
-    }
-    else UnloadRenderTexture(a->sceneTarget);
+    ReleaseSceneTarget(a);
 
     // The material borrows the shader, so drop its reference before unloading it.
     a->mat.shader = (Shader){ 0 };
@@ -910,6 +948,18 @@ void AssetsUnload(Assets *a)
         UnloadModel(character->model);
     }
     if (a->skinnedOk) UnloadShader(a->skinned);
+}
+
+bool AssetsResizeViewport(Assets *a, int screenW, int screenH)
+{
+    if (!a || screenW < 1 || screenH < 1) return false;
+    if (a->sceneTarget.texture.width == screenW &&
+        a->sceneTarget.texture.height == screenH) return true;
+    ReleaseSceneTarget(a);
+    bool ok = CreateSceneTarget(a, screenW, screenH);
+    if (!ok)
+        TraceLog(LOG_WARNING, "POST: viewport target recreation failed; using direct render");
+    return ok;
 }
 
 //------------------------------------------------------------------------------------

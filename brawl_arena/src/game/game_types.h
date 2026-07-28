@@ -61,6 +61,8 @@ typedef struct Brawler {
     float attackCd;
     float hitFlash;
     float revealTimer;
+    float lastCombatTime;
+    float lastHealthRegenPulseTime;
     float spawnScale;
     float mobilityCooldown;
     float dashTimer;

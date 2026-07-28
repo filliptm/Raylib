@@ -19,19 +19,45 @@
 #include "map_content.h"
 #include "game_commands.h"
 #include "content_catalog.h"
+#include "ui_system.h"
 #include "raymath.h"
 #include <stddef.h>
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
-typedef enum { TAB_MATCH = 0, TAB_BOTS, TAB_PLAYER, TAB_KIT, TAB_STYLE, TAB_WORLD, TAB_COUNT } PanelTab;
+typedef enum {
+    TAB_MATCH = 0,
+    TAB_BOTS,
+    TAB_PLAYER,
+    TAB_KIT,
+    TAB_STYLE,
+    TAB_WORLD,
+    TAB_PREVIEW,
+    TAB_COUNT
+} PanelTab;
 
-static const char *TAB_NAMES[TAB_COUNT] = { "MATCH", "BOTS", "PLAYER", "KIT", "STYLE", "WORLD" };
+static const char *TAB_NAMES[TAB_COUNT] = {
+    "MATCH", "BOTS", "PLAYER", "KIT", "VISUAL", "WORLD", "PREVIEW / UI"
+};
 
-// Open on launch: this build is a sandbox, so the tuning panel is the point of entry.
-static bool g_open = true;
-static PanelTab g_tab = TAB_MATCH;
-static float g_scroll[TAB_COUNT] = { 0 };
-static float g_contentHeight[TAB_COUNT] = { 0 };
+typedef struct CommandCenterState {
+    bool open;
+    PanelTab tab;
+    float scroll[TAB_COUNT];
+    float contentHeight[TAB_COUNT];
+} CommandCenterState;
+
+// Explicit long-lived editor state. Match resets cannot erase navigation or scroll.
+static CommandCenterState g_command = {
+    .open = true,
+    .tab = TAB_MATCH
+};
+
+#define g_open (g_command.open)
+#define g_tab (g_command.tab)
+#define g_scroll (g_command.scroll)
+#define g_contentHeight (g_command.contentHeight)
 
 //------------------------------------------------------------------------------------
 // Actions
@@ -281,7 +307,7 @@ static void TabKit(CommandUi *ui)
         ConfigResetKitToProject(w, cls);
         GameCommandExecute(w, (GameCommand){ GAME_COMMAND_SYNC_CLASS_HEALTH, cls });
     }
-    if (CommandUiButton(ui, "SAVE KIT AS PROJECT DEFAULT"))
+    if (CommandUiButton(ui, "SAVE KIT + FRAMING AS PROJECT DEFAULT"))
         ConfigPromoteKit(w, cls);
 }
 
@@ -354,6 +380,15 @@ static void TabWorld(CommandUi *ui)
     if (CommandUiSliderI(ui, "Crate health", &t->crateHealth, 100, 10000)) NeedsRestart(w);
     CommandUiSliderF(ui, "Result hold", &t->matchResultHold, 0.5f, 15.0f, "%.1fs");
 
+    CommandUiSection(ui, "COMBAT RECOVERY");
+    CommandUiSliderF(ui, "Regen delay", &t->healthRegenDelay, 0.0f, 10.0f, "%.2fs");
+    CommandUiSliderF(ui, "Pulse interval", &t->healthRegenInterval,
+                     0.05f, 5.0f, "%.2fs");
+    CommandUiSliderF(ui, "Max health / pulse", &t->healthRegenRatio,
+                     0.0f, 0.5f, "%.2f");
+    CommandUiText(ui, "0.13 restores 13% max health. Zero disables regeneration.",
+                  COMMAND_TEXT_DIM);
+
     CommandUiSection(ui, "STEALTH");
     CommandUiSliderF(ui, "Bush reveal range", &t->bushReveal, 0.0f, 14.0f, "%.1f");
     CommandUiSliderF(ui, "Reveal on fire", &t->fireReveal, 0.0f, 6.0f, "%.1fs");
@@ -408,12 +443,70 @@ static void TabWorld(CommandUi *ui)
         ConfigPromoteAll(w);
 }
 
+static void TabPreview(CommandUi *ui)
+{
+    App *w = ui->world;
+    BrawlerClass cls = w->session.brawlers[w->session.playerIdx].cls;
+    CharacterPresentationDefinition *profile = &w->content.presentation[cls];
+
+    CommandUiSection(ui, "CHARACTER PRESENTATION");
+    CommandUiText(ui, TextFormat("%s // project-authorable framing",
+                                 CLASS_NAMES[cls]), COMMAND_TEXT_MAIN);
+    CommandUiText(ui, "Home and roster poses are independent. No automatic rotation.",
+                  COMMAND_TEXT_DIM);
+    CommandUiSliderF(ui, "Home yaw", &profile->homeYawDegrees,
+                     -360.0f, 360.0f, "%.0f deg");
+    CommandUiSliderF(ui, "Roster yaw", &profile->selectYawDegrees,
+                     -360.0f, 360.0f, "%.0f deg");
+    CommandUiSliderF(ui, "Home scale", &profile->homeScale, 0.50f, 1.50f, "%.2f");
+    CommandUiSliderF(ui, "Roster scale", &profile->selectScale, 0.50f, 1.50f, "%.2f");
+    CommandUiSliderF(ui, "Home offset X", &profile->homeOffset.x, -8.0f, 8.0f, "%.2f");
+    CommandUiSliderF(ui, "Home offset Y", &profile->homeOffset.y, -4.0f, 4.0f, "%.2f");
+    CommandUiSliderF(ui, "Roster offset X", &profile->selectOffset.x, -8.0f, 8.0f, "%.2f");
+    CommandUiSliderF(ui, "Roster offset Y", &profile->selectOffset.y, -4.0f, 4.0f, "%.2f");
+    CommandUiSliderF(ui, "Camera target Y", &profile->cameraTargetY, 0.20f, 4.0f, "%.2f");
+    CommandUiSliderF(ui, "Camera distance", &profile->cameraDistance, 4.0f, 14.0f, "%.2f");
+
+    CommandUiSection(ui, "PERSONAL UI PROFILE");
+    CommandUiText(ui, "These values save to profile.cfg, never gameplay.cfg.",
+                  COMMAND_TEXT_DIM);
+    CommandUiSliderF(ui, "UI scale", &w->uiPreferences.scale, 0.75f, 1.50f, "%.2fx");
+    CommandUiToggle(ui, "Reduced motion", &w->uiPreferences.reducedMotion);
+    CommandUiToggle(ui, "High contrast", &w->uiPreferences.highContrast);
+    CommandUiToggle(ui, "Tutorial hints", &w->uiPreferences.showTutorialHints);
+    static const char *GLYPH_NAMES[] = { "AUTO", "KEYBOARD", "GAMEPAD" };
+    CommandUiCycler(ui, "Input glyphs", &w->uiPreferences.inputGlyphMode,
+                    3, GLYPH_NAMES);
+    if (CommandUiButton(ui, "Reset tutorial progress"))
+    {
+        w->uiPreferences.tutorialFlags = 0;
+        ConfigMarkDirty();
+    }
+
+    CommandUiSection(ui, "PROJECT AUTHORING");
+    CommandUiText(ui, TextFormat("%d kit/profile values differ from PROJECT",
+                                 ConfigKitOverrideCount(w, cls)),
+                  ConfigKitOverrideCount(w, cls) > 0 ? COMMAND_WARN : COMMAND_TEXT_DIM);
+    if (CommandUiButton(ui, "Reset kit + framing to PROJECT"))
+        ConfigResetKitToProject(w, cls);
+    if (CommandUiButton(ui, "SAVE KIT + FRAMING AS PROJECT DEFAULT"))
+        ConfigPromoteKit(w, cls);
+}
+
 //------------------------------------------------------------------------------------
 // Public
 //------------------------------------------------------------------------------------
 bool CommandCenterIsOpen(void) { return g_open; }
 
 void CommandCenterForceOpen(void) { g_open = true; }
+
+bool CommandCenterConsumeEscape(void)
+{
+    if (!g_open) return false;
+    g_open = false;
+    CommandUiResetInteraction();
+    return true;
+}
 
 bool CommandCenterCapturesMouse(void)
 {
@@ -425,57 +518,101 @@ void CommandCenterUpdate(App *w)
 {
     (void)w;
     if (IsKeyPressed(KEY_TAB)) g_open = !g_open;
+    if (g_open && UiBackPressed()) g_open = false;
+    if (g_open && (UiSystemActive()->previousPressed || UiSystemActive()->nextPressed))
+    {
+        int direction = UiSystemActive()->nextPressed ? 1 : -1;
+        g_tab = (PanelTab)((g_tab + direction + TAB_COUNT)%TAB_COUNT);
+    }
     if (!g_open) CommandUiResetInteraction();
 }
 
 void CommandCenterDraw(App *w)
 {
+    const UiTheme *theme = UiSystemActive()->theme;
     if (!g_open)
     {
-        // Centered, so it clears the kit panel on the left and the super meter on the right.
-        const char *hint = "TAB  command center";
-        int tw = MeasureText(hint, 14);
-        DrawText(hint, GetScreenWidth() / 2 - tw / 2, GetScreenHeight() - 26, 14, (Color){ 120, 132, 152, 200 });
+        UiDrawTextAligned(UI_TEXT_CAPTION, "TAB  COMMAND CENTER",
+                          UiRefRect(500, 772, 280, 24), UI_ALIGN_CENTER, theme->muted);
         return;
     }
 
     Rectangle panel = CommandPanelRect();
-    DrawRectangleRounded(panel, 0.02f, 8, COMMAND_PANEL_BG);
-    DrawRectangleRoundedLines(panel, 0.02f, 8, COMMAND_PANEL_EDGE);
+    UiDrawPanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
+    UiDrawSignalRail(panel, COMMAND_WARN, false);
 
-    // Title
-    DrawText("COMMAND CENTER", (int)panel.x + 16, (int)panel.y + 12, 18, COMMAND_TEXT_MAIN);
-    DrawText("TAB to close", (int)(panel.x + panel.width - 92), (int)panel.y + 17, 12, COMMAND_TEXT_DIM);
+    float inset = UiScale(16);
+    float headerHeight = UiScale(78);
+    float footerHeight = UiScale(76);
+    float railWidth = UiScale(126);
+
+    UiDrawText(UI_TEXT_HEADING, "COMMAND CENTER",
+               (Vector2){ panel.x + inset, panel.y + UiScale(10) }, COMMAND_TEXT_MAIN);
+    UiDrawTextAligned(UI_TEXT_CAPTION, "TAB TO CLOSE",
+                      (Rectangle){ panel.x + panel.width - UiScale(116),
+                                   panel.y + UiScale(12), UiScale(98), UiScale(24) },
+                      UI_ALIGN_RIGHT, COMMAND_TEXT_DIM);
     int projectChanges = ConfigProjectOverrideCount(w);
-    const char *source = w->config.recoveryDefaults ? "CONFIG RECOVERY MODE"
-                       : (projectChanges > 0 ? TextFormat("PROJECT + LOCAL DRAFT  (%d)", projectChanges)
-                                             : "PROJECT DEFAULTS");
-    DrawText(source, (int)panel.x + 16, (int)panel.y + 32, 11,
-             w->config.recoveryDefaults ? COMMAND_WARN : (Color){ 96, 148, 188, 255 });
+    char source[96];
+    if (w->config.recoveryDefaults) snprintf(source, sizeof(source), "CONFIG RECOVERY MODE");
+    else if (projectChanges > 0)
+        snprintf(source, sizeof(source), "PROJECT + LOCAL DRAFT  //  %d CHANGED", projectChanges);
+    else snprintf(source, sizeof(source), "PROJECT DEFAULTS  //  CLEAN");
+    UiDrawText(UI_TEXT_CAPTION, source,
+               (Vector2){ panel.x + inset, panel.y + UiScale(48) },
+               w->config.recoveryDefaults ? COMMAND_WARN :
+               (projectChanges > 0 ? theme->safety : theme->ally));
+    DrawLineEx((Vector2){ panel.x + inset, panel.y + headerHeight },
+               (Vector2){ panel.x + panel.width - inset, panel.y + headerHeight },
+               UiScale(1), COMMAND_PANEL_EDGE);
 
-    // Tabs
-    int tabY = (int)panel.y + 50;
-    int tabW = (int)(panel.width - 32) / TAB_COUNT;
+    Rectangle rail = {
+        panel.x + inset,
+        panel.y + headerHeight + UiScale(10),
+        railWidth,
+        panel.height - headerHeight - footerHeight - UiScale(20)
+    };
+    UiDrawPanel(rail, theme->voidBg, theme->hull, false);
+    UiDrawText(UI_TEXT_CAPTION, "GAMEPLAY",
+               (Vector2){ rail.x + UiScale(10), rail.y + UiScale(10) }, theme->muted);
+
+    float tabY = rail.y + UiScale(34);
     for (int i = 0; i < TAB_COUNT; i++)
     {
-        Rectangle r = { panel.x + 16 + i * tabW, tabY, tabW - 4, 26 };
-        bool hover = CommandUiMouseIn(r);
+        if (i == TAB_KIT)
+        {
+            UiDrawText(UI_TEXT_CAPTION, "CONTENT",
+                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->muted);
+            tabY += UiScale(24);
+        }
+        if (i == TAB_STYLE)
+        {
+            UiDrawText(UI_TEXT_CAPTION, "PRESENTATION",
+                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->muted);
+            tabY += UiScale(24);
+        }
+        Rectangle r = { rail.x + UiScale(6), tabY, rail.width - UiScale(12), UiScale(38) };
+        UiResponse response = UiInteract(UiHash(TAB_NAMES[i]), r, true);
+        bool hover = response.hovered;
         bool active = (g_tab == (PanelTab)i);
-
-        if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) g_tab = (PanelTab)i;
-
-        DrawRectangleRounded(r, 0.3f, 6, active ? COMMAND_ACCENT_DIM : (hover ? (Color){ 30, 38, 50, 255 } : COMMAND_TRACK_BG));
-        int tw = MeasureText(TAB_NAMES[i], 13);
-        DrawText(TAB_NAMES[i], (int)(r.x + r.width / 2 - tw / 2), (int)r.y + 6, 13,
-                 active ? COMMAND_TEXT_MAIN : COMMAND_TEXT_DIM);
-
-        if (active) DrawRectangle((int)r.x, (int)(r.y + r.height - 2), (int)r.width, 2, COMMAND_ACCENT);
+        if (response.activated) g_tab = (PanelTab)i;
+        DrawRectangleRec(r, active ? COMMAND_ACCENT_DIM :
+                         (hover ? theme->deckRaised : theme->voidBg));
+        if (active) UiDrawSignalRail(r, COMMAND_ACCENT, false);
+        UiDrawTextFit(UI_TEXT_CAPTION, TAB_NAMES[i],
+                      (Rectangle){ r.x + UiScale(12), r.y,
+                                   r.width - UiScale(18), r.height },
+                      UI_ALIGN_LEFT, active ? COMMAND_TEXT_MAIN : COMMAND_TEXT_DIM);
+        if (response.focused && UiSystemActive()->focusVisible)
+            DrawRectangleLinesEx(r, UiScale(1), COMMAND_TEXT_MAIN);
+        tabY += UiScale(42);
     }
 
-    int contentTop = tabY + 34;
-    int contentBottom = (int)(panel.y + panel.height) - 10;
+    int contentTop = (int)(panel.y + headerHeight + UiScale(10));
+    int contentBottom = (int)(panel.y + panel.height - footerHeight - UiScale(8));
     Rectangle contentClip = {
-        panel.x + 8, (float)contentTop, panel.width - 16,
+        rail.x + rail.width + UiScale(12), (float)contentTop,
+        panel.x + panel.width - inset - (rail.x + rail.width + UiScale(12)),
         (float)(contentBottom - contentTop)
     };
 
@@ -488,12 +625,14 @@ void CommandCenterDraw(App *w)
 
     CommandUi ui = {
         .world = w,
-        .x = (int)panel.x + 16,
+        .x = (int)contentClip.x + (int)UiScale(6),
         .y = contentTop - (int)g_scroll[g_tab],
-        .width = (int)panel.width - 32,
+        .width = (int)contentClip.width - (int)UiScale(14),
         .clip = contentClip
     };
     int logicalStart = ui.y;
+    BrawlerClass activeClass = w->session.brawlers[w->session.playerIdx].cls;
+    WeaponDef weaponBefore = w->content.weapons[activeClass];
 
     BeginScissorMode((int)contentClip.x, (int)contentClip.y,
                      (int)contentClip.width, (int)contentClip.height);
@@ -506,10 +645,13 @@ void CommandCenterDraw(App *w)
         case TAB_KIT:    TabKit(&ui); break;
         case TAB_STYLE:  TabStyle(&ui); break;
         case TAB_WORLD:  TabWorld(&ui); break;
+        case TAB_PREVIEW: TabPreview(&ui); break;
         default: break;
     }
     EndScissorMode();
-    ContentCatalogRebuildTyped(&w->content);
+    if (memcmp(&weaponBefore, &w->content.weapons[activeClass],
+               sizeof(weaponBefore)) != 0)
+        ContentCatalogRebuildTyped(&w->content);
 
     g_contentHeight[g_tab] = (float)(ui.y - logicalStart);
     maxScroll = fmaxf(0.0f, g_contentHeight[g_tab] - contentClip.height);
@@ -526,4 +668,29 @@ void CommandCenterDraw(App *w)
         DrawRectangle((int)(contentClip.x + contentClip.width - 4), (int)thumbY,
                       4, (int)thumbH, COMMAND_ACCENT_DIM);
     }
+
+    Rectangle footer = {
+        panel.x + inset,
+        panel.y + panel.height - footerHeight + UiScale(8),
+        panel.width - inset*2.0f,
+        footerHeight - UiScale(16)
+    };
+    DrawLineEx((Vector2){ footer.x, footer.y - UiScale(6) },
+               (Vector2){ footer.x + footer.width, footer.y - UiScale(6) },
+               UiScale(1), COMMAND_PANEL_EDGE);
+    UiResponse discard = UiButton(UiHash("command.discard"),
+        (Rectangle){ footer.x, footer.y, footer.width*0.42f, footer.height },
+        "RESTORE PROJECT", UI_BUTTON_DANGER, UI_ICON_BACK);
+    UiResponse save = UiButton(UiHash("command.save"),
+        (Rectangle){ footer.x + footer.width*0.44f, footer.y,
+                     footer.width*0.56f, footer.height },
+        "SAVE ALL TO PROJECT", UI_BUTTON_STANDARD, UI_ICON_NEXT);
+    if (discard.activated)
+    {
+        ConfigResetAllToProject(w);
+        for (int i = 0; i < CLASS_COUNT; i++)
+            GameCommandExecute(w, (GameCommand){ GAME_COMMAND_SYNC_CLASS_HEALTH, i });
+        w->matchRestartPending = true;
+    }
+    if (save.activated) ConfigPromoteAll(w);
 }

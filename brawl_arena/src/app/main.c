@@ -26,6 +26,7 @@
 #include "menu.h"
 #include "map_content.h"
 #include "game_random.h"
+#include "ui_system.h"
 #include <string.h>
 #include <math.h>
 #include "raymath.h"
@@ -35,6 +36,7 @@
 
 static App world;
 static Assets assets;
+static UiSystem ui;
 
 static const Color SKY_COLOR = { 22, 26, 38, 255 };
 
@@ -165,8 +167,9 @@ static void BankResult(App *w)
 
 int main(void)
 {
-    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT);
+    SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
+    SetWindowMinSize(960, 600);
 
     // Vsync owns presentation; the refresh-rate ceiling is a fallback for platforms
     // where the swap interval cannot be enabled. Matching the active display avoids the
@@ -178,6 +181,7 @@ int main(void)
     SetExitKey(KEY_NULL);
 
     ConfigInitialize(&world);
+    UiSystemLoad(&ui);
     char mapStatus[256];
     if (!MapCatalogLoad(&world.content, "data/maps/manifest.cfg",
                         mapStatus, (int)sizeof(mapStatus)))
@@ -187,9 +191,9 @@ int main(void)
         return 1;
     }
 
-    AssetsLoad(&assets, SCREEN_WIDTH, SCREEN_HEIGHT);
+    AssetsLoad(&assets, GetScreenWidth(), GetScreenHeight());
     RenderSetAssets(&assets);
-    MenuInit(&assets);
+    MenuInit(&assets, &ui);
 
     ResetMatch(&world, (BrawlerClass)world.tune.selectedKit);
     world.flow.screen = SCREEN_MENU;
@@ -198,6 +202,10 @@ int main(void)
     {
         float realDt = GetFrameTime();
         if (realDt > 0.05f) realDt = 0.05f;
+        UiSystemBeginFrame(&ui, &world.uiPreferences,
+                           GetScreenWidth(), GetScreenHeight(), realDt);
+        if (IsWindowResized())
+            AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight());
 
         ShellUpdate(&world, realDt);
         bool locked = ShellIsTransitioning(&world);
@@ -207,6 +215,8 @@ int main(void)
         {
             // An open overlay gets first refusal, so closing it never also quits.
             if (MenuConsumeEscape()) { }
+            else if (world.flow.screen == SCREEN_MATCH &&
+                     CommandCenterConsumeEscape()) { }
             else if (world.flow.screen == SCREEN_BRAWLERS) ShellRequestScreen(&world, SCREEN_MENU);
             else if (world.flow.screen == SCREEN_MATCH) ShellRequestScreen(&world, SCREEN_MENU);
             else world.flow.quitRequested = true;
@@ -236,6 +246,7 @@ int main(void)
             if (!locked && !decided)
             {
                 PlayerInput input = PlayerCaptureInput(&world);
+                HudObservePlayerInput(&world, &input);
                 PlayerUpdate(&world, &input, dt);
             }
 
@@ -244,6 +255,7 @@ int main(void)
                 AIUpdate(game, dt);
                 BrawlersUpdate(game, dt);
                 ProjectilesUpdate(game, dt);
+                BrawlersUpdateRegeneration(game);
             }
 
             ArenaUpdate(&world.session.arena, dt);
@@ -258,10 +270,8 @@ int main(void)
             // as soon as they click through it.
             if (decided && !ShellIsTransitioning(&world))
             {
-                bool skipped = world.session.match.overTimer > 0.9f &&
-                               (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsKeyPressed(KEY_SPACE));
-
-                if (world.session.match.overTimer > world.tune.matchResultHold || skipped)
+                if (world.session.match.overTimer > world.tune.matchResultHold ||
+                    HudConsumeContinue())
                     ShellRequestScreen(&world, SCREEN_MENU);
             }
         }
@@ -277,7 +287,8 @@ int main(void)
         //--- Present -------------------------------------------------------------
         if (world.flow.screen == SCREEN_MATCH)
         {
-            bool usePost = world.tune.postFx && assets.postOk;
+            bool usePost = world.tune.postFx && assets.postOk &&
+                           assets.sceneTarget.texture.id > 0;
 
             if (usePost)
             {
@@ -321,9 +332,11 @@ int main(void)
                 ShellDrawFade(&world);
             EndDrawing();
         }
+        UiSystemEndFrame(&ui);
     }
 
     ConfigFlush(&world);
+    UiSystemUnload(&ui);
     AssetsUnload(&assets);
     CloseWindow();
     return 0;

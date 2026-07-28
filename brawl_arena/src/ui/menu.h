@@ -3,8 +3,9 @@
 
 #include "app_types.h"
 #include "assets.h"
+#include "ui_system.h"
 
-void MenuInit(Assets *a);
+void MenuInit(Assets *a, UiSystem *ui);
 
 // Lets an open menu overlay swallow ESC. Returns true when it did.
 bool MenuConsumeEscape(void);

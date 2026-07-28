@@ -1,328 +1,378 @@
 #include "hud.h"
-#include "weapons.h"
-#include "effects.h"
+
+#include "command_center.h"
+#include "config.h"
 #include "content_catalog.h"
+#include "ui_system.h"
 #include "raymath.h"
 #include <math.h>
+#include <stdio.h>
 
-static const Color PANEL_BG = { 12, 16, 26, 205 };
-static const Color SUPER_GOLD = { 255, 206, 74, 255 };
-static const Color GEM_PURPLE = { 186, 116, 252, 255 };
-static const Color TEXT_SOFT = { 214, 226, 244, 255 };
-static const Color HEALTH_GREEN = { 78, 216, 108, 255 };
-static const Color AMMO_FULL = { 122, 206, 255, 255 };
-static const Color AMMO_PART = { 62, 122, 176, 255 };
-static const Color SLOT_EMPTY = { 40, 46, 58, 255 };
+enum {
+    TUTORIAL_MOVE = 1 << 0,
+    TUTORIAL_AIM = 1 << 1,
+    TUTORIAL_FIRE = 1 << 2,
+    TUTORIAL_QUICK = 1 << 3,
+    TUTORIAL_MOBILITY = 1 << 4,
+    TUTORIAL_SUPER = 1 << 5,
+    TUTORIAL_COMMAND = 1 << 6
+};
 
-// Text with a hard drop shadow, so readouts stay legible over any part of the arena.
-static void DrawCenteredLabel(const char *text, int centerX, int y, int size, Color color)
+static bool g_continueRequested;
+
+static Color CueColor(const App *w, Color base)
 {
-    int tw = MeasureText(text, size);
-    DrawText(text, centerX - tw / 2 + 1, y + 1, size, (Color){ 0, 0, 0, 200 });
-    DrawText(text, centerX - tw / 2, y, size, color);
+    return UiThemeHighContrast(base, w->uiPreferences.highContrast);
+}
+static void CenteredWorldText(const char *text, int centerX, int y,
+                              UiTextRole role, Color color)
+{
+    Vector2 size = UiMeasureText(role, text);
+    UiDrawTextShadow(role, text, (Vector2){ centerX - size.x*0.5f, (float)y }, color);
 }
 
-// Reload state as segmented tabs, one per ammo pip. Ammo is fractional, so a partly
-// refilled pip shows how far along the reload is.
-static void DrawAmmoTabs(int x, int y, int width, float ammo, int maxAmmo)
+static void DrawAmmo(Rectangle bounds, float ammo, int maxAmmo, Color fill)
 {
-    const int gap = 3;
-    const int h = 5;
     if (maxAmmo < 1) return;
-    int tabW = (width - gap * (maxAmmo - 1)) / maxAmmo;
-    if (tabW < 1) return;
-
-    for (int i = 0; i < maxAmmo; i++)
-    {
-        int tx = x + i * (tabW + gap);
-        float fill = Clamp(ammo - i, 0.0f, 1.0f);
-
-        DrawRectangle(tx - 1, y - 1, tabW + 2, h + 2, (Color){ 0, 0, 0, 180 });
-        DrawRectangle(tx, y, tabW, h, SLOT_EMPTY);
-
-        if (fill > 0.0f)
-            DrawRectangle(tx, y, (int)(tabW * fill), h, (fill >= 1.0f) ? AMMO_FULL : AMMO_PART);
-    }
+    UiDrawProgress(bounds, Clamp(ammo/maxAmmo, 0.0f, 1.0f), fill, true, maxAmmo);
 }
 
-//------------------------------------------------------------------------------------
+void HudObservePlayerInput(App *w, const PlayerInput *input)
+{
+    if (!w || !input || input->actionsBlocked) return;
+    int before = w->uiPreferences.tutorialFlags;
+    if (Vector3Length(input->moveIntent) > 0.1f)
+        w->uiPreferences.tutorialFlags |= TUTORIAL_MOVE;
+    if (input->attackPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_AIM;
+    if (input->attackReleased) w->uiPreferences.tutorialFlags |= TUTORIAL_FIRE;
+    if (input->autoAttackPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_QUICK;
+    if (input->mobilityPressed) w->uiPreferences.tutorialFlags |= TUTORIAL_MOBILITY;
+    if (input->superHeld) w->uiPreferences.tutorialFlags |= TUTORIAL_SUPER;
+    if (w->session.sandbox && CommandCenterIsOpen())
+        w->uiPreferences.tutorialFlags |= TUTORIAL_COMMAND;
+    if (before != w->uiPreferences.tutorialFlags) ConfigMarkDirty();
+}
+
+bool HudConsumeContinue(void)
+{
+    bool requested = g_continueRequested;
+    g_continueRequested = false;
+    return requested;
+}
+
 void HudDrawBars(App *w)
 {
+    const UiTheme *t = UiSystemActive()->theme;
     for (int i = 0; i < w->session.brawlerCount; i++)
     {
         Brawler *b = &w->session.brawlers[i];
         if (!b->alive || !b->visible) continue;
-
         Vector3 head = b->position;
-        // Cleared above the tallest head in play - the rigged model stands 3.1 world
-        // units. Your own cluster is taller than an enemy's (number above, ammo tabs
-        // below), so it gets extra room.
         head.y = b->isPlayer ? 4.05f : 3.60f;
-        Vector2 sp = GetWorldToScreen(head, w->presentation.camera);
-
-        if (sp.x < -80 || sp.x > GetScreenWidth() + 80) continue;
-        if (sp.y < -80 || sp.y > GetScreenHeight() + 80) continue;
+        Vector2 screen = GetWorldToScreen(head, w->presentation.camera);
+        if (screen.x < -80 || screen.x > GetScreenWidth() + 80 ||
+            screen.y < -80 || screen.y > GetScreenHeight() + 80) continue;
 
         bool mine = b->isPlayer;
-        int bw = mine ? 62 : 46;
-        int bh = mine ? 9 : 6;
-        int x = (int)sp.x - bw / 2;
-        int y = (int)sp.y;
+        float width = UiScale(mine ? 68.0f : 50.0f);
+        float height = UiScale(mine ? 8.0f : 6.0f);
+        Rectangle bar = { screen.x - width*0.5f, screen.y, width, height };
+        float health = b->maxHealth > 0 ? (float)b->health/b->maxHealth : 0.0f;
+        Color team = b->team == TEAM_PLAYER ? CueColor(w, t->ally) : CueColor(w, t->enemy);
+        if (health < 0.30f) team = t->enemy;
 
-        float ratio = (float)b->health / (float)b->maxHealth;
-        if (ratio < 0.0f) ratio = 0.0f;
+        char number[24];
+        snprintf(number, sizeof(number), "%d", b->health);
+        CenteredWorldText(number, (int)screen.x, (int)(screen.y - UiScale(20)),
+                          UI_TEXT_CAPTION, mine ? t->paper : t->mist);
 
-        // Health reads as a number above every bar. Yours is larger and cooler-toned;
-        // enemies get a smaller, warmer figure so the two never get confused.
-        DrawCenteredLabel(TextFormat("%d", b->health), (int)sp.x,
-                          y - (mine ? 18 : 15), mine ? 16 : 13,
-                          mine ? (Color){ 236, 248, 238, 255 } : (Color){ 255, 208, 208, 255 });
+        DrawRectangleRec((Rectangle){ bar.x - UiScale(2), bar.y - UiScale(2),
+                                      bar.width + UiScale(4), bar.height + UiScale(4) },
+                         t->shadow);
+        DrawRectangleRec(bar, t->hull);
+        Rectangle healthFill = bar;
+        healthFill.width *= Clamp(health, 0.0f, 1.0f);
+        DrawRectangleRec(healthFill, team);
 
-        DrawRectangle(x - 2, y - 2, bw + 4, bh + 4, (Color){ 0, 0, 0, 180 });
-        DrawRectangle(x, y, bw, bh, SLOT_EMPTY);
-
-        // Green for you, team colour for everyone else, reddening as they get low.
-        Color fill = HEALTH_GREEN;
-        if (!mine)
-        {
-            fill = TEAM_COLORS[b->team];
-            if (ratio < 0.3f) fill = ColorLerpC(fill, (Color){ 255, 90, 90, 255 }, 0.6f);
-        }
-        DrawRectangle(x, y, (int)(bw * ratio), bh, fill);
+        // Shape markers make team identity readable without relying on hue.
+        if (b->team == TEAM_PLAYER)
+            UiIconDraw(UI_ICON_ALLY,
+                       (Vector2){ bar.x - UiScale(10), bar.y + bar.height*0.5f },
+                       UiScale(9), team);
+        else
+            UiIconDraw(UI_ICON_ENEMY,
+                       (Vector2){ bar.x + bar.width + UiScale(10),
+                                  bar.y + bar.height*0.5f },
+                       UiScale(9), team);
 
         if (mine)
-            DrawAmmoTabs(x, y + bh + 5, bw, b->ammo,
-                         ContentCharacter(&w->content, b->cls)->maxAmmo);
-
-        // Super-ready pip beside the bar.
-        if (b->superCharge >= 1.0f)
         {
-            float pulse = 0.5f + 0.5f * sinf(w->session.time * 8.0f);
-            Color c = SUPER_GOLD;
-            c.a = (unsigned char)(160 + pulse * 95);
-            DrawCircle(x + bw + 9, y + bh / 2, 5.0f, c);
+            DrawAmmo((Rectangle){ bar.x, bar.y + bar.height + UiScale(6),
+                                  bar.width, UiScale(5) },
+                     b->ammo, ContentCharacter(&w->content, b->cls)->maxAmmo, t->ion);
         }
 
-        // What this brawler is carrying. Knowing who to hunt is the whole mode.
         if (b->gems > 0)
         {
-            const char *carried = TextFormat("%d", b->gems);
-            int cw = MeasureText(carried, mine ? 17 : 14);
-            int gx = x + bw/2 - (cw + 16)/2;
-            int gy = y + bh + (mine ? 14 : 6);
-
-            DrawRectangleRounded((Rectangle){ gx - 4, gy - 3, cw + 22, (mine ? 19 : 16) },
-                                 0.45f, 6, (Color){ 0, 0, 0, 175 });
-            DrawPoly((Vector2){ gx + 5, gy + (mine ? 7 : 6) }, 4, 5.5f, 45.0f, GEM_PURPLE);
-            DrawText(carried, gx + 14, gy, mine ? 17 : 14, WHITE);
+            char gems[16];
+            snprintf(gems, sizeof(gems), "%d", b->gems);
+            UiIconDraw(UI_ICON_GEM,
+                       (Vector2){ screen.x - UiScale(12),
+                                  bar.y + bar.height + UiScale(mine ? 25 : 15) },
+                       UiScale(11), t->reactor);
+            UiDrawTextShadow(UI_TEXT_CAPTION, gems,
+                             (Vector2){ screen.x, bar.y + bar.height +
+                                        UiScale(mine ? 18 : 8) }, t->paper);
         }
-
-        if (b->inBush)
-            DrawText("~", x - 14, y - 4, 16, (Color){ 130, 235, 150, 220 });
     }
+}
+
+static void DrawObjective(App *w)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    Rectangle bounds = UiRefRect(434, 20, 412, 94);
+    UiDrawPanel(bounds, t->deck, t->line, true);
+    UiDrawSignalRail(bounds, t->reactor, false);
+    UiDrawTextAligned(UI_TEXT_CAPTION,
+                      w->session.sandbox ? "PRACTICE TELEMETRY" :
+                      (w->tune.gemGrab ? "GEM GRAB // FIRST TO TARGET" : "SKIRMISH"),
+                      UiRefRect(454, 28, 372, 22), UI_ALIGN_CENTER, t->muted);
+
+    if (w->tune.gemGrab && !w->session.sandbox)
+    {
+        const Match *match = &w->session.match;
+        char ally[16], enemy[16], target[32];
+        snprintf(ally, sizeof(ally), "%d", match->teamGems[TEAM_PLAYER]);
+        snprintf(enemy, sizeof(enemy), "%d", match->teamGems[TEAM_ENEMY]);
+        snprintf(target, sizeof(target), "TARGET %d", w->tune.gemsToWin);
+        UiIconDraw(UI_ICON_ALLY, UiRefPoint(492, 73), UiScale(20), CueColor(w, t->ally));
+        UiDrawText(UI_TEXT_HEADING, ally, UiRefPoint(516, 53), t->paper);
+        UiDrawTextAligned(UI_TEXT_DATA, target, UiRefRect(558, 52, 164, 40),
+                          UI_ALIGN_CENTER, t->ready);
+        UiDrawTextAligned(UI_TEXT_HEADING, enemy, UiRefRect(728, 52, 44, 40),
+                          UI_ALIGN_RIGHT, t->paper);
+        UiIconDraw(UI_ICON_ENEMY, UiRefPoint(792, 73), UiScale(20), CueColor(w, t->enemy));
+
+        if (match->phase == MATCH_COUNTDOWN)
+        {
+            char countdown[80];
+            snprintf(countdown, sizeof(countdown), "%s LOCK // %.1f",
+                     match->countdownTeam == TEAM_PLAYER ? "ALLY" : "ENEMY",
+                     match->countdown);
+            UiDrawTextAligned(UI_TEXT_CAPTION, countdown, UiRefRect(508, 91, 264, 18),
+                              UI_ALIGN_CENTER,
+                              match->countdownTeam == TEAM_PLAYER ? t->ally : t->enemy);
+        }
+    }
+    else
+    {
+        char state[96];
+        int alive = 0;
+        for (int i = 0; i < w->session.brawlerCount; i++)
+            if (w->session.brawlers[i].team == TEAM_ENEMY &&
+                w->session.brawlers[i].alive) alive++;
+        snprintf(state, sizeof(state), "%d KO  /  %d DOWN  /  %d HOSTILES",
+                 w->session.kills, w->session.deaths, alive);
+        UiDrawTextAligned(UI_TEXT_DATA, state, UiRefRect(468, 56, 344, 42),
+                          UI_ALIGN_CENTER, t->paper);
+    }
+}
+
+static void DrawVitals(App *w, const Brawler *player)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    const CharacterDefinition *character = ContentCharacter(&w->content, player->cls);
+    Rectangle panel = UiRefRect(24, 642, 360, 134);
+    UiDrawPanel(panel, t->deck, t->line, true);
+    UiDrawSignalRail(panel, CueColor(w, t->ally), false);
+    UiDrawText(UI_TEXT_CAPTION, character->displayName, UiRefPoint(48, 654), t->ally);
+    char health[64];
+    snprintf(health, sizeof(health), "%d / %d", player->health, player->maxHealth);
+    UiDrawText(UI_TEXT_HEADING, health, UiRefPoint(48, 676), t->paper);
+    UiDrawProgress(UiRefRect(48, 716, 310, 14),
+                   player->maxHealth > 0 ? (float)player->health/player->maxHealth : 0,
+                   CueColor(w, t->ally), false, 0);
+    DrawAmmo(UiRefRect(48, 744, 310, 10), player->ammo, character->maxAmmo, t->ion);
+    UiDrawText(UI_TEXT_CAPTION, "INTEGRITY", UiRefPoint(278, 682), t->muted);
+    UiDrawText(UI_TEXT_CAPTION, "AMMO", UiRefPoint(305, 758), t->muted);
+}
+
+static void DrawAbilityTile(Rectangle bounds, const char *eyebrow, const char *name,
+                            const char *binding, float progress, bool ready,
+                            Color accent)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    UiDrawPanel(bounds, ready ? t->deckRaised : t->deck,
+                ready ? accent : t->line, true);
+    if (ready) UiDrawSignalRail(bounds, accent, true);
+    UiDrawText(UI_TEXT_CAPTION, eyebrow,
+               (Vector2){ bounds.x + UiScale(14), bounds.y + UiScale(9) },
+               ready ? accent : t->muted);
+    Rectangle nameBounds = { bounds.x + UiScale(14), bounds.y + UiScale(25),
+                             bounds.width - UiScale(28), UiScale(28) };
+    UiDrawTextFit(UI_TEXT_EMPHASIS, name, nameBounds, UI_ALIGN_LEFT,
+                  ready ? t->paper : t->mist);
+    UiDrawKeycap((Rectangle){ bounds.x + UiScale(14),
+                              bounds.y + bounds.height - UiScale(34),
+                              UiScale(86), UiScale(24) }, binding, ready);
+    UiDrawProgress((Rectangle){ bounds.x + UiScale(112),
+                                bounds.y + bounds.height - UiScale(28),
+                                bounds.width - UiScale(126), UiScale(8) },
+                   progress, ready ? accent : t->hullBright, false, 0);
+    if (ready)
+        UiDrawText(UI_TEXT_CAPTION, "READY",
+                   (Vector2){ bounds.x + bounds.width - UiScale(58),
+                              bounds.y + UiScale(10) }, accent);
+}
+
+static void DrawAbilities(App *w, const Brawler *player)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    const AbilityDefinition *super = ContentSuperAbility(&w->content, player->cls);
+    const AbilityDefinition *mobility = ContentMobilityAbility(&w->content, player->cls);
+    float superProgress = Clamp(player->superCharge, 0.0f, 1.0f);
+    bool superReady = superProgress >= 1.0f;
+    DrawAbilityTile(UiRefRect(920, 666, 336, 110), "ULTIMATE", super->name,
+                    UiBindingLabel("RMB", "RB"), superProgress, superReady,
+                    CueColor(w, t->ready));
+
+    if (mobility)
+    {
+        float progress = player->mobilityCooldown <= 0.0f ? 1.0f :
+            Clamp(1.0f - player->mobilityCooldown/mobility->cooldown, 0.0f, 1.0f);
+        DrawAbilityTile(UiRefRect(920, 548, 336, 104), "BRAWLER ABILITY", mobility->name,
+                        UiBindingLabel("SHIFT", "LB"), progress,
+                        player->mobilityCooldown <= 0.0f, CueColor(w, t->ion));
+    }
+}
+
+static const char *NextTutorial(const App *w, const Brawler *player,
+                                const char **binding)
+{
+    int flags = w->uiPreferences.tutorialFlags;
+    if (!(flags & TUTORIAL_MOVE))
+    {
+        *binding = UiBindingLabel("WASD", "LEFT STICK");
+        return "Move through the arena";
+    }
+    if (!(flags & TUTORIAL_AIM))
+    {
+        *binding = UiBindingLabel("HOLD LMB", "HOLD RT");
+        return "Aim your main attack";
+    }
+    if (!(flags & TUTORIAL_FIRE))
+    {
+        *binding = UiBindingLabel("RELEASE LMB", "RELEASE RT");
+        return "Release to fire";
+    }
+    if (!(flags & TUTORIAL_QUICK))
+    {
+        *binding = UiBindingLabel("SPACE", "A");
+        return "Try a quick auto-aim shot";
+    }
+    if (ContentMobilityAbility(&w->content, player->cls) &&
+        !(flags & TUTORIAL_MOBILITY))
+    {
+        *binding = UiBindingLabel("SHIFT", "LB");
+        return "Use your brawler ability";
+    }
+    if (player->superCharge >= 1.0f && !(flags & TUTORIAL_SUPER))
+    {
+        *binding = UiBindingLabel("RMB", "RB");
+        return "Your ultimate is ready";
+    }
+    if (w->session.sandbox && !(flags & TUTORIAL_COMMAND))
+    {
+        *binding = UiBindingLabel("TAB", "VIEW");
+        return "Open the command center";
+    }
+    return NULL;
+}
+
+static void DrawTutorial(const App *w, const Brawler *player)
+{
+    if (!w->uiPreferences.showTutorialHints) return;
+    const char *binding = NULL;
+    const char *prompt = NextTutorial(w, player, &binding);
+    if (!prompt) return;
+    const UiTheme *t = UiSystemActive()->theme;
+    Rectangle chip = UiRefRect(430, 700, 420, 58);
+    UiDrawPanel(chip, t->deck, t->hullBright, true);
+    UiDrawKeycap(UiRefRect(444, 711, 104, 36), binding, true);
+    UiDrawTextFit(UI_TEXT_BODY, prompt, UiRefRect(566, 710, 266, 38),
+                  UI_ALIGN_LEFT, t->paper);
+}
+
+static void DrawDowned(const Brawler *player)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                  (Color){ 30, 5, 10, 110 });
+    Rectangle panel = UiRefRect(410, 296, 460, 190);
+    UiDrawPanel(panel, t->deckRaised, t->enemy, true);
+    UiDrawSignalRail(panel, t->enemy, false);
+    UiDrawTextAligned(UI_TEXT_TITLE, "BRAWLER DOWN", UiRefRect(438, 320, 404, 60),
+                      UI_ALIGN_CENTER, t->enemy);
+    char timer[64];
+    snprintf(timer, sizeof(timer), "REDEPLOY IN %.1f SECONDS", player->respawnTimer);
+    UiDrawTextAligned(UI_TEXT_DATA, timer, UiRefRect(438, 396, 404, 42),
+                      UI_ALIGN_CENTER, t->paper);
+    UiDrawProgress(UiRefRect(474, 454, 332, 10),
+                   1.0f - Clamp(player->respawnTimer/5.0f, 0.0f, 1.0f),
+                   t->safety, false, 0);
+}
+
+static void DrawResult(App *w)
+{
+    const UiTheme *t = UiSystemActive()->theme;
+    bool won = w->session.match.winner == TEAM_PLAYER;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                  (Color){ 2, 6, 12, 225 });
+    Rectangle panel = UiRefRect(330, 142, 620, 516);
+    Color outcome = won ? t->ally : t->enemy;
+    UiDrawPanel(panel, t->deckRaised, outcome, true);
+    UiDrawSignalRail(panel, outcome, false);
+    UiDrawTextAligned(UI_TEXT_RESULT, won ? "VICTORY" : "DEFEAT",
+                      UiRefRect(372, 174, 536, 108), UI_ALIGN_CENTER, outcome);
+    UiDrawTextAligned(UI_TEXT_CAPTION, "FINAL BROADCAST",
+                      UiRefRect(372, 278, 536, 24), UI_ALIGN_CENTER, t->muted);
+
+    char score[48];
+    snprintf(score, sizeof(score), "%d  —  %d",
+             w->session.match.teamGems[TEAM_PLAYER],
+             w->session.match.teamGems[TEAM_ENEMY]);
+    UiDrawTextAligned(UI_TEXT_DISPLAY, score, UiRefRect(394, 310, 492, 80),
+                      UI_ALIGN_CENTER, t->paper);
+    char summary[96];
+    snprintf(summary, sizeof(summary), "%d KOs  /  %d downs",
+             w->session.kills, w->session.deaths);
+    UiDrawTextAligned(UI_TEXT_DATA, summary, UiRefRect(394, 398, 492, 38),
+                      UI_ALIGN_CENTER, t->mist);
+
+    UiResponse continueButton =
+        UiButton(UiHash("result.continue"), UiRefRect(484, 490, 312, 78),
+                 "CONTINUE", UI_BUTTON_PRIMARY, UI_ICON_NEXT);
+    if (continueButton.activated) g_continueRequested = true;
+
+    int remaining = (int)ceilf(w->tune.matchResultHold - w->session.match.overTimer);
+    if (remaining < 0) remaining = 0;
+    char fallback[80];
+    snprintf(fallback, sizeof(fallback), "AUTO RETURN IN %d", remaining);
+    UiDrawTextAligned(UI_TEXT_CAPTION, fallback, UiRefRect(486, 584, 308, 24),
+                      UI_ALIGN_CENTER, t->muted);
 }
 
 void HudDrawPanel(App *w)
 {
-    int sw = GetScreenWidth();
-    int sh = GetScreenHeight();
-    Brawler *p = &w->session.brawlers[w->session.playerIdx];
-    const AbilityDefinition *superAbility = ContentSuperAbility(&w->content, p->cls);
-    const AbilityDefinition *mobilityAbility =
-        ContentMobilityAbility(&w->content, p->cls);
+    if (w->session.brawlerCount <= 0) return;
+    Brawler *player = &w->session.brawlers[w->session.playerIdx];
+    DrawObjective(w);
+    DrawVitals(w, player);
+    DrawAbilities(w, player);
+    DrawTutorial(w, player);
 
-    //--- Top bar ----------------------------------------------------------------
-    DrawRectangleGradientV(0, 0, sw, 78, (Color){ 0, 0, 0, 200 }, (Color){ 0, 0, 0, 0 });
-
-    if (w->tune.gemGrab && !w->session.sandbox)
-    {
-        const Match *m = &w->session.match;
-        int target = w->tune.gemsToWin;
-
-        // Two counters flanking the centre, so a glance tells you who is ahead.
-        for (int team = 0; team < 2; team++)
-        {
-            bool left = (team == TEAM_PLAYER);
-            int cx = left ? (sw/2 - 96) : (sw/2 + 96);
-            Color tc = TEAM_COLORS[team];
-
-            const char *count = TextFormat("%d", m->teamGems[team]);
-            int cwid = MeasureText(count, 40);
-
-            DrawRectangleRounded((Rectangle){ cx - 46, 10, 92, 50 }, 0.28f, 8,
-                                 (Color){ tc.r/4, tc.g/4, tc.b/4, 225 });
-            if (m->teamGems[team] >= target)
-                DrawRectangleRoundedLines((Rectangle){ cx - 46, 10, 92, 50 }, 0.28f, 8, tc);
-
-            DrawPoly((Vector2){ cx - 26, 36 }, 4, 9.0f, 45.0f, GEM_PURPLE);
-            DrawText(count, cx - cwid/2 + 14, 18, 40, WHITE);
-        }
-
-        const char *targetText = TextFormat("FIRST TO %d", target);
-        int ttw = MeasureText(targetText, 13);
-        DrawText(targetText, sw/2 - ttw/2, 62, 13, (Color){ 150, 160, 178, 255 });
-
-        // Countdown, owned by whoever is currently holding the lead.
-        if (m->phase == MATCH_COUNTDOWN)
-        {
-            Color tc = TEAM_COLORS[m->countdownTeam];
-            const char *cd = TextFormat("%d", (int)ceilf(m->countdown));
-            int cdw = MeasureText(cd, 64);
-
-            float pulse = 0.5f + 0.5f*sinf(w->session.time*9.0f);
-            DrawText(cd, sw/2 - cdw/2 + 2, 92 + 2, 64, (Color){ 0, 0, 0, 190 });
-            DrawText(cd, sw/2 - cdw/2, 92, 64,
-                     ColorLerpC(tc, WHITE, pulse*0.55f));
-
-            const char *who = (m->countdownTeam == TEAM_PLAYER) ? "YOUR TEAM IS WINNING"
-                                                                : "ENEMY TEAM IS WINNING";
-            int ww = MeasureText(who, 15);
-            DrawText(who, sw/2 - ww/2, 160, 15, tc);
-        }
-    }
-    else
-    {
-        DrawText("KOs", 22, 10, 13, (Color){ 150, 160, 175, 255 });
-        DrawText(TextFormat("%d", w->session.kills), 22, 25, 30, WHITE);
-
-        DrawText("DOWNS", 100, 10, 13, (Color){ 150, 160, 175, 255 });
-        DrawText(TextFormat("%d", w->session.deaths), 100, 25, 30, (Color){ 235, 130, 130, 255 });
-
-        int alive = 0;
-        for (int i = 0; i < w->session.brawlerCount; i++)
-            if (w->session.brawlers[i].team == TEAM_ENEMY && w->session.brawlers[i].alive) alive++;
-
-        const char *enemyText = TextFormat("%d ENEMIES", alive);
-        int etw = MeasureText(enemyText, 20);
-        DrawText(enemyText, sw - etw - 22, 26, 20, (Color){ 235, 150, 150, 255 });
-
-        if (w->session.sandbox)
-        {
-            const char *tag = TextFormat("SANDBOX  -  bots %s", BOT_MODE_NAMES[w->tune.botMode]);
-            int tgw = MeasureText(tag, 15);
-            DrawText(tag, sw/2 - tgw/2, 14, 15, (Color){ 120, 200, 255, 235 });
-        }
-    }
-
-    //--- Super meter, bottom-right ----------------------------------------------
-    int sx = sw - 190, sy = sh - 122;
-    bool ready = p->superCharge >= 1.0f;
-
-    if (mobilityAbility)
-    {
-        int my = sy - 68;
-        bool mobilityReady = p->mobilityCooldown <= 0.0f;
-        float fill = mobilityReady ? 1.0f :
-            Clamp(1.0f - p->mobilityCooldown/mobilityAbility->cooldown,
-                  0.0f, 1.0f);
-        Color jet = { 92, 220, 255, 255 };
-
-        DrawRectangleRounded((Rectangle){ sx - 12, my - 8, 172, 54 },
-                             0.12f, 8, PANEL_BG);
-        DrawText(mobilityAbility->name, sx, my, 16,
-                 mobilityReady ? jet : (Color){ 150, 160, 175, 255 });
-        if (mobilityReady)
-            DrawText("SHIFT  READY", sx, my + 21, 12, jet);
-        else
-            DrawText(TextFormat("SHIFT  %.1fs", p->mobilityCooldown),
-                     sx, my + 21, 12, (Color){ 150, 160, 175, 255 });
-
-        DrawRectangleRounded((Rectangle){ sx + 102, my + 24, 46, 7 },
-                             0.5f, 4, SLOT_EMPTY);
-        if (fill > 0.0f)
-            DrawRectangleRounded((Rectangle){ sx + 102, my + 24, 46*fill, 7 },
-                                 0.5f, 4, jet);
-    }
-
-    DrawRectangleRounded((Rectangle){ sx - 12, sy - 12, 172, 92 }, 0.12f, 8, PANEL_BG);
-
-    if (ready)
-    {
-        float pulse = 0.5f + 0.5f * sinf(w->session.time * 7.0f);
-        Color glow = SUPER_GOLD;
-        glow.a = (unsigned char)(80 + pulse * 120);
-        DrawRectangleRoundedLines((Rectangle){ sx - 12, sy - 12, 172, 92 }, 0.12f, 8, glow);
-        DrawText(superAbility->name, sx, sy + 4, 20, SUPER_GOLD);
-        DrawText("RIGHT-CLICK", sx, sy + 30, 13, (Color){ 220, 200, 150, 255 });
-    }
-    else
-    {
-        DrawText("SUPER", sx, sy + 4, 20, (Color){ 150, 160, 175, 255 });
-        DrawText(TextFormat("%d%%", (int)(p->superCharge * 100)), sx, sy + 30, 13, (Color){ 150, 160, 175, 255 });
-    }
-
-    int mbY = sy + 54;
-    DrawRectangleRounded((Rectangle){ sx, mbY, 148, 14 }, 0.5f, 6, (Color){ 40, 44, 54, 255 });
-    if (p->superCharge > 0.0f)
-    {
-        Color fill = ready ? SUPER_GOLD : (Color){ 190, 150, 60, 255 };
-        DrawRectangleRounded((Rectangle){ sx, mbY, 148 * p->superCharge, 14 }, 0.5f, 6, fill);
-    }
-
-    //--- Match result -----------------------------------------------------------
-    if (w->tune.gemGrab && !w->session.sandbox && w->session.match.phase == MATCH_OVER)
-    {
-        bool won = (w->session.match.winner == TEAM_PLAYER);
-        float fade = Clamp(w->session.match.overTimer*1.6f, 0.0f, 1.0f);
-
-        DrawRectangle(0, 0, sw, sh, (Color){ won ? 10 : 60, won ? 40 : 10, won ? 24 : 18,
-                                             (unsigned char)(180*fade) });
-
-        const char *banner = won ? "VICTORY" : "DEFEAT";
-        Color bc = won ? (Color){ 120, 240, 150, 255 } : (Color){ 255, 110, 110, 255 };
-        int bw2 = MeasureText(banner, 78);
-        float drop = EaseOutBack(Clamp(w->session.match.overTimer*2.2f, 0.0f, 1.0f));
-        DrawText(banner, sw/2 - bw2/2, (int)(sh/2 - 90 + (1.0f - drop)*70), 78, bc);
-
-        const char *tally = TextFormat("%d  -  %d", w->session.match.teamGems[TEAM_PLAYER],
-                                       w->session.match.teamGems[TEAM_ENEMY]);
-        int tw2 = MeasureText(tally, 34);
-        DrawText(tally, sw/2 - tw2/2, sh/2 + 6, 34, WHITE);
-
-        if (w->session.match.overTimer > 0.9f)
-        {
-            int remain = (int)ceilf(w->tune.matchResultHold - w->session.match.overTimer);
-            if (remain < 0) remain = 0;
-
-            const char *back = TextFormat("Returning to the menu in %d", remain);
-            int bwid = MeasureText(back, 22);
-            DrawText(back, sw/2 - bwid/2, sh/2 + 62, 22, TEXT_SOFT);
-
-            const char *skip = "click to go back now";
-            int swid = MeasureText(skip, 15);
-            float p = 0.5f + 0.5f*sinf(w->session.time*4.0f);
-            DrawText(skip, sw/2 - swid/2, sh/2 + 94, 15, ColorLerpC(GRAY, WHITE, p));
-        }
-        return;
-    }
-
-    //--- Respawn overlay --------------------------------------------------------
-    if (!p->alive)
-    {
-        DrawRectangle(0, 0, sw, sh, (Color){ 120, 20, 20, 60 });
-
-        const char *downText = "DOWNED";
-        int dtw = MeasureText(downText, 56);
-        DrawText(downText, sw / 2 - dtw / 2, sh / 2 - 60, 56, (Color){ 255, 110, 110, 255 });
-
-        const char *timer = TextFormat("Respawning in %.1f", p->respawnTimer);
-        int ttw = MeasureText(timer, 24);
-        DrawText(timer, sw / 2 - ttw / 2, sh / 2 + 4, 24, WHITE);
-    }
-
-    //--- Controls, fading out once you have found your feet ----------------------
-    if (w->session.time < 22.0f)
-    {
-        int alpha = (int)(220 * Clamp((22.0f - w->session.time) / 6.0f, 0.0f, 1.0f));
-        Color c = { 220, 228, 240, (unsigned char)alpha };
-        int cy = 78;
-
-        DrawText("WASD  move", sw - 250, cy, 15, c);
-        DrawText("SHIFT  mobility (Tank)", sw - 250, cy + 20, 15, c);
-        DrawText("HOLD LMB  aim, release to fire", sw - 250, cy + 40, 15, c);
-        DrawText("TAP LMB / SPACE  auto-aim shot", sw - 250, cy + 60, 15, c);
-        DrawText("RMB  super (when charged)", sw - 250, cy + 80, 15, c);
-        DrawText("1-5  swap kit     R  reset", sw - 250, cy + 100, 15, c);
-        DrawText("TAB  command center", sw - 250, cy + 120, 15, (Color){ 92, 178, 255, (unsigned char)alpha });
-    }
+    if (!player->alive) DrawDowned(player);
+    if (w->tune.gemGrab && !w->session.sandbox &&
+        w->session.match.phase == MATCH_OVER)
+        DrawResult(w);
 }

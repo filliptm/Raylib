@@ -1,646 +1,523 @@
 /*******************************************************************************************
-*   MENU
+*   HELIOS BROADCAST MENU
 *
-*   The shell around the match: a main screen with the selected brawler on a podium and
-*   everything else arranged around the edges, plus a character select built on the same
-*   podium scene so switching between them costs nothing.
-*
-*   Every card here does something real. Nothing is a placeholder, because a menu full of
-*   dead buttons teaches you to stop clicking things.
+*   Player-facing shell built from the shared UI system. Gameplay is only reached through
+*   screen requests and existing application flags; the 3D preview is owned by MenuScene.
 ********************************************************************************************/
 #include "menu.h"
-#include "render.h"
-#include "weapons.h"
-#include "effects.h"
-#include "config.h"
+
 #include "command_center.h"
+#include "config.h"
 #include "content_catalog.h"
-#include "rlgl.h"
+#include "menu_scene.h"
+#include "ui_system.h"
 #include "raymath.h"
-#include <math.h>
-#include <stddef.h>
+#include <stdio.h>
+#include <string.h>
 
 #define FADE_SPEED 3.6f
 
-//------------------------------------------------------------------------------------
-// Palette
-//------------------------------------------------------------------------------------
-static const Color BG_TOP      = {  22,  30,  52, 255 };
-static const Color BG_BOTTOM   = {  10,  14,  26, 255 };
-static const Color CARD_BG     = {  26,  34,  54, 232 };
-static const Color CARD_EDGE   = {  58,  76, 110, 255 };
-static const Color CARD_HOVER  = {  40,  58,  92, 245 };
-static const Color TEXT_MAIN   = { 232, 240, 252, 255 };
-static const Color TEXT_DIM    = { 132, 148, 176, 255 };
-static const Color ACCENT      = {  92, 178, 255, 255 };
-static const Color PLAY_GOLD   = { 255, 196,  62, 255 };
-static const Color PLAY_GOLD_D = { 196, 140,  30, 255 };
+typedef enum MenuOverlay {
+    MENU_OVERLAY_NONE = 0,
+    MENU_OVERLAY_CONTROLS,
+    MENU_OVERLAY_SETTINGS
+} MenuOverlay;
 
-static Assets *g_assets = NULL;
-static Camera3D g_podium;
-static Brawler g_preview;
-static float g_spin = 0.0f;
-static float g_time = 0.0f;
-static int g_hoverKit = -1;
-static bool g_showControls = false;
-static bool g_blockCards = false;
+static UiSystem *g_ui;
+static MenuScene g_scene;
+static MenuOverlay g_overlay;
+static BrawlerClass g_candidate = CLASS_SHOTGUNNER;
+static AppScreen g_lastScreen = SCREEN_COUNT;
 
-// Character select: the roster scrolls forever by wrapping, so there is never a hard
-// stop at either end of a short list.
-#define ENTRY_H 172
-#define SELECT_MODEL_X 3.1f     // world offset that puts the podium on the screen's left
-
-static float g_scroll = 0.0f;
-static bool g_dragging = false;
-static bool g_dragMoved = false;
-static float g_dragStartY = 0.0f;
-static float g_dragStartScroll = 0.0f;
-
-// One accent per kit, used for the podium model and the select cards so the two agree.
-static const Color KIT_ACCENT[CLASS_COUNT] = {
-    {  74, 142, 236, 255 },     // SCRAPPER
-    { 104, 200, 255, 255 },     // LONGSHOT
-    { 172, 118, 250, 255 },     // MORTAR
-    { 250, 146,  84, 255 },     // TANK
-    {  70, 244, 166, 255 }      // GUARDIAN
+static const char *ROLE_NAMES[] = {
+    "Damage", "Marksman", "Artillery", "Tank", "Support"
 };
 
-// The podium brawler is rebuilt whenever the selection changes.
-static BrawlerClass g_previewKit = CLASS_COUNT;
-
-//------------------------------------------------------------------------------------
-// Small widget layer. Separate from the command center's on purpose: this one is chunky
-// and animated, that one is dense and precise, and merging them would ruin both.
-//------------------------------------------------------------------------------------
-typedef struct CardStyle {
-    Color fill, edge, text;
-    int fontSize;
-    bool primary;
-} CardStyle;
-
-static bool MouseIn(Rectangle r)
+static Color CharacterAccent(BrawlerClass cls)
 {
-    Vector2 m = GetMousePosition();
-    return (m.x >= r.x && m.x <= r.x + r.width && m.y >= r.y && m.y <= r.y + r.height);
-}
-
-static void DrawLabel(const char *text, int cx, int y, int size, Color c)
-{
-    int tw = MeasureText(text, size);
-    DrawText(text, cx - tw/2 + 2, y + 2, size, (Color){ 0, 0, 0, 170 });
-    DrawText(text, cx - tw/2, y, size, c);
-}
-
-// Returns true on click. Hovering lifts the card slightly, which is the cheapest way to
-// make a flat interface feel responsive.
-static bool Card(App *w, Rectangle r, const char *title, const char *sub,
-                 CardStyle style, int badge)
-{
-    (void)w;
-    bool hover = MouseIn(r) && !g_blockCards;
-    bool click = hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
-    bool held = hover && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
-
-    Rectangle draw = r;
-    if (hover) { draw.y -= 3.0f; draw.height += 1.0f; }
-    if (held) draw.y += 4.0f;
-
-    // Drop shadow anchors the card to the background.
-    DrawRectangleRounded((Rectangle){ draw.x + 3, draw.y + 5, draw.width, draw.height },
-                         0.22f, 8, (Color){ 0, 0, 0, 120 });
-
-    Color fill = hover ? (style.primary ? PLAY_GOLD : CARD_HOVER) : style.fill;
-    DrawRectangleRounded(draw, 0.22f, 8, fill);
-    DrawRectangleRoundedLines(draw, 0.22f, 8, hover ? ACCENT : style.edge);
-
-    if (style.primary)
-    {
-        // A lit top edge so the primary action reads as raised.
-        DrawRectangleRounded((Rectangle){ draw.x + 6, draw.y + 4, draw.width - 12, draw.height*0.34f },
-                             0.5f, 6, (Color){ 255, 255, 255, hover ? 60 : 38 });
-    }
-
-    int cx = (int)(draw.x + draw.width/2);
-    int titleY = sub ? (int)(draw.y + draw.height/2 - style.fontSize) : (int)(draw.y + draw.height/2 - style.fontSize/2);
-    DrawLabel(title, cx, titleY, style.fontSize, style.primary ? (Color){ 40, 26, 4, 255 } : style.text);
-    if (sub) DrawLabel(sub, cx, titleY + style.fontSize + 4, 13, style.primary ? (Color){ 90, 62, 12, 255 } : TEXT_DIM);
-
-    if (badge > 0)
-    {
-        DrawCircle((int)(draw.x + draw.width - 6), (int)draw.y + 6, 11.0f, (Color){ 232, 72, 72, 255 });
-        DrawLabel(TextFormat("%d", badge), (int)(draw.x + draw.width - 6), (int)draw.y - 1, 15, WHITE);
-    }
-    return click;
-}
-
-static CardStyle StyleNormal(void)
-{
-    return (CardStyle){ CARD_BG, CARD_EDGE, TEXT_MAIN, 17, false };
-}
-
-static CardStyle StylePrimary(void)
-{
-    return (CardStyle){ PLAY_GOLD_D, PLAY_GOLD, (Color){ 40, 26, 4, 255 }, 34, true };
-}
-
-//------------------------------------------------------------------------------------
-// Podium scene
-//------------------------------------------------------------------------------------
-// ESC has to close an open overlay before it means "back", or dismissing the controls
-// panel would also quit the game.
-bool MenuConsumeEscape(void)
-{
-    if (!g_showControls) return false;
-    g_showControls = false;
-    return true;
-}
-
-void MenuInit(Assets *a)
-{
-    g_assets = a;
-
-    // Framed so the brawler is about half the screen height, leaving room above for the
-    // name badge and below for the mode and play cards.
-    g_podium.position = (Vector3){ 0.0f, 2.7f, -7.6f };
-    g_podium.target = (Vector3){ 0.0f, 1.30f, 0.0f };
-    g_podium.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    g_podium.fovy = 40.0f;
-    g_podium.projection = CAMERA_PERSPECTIVE;
-}
-
-static void RebuildPreview(App *w)
-{
-    BrawlerClass kit = (BrawlerClass)Clamp((float)w->tune.selectedKit, 0.0f, CLASS_COUNT - 1);
-
-    g_preview = (Brawler){ 0 };
-    g_preview.team = TEAM_PLAYER;
-    g_preview.cls = kit;
-    g_preview.isPlayer = true;
-    g_preview.alive = true;
-    g_preview.visible = true;
-    g_preview.spawnScale = 1.0f;
-    g_preview.maxHealth = ContentCharacter(&w->content, kit)->maxHealth;
-    g_preview.health = g_preview.maxHealth;
-    g_preview.position = (Vector3){ 0.0f, 0.0f, 0.0f };
-    g_previewKit = kit;
-}
-
-void MenuUpdate(App *w, float dt)
-{
-    g_time += dt;
-    g_spin += dt*0.45f;
-
-    if (g_previewKit != (BrawlerClass)w->tune.selectedKit) RebuildPreview(w);
-
-    // Select puts the model on the left and the roster on the right; the main menu
-    // keeps it centred.
-    g_preview.position.x = (w->flow.screen == SCREEN_BRAWLERS) ? SELECT_MODEL_X : 0.0f;
-
-    // Face the camera, with a slow sway either side so the silhouette is never static.
-    // The camera looks down +Z, so PI turns the model around to meet it.
-    g_preview.bobPhase += dt*3.4f;
-    g_preview.renderYaw = PI + sinf(g_spin)*0.55f;
-    g_preview.aimAngle = g_preview.renderYaw;
-}
-
-static void DrawPodiumScene(App *w)
-{
-    Assets *a = g_assets;
-    if (!a) return;
-
-    // Two warm key lights either side of the podium, so the model has shape against the
-    // flat background rather than reading as a silhouette.
-    Vector3 lightPos[2] = { { -2.6f, 3.0f, -2.4f }, { 2.8f, 2.4f, 1.6f } };
-    Vector3 lightCol[2] = { { 0.85f, 0.72f, 0.45f }, { 0.32f, 0.48f, 0.80f } };
-    (void)lightCol;
-    AssetsSetCamera(a, g_podium.position);
-    AssetsSetToon(a, w->tune.toon, w->tune.toonBands);
-    AssetsSetLights(a, lightPos, lightCol, 2);
-
-    Camera3D cam = g_podium;
-    if (w->flow.screen == SCREEN_BRAWLERS)
-    {
-        cam.position.z -= 0.4f;     // a touch closer, the model is the left-hand feature
-    }
-
-    BeginMode3D(cam);
-
-        // Platform: a low disc, deliberately smaller than the model so it frames the
-        // brawler instead of competing with it.
-        float px = g_preview.position.x;
-
-        Matrix base = MatrixMultiply(MatrixScale(1.45f, 0.22f, 1.45f), MatrixTranslate(px, -0.22f, 0));
-        DrawLit(a, a->cylinder, base, a->texMetal, (Color){ 84, 96, 124, 255 }, (Vector2){ 1, 1 }, 0.0f);
-
-        Matrix lip = MatrixMultiply(MatrixScale(1.58f, 0.07f, 1.58f), MatrixTranslate(px, -0.07f, 0));
-        DrawLit(a, a->cylinder, lip, a->texMetal, (Color){ 142, 158, 192, 255 }, (Vector2){ 1, 1 }, 0.0f);
-
-        Matrix glow = MatrixMultiply(MatrixScale(1.30f, 0.02f, 1.30f), MatrixTranslate(px, 0.02f, 0));
-        float pulse = 0.5f + 0.5f*sinf(g_time*1.6f);
-        Color teamGlow = TEAM_COLORS[TEAM_PLAYER];
-        teamGlow.a = (unsigned char)(70 + pulse*60);
-        DrawLit(a, a->cylinder, glow, a->texGlow, teamGlow, (Vector2){ 1, 1 }, 1.0f);
-
-        Color accent = KIT_ACCENT[g_preview.cls];
-
-        RiggedCharacter *character = &a->characters[g_preview.cls];
-        if (character->ok && w->tune.modelCharacter)
-        {
-            // Frames advance at 60Hz, the rate the source clips were sampled at. Tint
-            // stays white so the model's own texture reads - the kit accent lives on
-            // the podium ring instead.
-            AssetsDrawCharacter(a, g_preview.cls, g_preview.position, g_preview.renderYaw, 1.0f,
-                                character->clipIdle, g_time*60.0f, true, WHITE, 0.0f, 0.0f,
-                                lightPos, lightCol, 2, cam.position);
-        }
-        else RenderBrawlerModel(a, &g_preview, g_time, 0.0f, &accent);
-
-    EndMode3D();
+    static const Color accents[CLASS_COUNT] = {
+        { 100, 185, 255, 255 },
+        { 113, 216, 255, 255 },
+        { 184, 140, 255, 255 },
+        { 255, 157, 66, 255 },
+        { 85, 213, 154, 255 }
+    };
+    int index = (int)Clamp((float)cls, 0.0f, CLASS_COUNT - 1);
+    return accents[index];
 }
 
 static void DrawBackdrop(void)
 {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    DrawRectangleGradientV(0, 0, sw, sh, BG_TOP, BG_BOTTOM);
-
-    // A faint vignette focuses attention on the podium.
-    DrawRectangleGradientH(0, 0, sw/4, sh, (Color){ 0, 0, 0, 90 }, (Color){ 0, 0, 0, 0 });
-    DrawRectangleGradientH(sw - sw/4, 0, sw/4, sh, (Color){ 0, 0, 0, 0 }, (Color){ 0, 0, 0, 90 });
+    const UiTheme *t = g_ui->theme;
+    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(),
+                           t->deepBg, t->voidBg);
+    Rectangle canvas = g_ui->layout.content;
+    DrawRectangleGradientH((int)canvas.x, (int)canvas.y, (int)(canvas.width*0.28f),
+                           (int)canvas.height, (Color){ 5, 11, 20, 215 },
+                           (Color){ 5, 11, 20, 20 });
+    DrawRectangleGradientH((int)(canvas.x + canvas.width*0.72f), (int)canvas.y,
+                           (int)(canvas.width*0.28f), (int)canvas.height,
+                           (Color){ 5, 11, 20, 20 }, (Color){ 5, 11, 20, 215 });
 }
 
-//------------------------------------------------------------------------------------
-// Main menu
-//------------------------------------------------------------------------------------
-static void DrawMainMenu(App *w)
+static void DrawStationHeader(const App *w, const char *section)
 {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    Tuning *t = &w->tune;
-    const CharacterDefinition *kit = ContentCharacter(&w->content, g_preview.cls);
-    const AbilityDefinition *mainAbility = ContentMainAbility(&w->content, g_preview.cls);
-    const AbilityDefinition *superAbility = ContentSuperAbility(&w->content, g_preview.cls);
+    const UiTheme *t = g_ui->theme;
+    Rectangle rail = UiRefRect(24, 20, 1232, 64);
+    UiDrawPanel(rail, t->deck, t->line, false);
+    UiDrawSignalRail(rail, t->ion, false);
 
-    //--- Top left: profile, built from numbers actually earned -------------------
-    DrawRectangleRounded((Rectangle){ 18, 16, 236, 58 }, 0.2f, 8, CARD_BG);
-    DrawRectangleRoundedLines((Rectangle){ 18, 16, 236, 58 }, 0.2f, 8, CARD_EDGE);
-    DrawRectangleRounded((Rectangle){ 27, 25, 40, 40 }, 0.28f, 6, TEAM_COLORS[TEAM_PLAYER]);
-    DrawText("BRAWLER", 78, 25, 17, TEXT_MAIN);
-    DrawText(TextFormat("%d W   %d L   %d KO", t->statWins, t->statLosses, t->statKos),
-             78, 47, 13, TEXT_DIM);
+    UiDrawText(UI_TEXT_HEADING, "HELIOS-9", UiRefPoint(50, 29), t->paper);
+    UiDrawText(UI_TEXT_CAPTION, "BRAWL ARENA // LIVE DEPLOYMENT",
+               UiRefPoint(50, 61), t->muted);
 
-    //--- Top right: settings and quit -------------------------------------------
-    // The single entry to the practice range: static targets to shoot at with every
-    // parameter to hand, without touching the mode PLAY will use. TAB hides the panel
-    // if you just want the range.
-    if (Card(w, (Rectangle){ sw - 250, 16, 108, 46 }, "PRACTICE", NULL, StyleNormal(), 0))
-    {
-        w->session.sandbox = true;
-        w->matchRestartPending = true;
-        ShellRequestScreen(w, SCREEN_MATCH);
-        CommandCenterForceOpen();
-    }
-    if (Card(w, (Rectangle){ sw - 132, 16, 108, 46 }, "QUIT", NULL, StyleNormal(), 0))
-        w->flow.quitRequested = true;
+    Rectangle sectionRect = UiRefRect(490, 28, 300, 42);
+    UiDrawTextFit(UI_TEXT_LABEL, section, sectionRect, UI_ALIGN_CENTER, t->ion);
 
-    //--- Centre top: the selected kit's name badge -------------------------------
-    int badgeW = 300;
-    DrawRectangleRounded((Rectangle){ sw/2 - badgeW/2, 88, badgeW, 54 }, 0.3f, 8, CARD_BG);
-    DrawRectangleRoundedLines((Rectangle){ sw/2 - badgeW/2, 88, badgeW, 54 }, 0.3f, 8, CARD_EDGE);
-    DrawLabel(kit->displayName, sw/2, 95, 26, TEXT_MAIN);
-    DrawLabel(kit->flavor, sw/2, 122, 13, TEXT_DIM);
-
-    //--- Left column -------------------------------------------------------------
-    if (Card(w, (Rectangle){ 24, 232, 150, 74 }, "BRAWLERS", "choose a kit", StyleNormal(), 0))
-        ShellRequestScreen(w, SCREEN_BRAWLERS);
-
-    if (Card(w, (Rectangle){ 24, 320, 150, 74 }, "CONTROLS", "how to play", StyleNormal(), 0))
-        g_showControls = true;
-
-    //--- Right column: kit stats at a glance -------------------------------------
-    int rx = sw - 214;
-    DrawRectangleRounded((Rectangle){ rx, 232, 190, 178 }, 0.14f, 8, CARD_BG);
-    DrawRectangleRoundedLines((Rectangle){ rx, 232, 190, 178 }, 0.14f, 8, CARD_EDGE);
-    DrawText("KIT", rx + 16, 244, 13, ACCENT);
-
-    // Drawn one at a time, for the TextFormat buffer reason noted in DrawRosterEntry.
-    DrawText(TextFormat("HEALTH      %d", kit->maxHealth), rx + 16, 272, 14, TEXT_MAIN);
-    if (mainAbility->behavior == ABILITY_BEHAVIOR_RAIN)
-        DrawText(TextFormat("PULSE D/H   %d / %d",
-                            mainAbility->damage, mainAbility->healing),
-                 rx + 16, 298, 14, TEXT_MAIN);
-    else if (mainAbility->healing > 0)
-        DrawText(TextFormat("DMG / HEAL  %d / %d",
-                            mainAbility->damage*mainAbility->data.projectile.pellets,
-                            mainAbility->healing*mainAbility->data.projectile.pellets),
-                 rx + 16, 298, 14, TEXT_MAIN);
-    else
-        DrawText(TextFormat("DAMAGE      %d",
-                            mainAbility->damage*mainAbility->data.projectile.pellets),
-                 rx + 16, 298, 14, TEXT_MAIN);
-    DrawText(TextFormat("RANGE       %.0f", mainAbility->range), rx + 16, 324, 14, TEXT_MAIN);
-    DrawText(TextFormat("RELOAD      %.2fs", mainAbility->reloadPerAmmo),
-             rx + 16, 350, 14, TEXT_MAIN);
-
-    DrawText("SUPER", rx + 16, 380, 13, ACCENT);
-    DrawText(superAbility->name, rx + 66, 379, 15, PLAY_GOLD);
-
-    //--- Bottom centre: the mode card, which toggles the rules --------------------
-    Rectangle modeCard = { sw/2 - 250, sh - 104, 340, 78 };
-    bool gg = t->gemGrab;
-    if (Card(w, modeCard, gg ? "GEM GRAB" : "SANDBOX",
-             gg ? TextFormat("%dv%d   first to %d", t->teamSize, t->teamSize, t->gemsToWin)
-                : "free-form, no objective",
-             StyleNormal(), 0))
-    {
-        t->gemGrab = !t->gemGrab;
-        ConfigMarkDirty();
-    }
-    DrawText("MODE  -  click to change", (int)modeCard.x + 6, (int)modeCard.y - 17, 12, TEXT_DIM);
-
-    //--- Bottom right: play ------------------------------------------------------
-    if (Card(w, (Rectangle){ sw/2 + 106, sh - 104, 200, 78 }, "PLAY", NULL, StylePrimary(), 0))
-    {
-        w->session.sandbox = false;              // a real match, whatever the sandbox was doing
-        w->matchRestartPending = true;
-        w->flow.matchResultBanked = false;
-        ShellRequestScreen(w, SCREEN_MATCH);
-    }
+    char profile[96];
+    snprintf(profile, sizeof(profile), "%d W  /  %d L  /  %d KO",
+             w->tune.statWins, w->tune.statLosses, w->tune.statKos);
+    UiDrawText(UI_TEXT_DATA, profile, UiRefPoint(852, 42), t->mist);
 }
 
-static void DrawControlsModal(App *w)
+static void DrawMetric(Rectangle row, UiIcon icon, const char *label,
+                       const char *value, Color color)
 {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-
-    DrawRectangle(0, 0, sw, sh, (Color){ 0, 0, 0, 195 });
-
-    Rectangle panel = { sw/2.0f - 270, sh/2.0f - 220, 540, 430 };
-    DrawRectangleRounded(panel, 0.07f, 8, CARD_BG);
-    DrawRectangleRoundedLines(panel, 0.07f, 8, CARD_EDGE);
-    DrawLabel("CONTROLS", sw/2, (int)panel.y + 20, 25, TEXT_MAIN);
-
-    static const char *KEYS[] = {
-        "WASD / arrows", "Left Shift", "Hold LMB", "Release LMB", "Tap LMB or SPACE",
-        "RMB", "1 - 5", "TAB", "R", "ESC"
-    };
-    static const char *WHAT[] = {
-        "Move", "Shoulder Jets when playing Tank",
-        "Aim - draws the shot on the ground", "Fire along the preview",
-        "Quick shot, auto-aimed at the nearest enemy", "Super, once charged",
-        "Swap kit on the spot", "Command center", "Restart the match",
-        "Back a screen, or quit from here"
-    };
-
-    int rows = (int)(sizeof(KEYS)/sizeof(KEYS[0]));
-    for (int i = 0; i < rows; i++)
-    {
-        int y = (int)panel.y + 66 + i*32;
-        DrawText(KEYS[i], (int)panel.x + 26, y, 15, ACCENT);
-        DrawText(WHAT[i], (int)panel.x + 205, y, 15, TEXT_MAIN);
-    }
-
-    Rectangle close = { panel.x + panel.width/2 - 60, panel.y + panel.height - 52, 120, 38 };
-    if (Card(w, close, "CLOSE", NULL, StyleNormal(), 0)) g_showControls = false;
-
-    // Clicking anywhere off the panel dismisses it too.
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !MouseIn(panel)) g_showControls = false;
+    const UiTheme *t = g_ui->theme;
+    UiIconDraw(icon, (Vector2){ row.x + UiScale(16), row.y + row.height*0.5f },
+               UiScale(16), color);
+    Rectangle labelBounds = row;
+    labelBounds.x += UiScale(34);
+    labelBounds.width *= 0.52f;
+    UiDrawTextFit(UI_TEXT_LABEL, label, labelBounds, UI_ALIGN_LEFT, t->muted);
+    Rectangle valueBounds = row;
+    valueBounds.x += row.width*0.56f;
+    valueBounds.width = row.width*0.40f;
+    UiDrawTextFit(UI_TEXT_DATA, value, valueBounds, UI_ALIGN_RIGHT, t->paper);
 }
 
-//------------------------------------------------------------------------------------
-// Character select
-//------------------------------------------------------------------------------------
-// Attack and super descriptions are derived from the weapon data rather than written
-// out, so they stay true after the numbers are tuned in the command center.
-static const char *AttackSummary(const AbilityDefinition *ability)
+static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int size)
 {
     if (ability->behavior == ABILITY_BEHAVIOR_RAIN)
-        return TextFormat("Growing rain, %d damage/healing per pulse", ability->damage);
-    if (ability->selfHealRatio > 0.0f)
-        return TextFormat("%d pellets, heals %.0f%% of damage dealt",
-                          ability->data.projectile.pellets,
-                          ability->selfHealRatio*100.0f);
-    if (ability->healing > 0)
-        return TextFormat("%d damage to foes, %d healing to allies",
-                          ability->damage, ability->healing);
-    if (ability->behavior == ABILITY_BEHAVIOR_LOB)
-        return TextFormat("Arcing lob, %.1f splash, clears walls", ability->radius);
-    if (ability->data.projectile.rangeScaled)
-        return "Single shot, damage grows with distance";
-    if (ability->data.projectile.pellets > 1)
-        return TextFormat("%d pellets, %.0f degree spread",
-                          ability->data.projectile.pellets,
-                          ability->data.projectile.spreadDegrees);
-    return "Single shot";
+        snprintf(buffer, size, "Growing rain // %d damage + %d healing per pulse",
+                 ability->damage, ability->healing);
+    else if (ability->behavior == ABILITY_BEHAVIOR_SOUND_WAVE)
+        snprintf(buffer, size, "Wide resonance cone // %d damage + %d healing per tick",
+                 ability->damage, ability->healing);
+    else if (ability->behavior == ABILITY_BEHAVIOR_DASH)
+        snprintf(buffer, size, "Armored drive // %d impact damage", ability->damage);
+    else if (ability->behavior == ABILITY_BEHAVIOR_LOB)
+        snprintf(buffer, size, "Arcing payload // %.1f splash radius", ability->radius);
+    else if (ability->healing > 0)
+        snprintf(buffer, size, "%d damage to hostiles // %d healing to allies",
+                 ability->damage, ability->healing);
+    else if (ability->data.projectile.pellets > 1)
+        snprintf(buffer, size, "%d projectiles // %.0f degree spread",
+                 ability->data.projectile.pellets,
+                 ability->data.projectile.spreadDegrees);
+    else snprintf(buffer, size, "Precision projectile // %.0f range", ability->range);
 }
 
-static const char *SuperSummary(const AbilityDefinition *ability)
+static void DrawAbilityBlock(Rectangle bounds, const char *eyebrow,
+                             const AbilityDefinition *ability, Color accent)
 {
-    if (ability->behavior == ABILITY_BEHAVIOR_SOUND_WAVE)
-        return TextFormat("Wide cone: %d damage, %d healing per tick",
-                          ability->damage, ability->healing);
-    if (ability->behavior == ABILITY_BEHAVIOR_HEALING_BURST)
-        return TextFormat("Heals nearby allies %d within %.0f",
-                          ability->healing, ability->range);
-    if (ability->behavior == ABILITY_BEHAVIOR_DASH)
-        return TextFormat("Charge: %d on contact, smashes crates", ability->damage);
-    if (ability->data.projectile.piercing)
-        return TextFormat("Piercing shot: %d, hits everyone in line", ability->damage);
-    if (ability->behavior == ABILITY_BEHAVIOR_LOB)
-        return TextFormat("%d shells, %d each, breaks walls",
-                          ability->data.projectile.pellets, ability->damage);
-    return TextFormat("%d pellets, %d each, breaks walls",
-                      ability->data.projectile.pellets, ability->damage);
+    const UiTheme *t = g_ui->theme;
+    UiDrawPanel(bounds, t->deck, t->line, false);
+    UiDrawSignalRail(bounds, accent, false);
+    UiDrawText(UI_TEXT_CAPTION, eyebrow,
+               (Vector2){ bounds.x + UiScale(18), bounds.y + UiScale(10) }, accent);
+    Rectangle name = { bounds.x + UiScale(18), bounds.y + UiScale(23),
+                       bounds.width - UiScale(32), UiScale(28) };
+    UiDrawTextFit(UI_TEXT_EMPHASIS, ability->name, name, UI_ALIGN_LEFT, t->paper);
+    char summary[160];
+    AbilitySummary(ability, summary, (int)sizeof(summary));
+    Rectangle copy = { bounds.x + UiScale(18), bounds.y + UiScale(50),
+                       bounds.width - UiScale(32), UiScale(24) };
+    UiDrawTextFit(UI_TEXT_CAPTION, summary, copy, UI_ALIGN_LEFT, t->mist);
 }
 
-static void DrawRosterEntry(App *w, Rectangle r, int kitIndex, bool selected, bool hover)
+static void OpenOverlay(MenuOverlay overlay, UiId returnFocus)
 {
-    const CharacterDefinition *character =
-        ContentCharacter(&w->content, (BrawlerClass)kitIndex);
-    const AbilityDefinition *mainAbility =
-        ContentMainAbility(&w->content, (BrawlerClass)kitIndex);
-    const AbilityDefinition *superAbility =
-        ContentSuperAbility(&w->content, (BrawlerClass)kitIndex);
-    Color accent = KIT_ACCENT[kitIndex];
+    g_overlay = overlay;
+    g_ui->restoreFocus = returnFocus;
+    g_ui->activatePressed = false;
+    UiFocus(overlay == MENU_OVERLAY_CONTROLS
+        ? UiHash("controls.close") : UiHash("settings.scale.down"));
+}
 
-    Color fill = selected ? (Color){ 34, 56, 92, 248 } : (hover ? CARD_HOVER : CARD_BG);
-    DrawRectangleRounded(r, 0.10f, 8, fill);
-    DrawRectangleRoundedLines(r, 0.10f, 8, selected ? accent : CARD_EDGE);
+static void CloseOverlay(void)
+{
+    g_overlay = MENU_OVERLAY_NONE;
+    if (g_ui->restoreFocus) UiFocus(g_ui->restoreFocus);
+    g_ui->restoreFocus = 0;
+}
 
-    // Accent spine down the left edge, the only colour that identifies the kit here.
-    DrawRectangleRounded((Rectangle){ r.x + 6, r.y + 10, 6, r.height - 20 }, 0.9f, 5, accent);
+static void StartMatch(App *w, bool practice)
+{
+    w->session.sandbox = practice;
+    w->matchRestartPending = true;
+    w->flow.matchResultBanked = false;
+    ShellRequestScreen(w, SCREEN_MATCH);
+    if (practice) CommandCenterForceOpen();
+}
 
-    DrawText(character->displayName, (int)r.x + 24, (int)r.y + 12, 24, TEXT_MAIN);
-    DrawText(character->flavor, (int)r.x + 24, (int)r.y + 40, 13, TEXT_DIM);
+static void DrawHome(App *w)
+{
+    const UiTheme *t = g_ui->theme;
+    BrawlerClass selected = (BrawlerClass)w->tune.selectedKit;
+    const CharacterDefinition *character = ContentCharacter(&w->content, selected);
+    Color accent = CharacterAccent(selected);
 
-    if (selected)
+    // The launch screen has one job: choose a session and deploy. Detailed
+    // character analysis lives in Brawler Select so the active model can breathe.
+    UiDrawTextShadow(UI_TEXT_DISPLAY, "BRAWL ARENA", UiRefPoint(42, 24), t->paper);
+    UiDrawText(UI_TEXT_CAPTION, "HELIOS-9 // LIVE DEPLOYMENT",
+               UiRefPoint(48, 96), t->ion);
+
+    UiResponse controls = UiButton(UiHash("home.controls"), UiRefRect(824, 34, 132, 52),
+                                   "Controls", UI_BUTTON_UTILITY, UI_ICON_CONTROLS);
+    if (controls.activated) OpenOverlay(MENU_OVERLAY_CONTROLS, UiHash("home.controls"));
+    UiResponse settings = UiButton(UiHash("home.settings"), UiRefRect(968, 34, 132, 52),
+                                   "Settings", UI_BUTTON_UTILITY, UI_ICON_SETTINGS);
+    if (settings.activated) OpenOverlay(MENU_OVERLAY_SETTINGS, UiHash("home.settings"));
+    UiResponse quit = UiButton(UiHash("home.quit"), UiRefRect(1112, 34, 120, 52),
+                               "Quit", UI_BUTTON_DANGER, UI_ICON_QUIT);
+    if (quit.activated) w->flow.quitRequested = true;
+
+    Rectangle launch = UiRefRect(24, 646, 1232, 130);
+    UiDrawPanel(launch, t->deck, t->line, true);
+    UiDrawSignalRail(launch, t->safety, false);
+
+    UiDrawText(UI_TEXT_CAPTION, "ACTIVE BRAWLER // CHANGE", UiRefPoint(48, 658), accent);
+    UiResponse roster = UiButton(UiHash("home.roster"), UiRefRect(46, 678, 276, 72),
+                                 character->displayName, UI_BUTTON_STANDARD, UI_ICON_NEXT);
+    if (roster.activated) ShellRequestScreen(w, SCREEN_BRAWLERS);
+    Rectangle mode = UiRefRect(344, 660, 398, 92);
+    UiDrawPanel(mode, t->deepBg, t->hullBright, false);
+    UiDrawTextAligned(UI_TEXT_CAPTION, "ACTIVE GAME MODE", UiRefRect(410, 666, 266, 20),
+                      UI_ALIGN_CENTER, t->muted);
+    UiResponse previous = UiIconButton(UiHash("home.mode.previous"),
+                                       UiRefRect(358, 692, 48, 48),
+                                       UI_ICON_PREVIOUS, "Previous mode");
+    UiResponse next = UiIconButton(UiHash("home.mode.next"),
+                                   UiRefRect(680, 692, 48, 48),
+                                   UI_ICON_NEXT, "Next mode");
+    const char *modeName = w->tune.gemGrab ? "GEM GRAB" : "SKIRMISH";
+    UiDrawTextFit(UI_TEXT_HEADING, modeName, UiRefRect(418, 688, 252, 56),
+                  UI_ALIGN_CENTER, w->tune.gemGrab ? t->reactor : t->ion);
+    if (previous.activated || next.activated || g_ui->previousPressed || g_ui->nextPressed)
     {
-        const char *tag = "SELECTED";
-        int tw = MeasureText(tag, 12);
-        DrawText(tag, (int)(r.x + r.width) - tw - 18, (int)r.y + 16, 12, accent);
+        w->tune.gemGrab = !w->tune.gemGrab;
+        ConfigMarkDirty();
     }
 
-    // Stats in two columns so the block scans quickly.
-    //
-    // Each string is drawn immediately after it is formatted. TextFormat hands back a
-    // pointer into a small rotating buffer, so holding several results at once silently
-    // corrupts the earliest ones.
-    int sx = (int)r.x + 24, rx = (int)r.x + 210, sy = (int)r.y + 66;
+    UiResponse practice = UiButton(UiHash("home.practice"), UiRefRect(764, 662, 154, 88),
+                                   "Practice", UI_BUTTON_UTILITY, UI_ICON_PRACTICE);
+    if (practice.activated) StartMatch(w, true);
 
-    DrawText(TextFormat("HEALTH   %d", character->maxHealth), sx, sy, 13, TEXT_MAIN);
-    if (mainAbility->behavior == ABILITY_BEHAVIOR_RAIN)
-        DrawText(TextFormat("PULSE D/H %d/%d",
-                            mainAbility->damage, mainAbility->healing),
-                 sx, sy + 19, 13, TEXT_MAIN);
-    else if (mainAbility->healing > 0)
-        DrawText(TextFormat("D/H      %d/%d",
-                            mainAbility->damage*mainAbility->data.projectile.pellets,
-                            mainAbility->healing*mainAbility->data.projectile.pellets),
-                 sx, sy + 19, 13, TEXT_MAIN);
-    else
-        DrawText(TextFormat("DAMAGE   %d",
-                            mainAbility->damage*mainAbility->data.projectile.pellets),
-                 sx, sy + 19, 13, TEXT_MAIN);
-    DrawText(TextFormat("RANGE    %.0f", mainAbility->range), sx, sy + 38, 13, TEXT_MAIN);
-
-    DrawText(TextFormat("RELOAD   %.2fs", mainAbility->reloadPerAmmo), rx, sy, 13, TEXT_MAIN);
-    DrawText(TextFormat("COOLDOWN %.2fs", mainAbility->cooldown), rx, sy + 19, 13, TEXT_MAIN);
-    DrawText(TextFormat("AMMO     %d", character->maxAmmo), rx, sy + 38, 13, TEXT_MAIN);
-
-    // Descriptions share one column, set wide enough for the longest super name.
-    const int descX = 112;
-
-    DrawText("ATTACK", (int)r.x + 24, (int)r.y + 128, 11, ACCENT);
-    DrawText(AttackSummary(mainAbility), (int)r.x + descX, (int)r.y + 127, 13, TEXT_MAIN);
-
-    DrawText(superAbility->name, (int)r.x + 24, (int)r.y + 148, 11, PLAY_GOLD);
-    DrawText(SuperSummary(superAbility), (int)r.x + descX, (int)r.y + 147, 13, TEXT_MAIN);
+    UiResponse deploy = UiButton(UiHash("home.deploy"), UiRefRect(940, 656, 292, 100),
+                                 "DEPLOY", UI_BUTTON_PRIMARY, UI_ICON_NEXT);
+    if (deploy.activated) StartMatch(w, false);
 }
 
-static void DrawBrawlerSelect(App *w)
+static void DrawRosterRow(App *w, BrawlerClass cls, Rectangle bounds)
 {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    Tuning *t = &w->tune;
+    (void)w;
+    const UiTheme *t = g_ui->theme;
+    const CharacterDefinition *character = ContentCharacter(&w->content, cls);
+    bool candidate = g_candidate == cls;
+    UiResponse response = UiButton(UiHash(character->id), bounds, character->displayName,
+                                   UI_BUTTON_STANDARD, (UiIcon)-1);
+    if (candidate)
+    {
+        UiDrawSignalRail(bounds, CharacterAccent(cls), false);
+        UiDrawTextAligned(UI_TEXT_CAPTION, "PREVIEW",
+                          (Rectangle){ bounds.x,
+                                       bounds.y + bounds.height - UiScale(22),
+                                       bounds.width, UiScale(16) },
+                          UI_ALIGN_CENTER, t->ready);
+    }
+    if (response.activated) g_candidate = cls;
+}
 
-    if (Card(w, (Rectangle){ 24, 24, 130, 52 }, "BACK", NULL, StyleNormal(), 0))
+static void DrawRoster(App *w)
+{
+    const UiTheme *t = g_ui->theme;
+    DrawStationHeader(w, "BRAWLER SELECT");
+
+    UiResponse back = UiButton(UiHash("roster.back"), UiRefRect(28, 100, 142, 50),
+                               "Back", UI_BUTTON_UTILITY, UI_ICON_BACK);
+    if (back.activated) ShellRequestScreen(w, SCREEN_MENU);
+
+    const CharacterDefinition *candidate =
+        ContentCharacter(&w->content, g_candidate);
+    const AbilityDefinition *main = ContentMainAbility(&w->content, g_candidate);
+    const AbilityDefinition *super = ContentSuperAbility(&w->content, g_candidate);
+    const AbilityDefinition *mobility = ContentMobilityAbility(&w->content, g_candidate);
+    Color accent = CharacterAccent(g_candidate);
+
+    // The former launch-deck readout belongs here: this is the moment where
+    // comparative character information helps the player make a decision.
+    Rectangle identity = UiRefRect(24, 166, 300, 454);
+    UiDrawPanel(identity, t->deck, t->line, true);
+    UiDrawSignalRail(identity, accent, false);
+    UiDrawText(UI_TEXT_CAPTION, ROLE_NAMES[candidate->role],
+               UiRefPoint(48, 184), accent);
+    UiDrawTextFit(UI_TEXT_TITLE, candidate->displayName, UiRefRect(46, 200, 252, 55),
+                  UI_ALIGN_LEFT, t->paper);
+    UiDrawTextFit(UI_TEXT_BODY, candidate->flavor, UiRefRect(48, 255, 248, 34),
+                  UI_ALIGN_LEFT, t->mist);
+    DrawAbilityBlock(UiRefRect(46, 306, 252, 88), "MAIN ATTACK", main, t->ion);
+    if (mobility)
+        DrawAbilityBlock(UiRefRect(46, 404, 252, 88),
+                         "BRAWLER ABILITY", mobility, t->safety);
+    DrawAbilityBlock(UiRefRect(46, mobility ? 502 : 404, 252, 88),
+                     "ULTIMATE", super, t->reactor);
+
+    Rectangle telemetry = UiRefRect(956, 166, 300, 454);
+    UiDrawPanel(telemetry, t->deck, t->line, true);
+    UiDrawSignalRail(telemetry, t->safety, true);
+    UiDrawText(UI_TEXT_CAPTION, "FIELD TELEMETRY", UiRefPoint(980, 186), t->safety);
+    UiDrawText(UI_TEXT_HEADING, "KIT READOUT", UiRefPoint(980, 208), t->paper);
+
+    char value[48];
+    snprintf(value, sizeof(value), "%d", candidate->maxHealth);
+    DrawMetric(UiRefRect(980, 258, 250, 42), UI_ICON_HEALTH,
+               "Hull integrity", value, t->ally);
+    int totalDamage = main->damage;
+    if (main->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+        main->behavior == ABILITY_BEHAVIOR_LOB)
+        totalDamage *= main->data.projectile.pellets;
+    snprintf(value, sizeof(value), "%d", totalDamage);
+    DrawMetric(UiRefRect(980, 306, 250, 42), UI_ICON_DAMAGE,
+               "Attack output", value, t->enemy);
+    snprintf(value, sizeof(value), "%.1f m", main->range);
+    DrawMetric(UiRefRect(980, 354, 250, 42), UI_ICON_RANGE,
+               "Effective range", value, t->ion);
+    snprintf(value, sizeof(value), "%.2f s", main->reloadPerAmmo);
+    DrawMetric(UiRefRect(980, 402, 250, 42), UI_ICON_RELOAD,
+               "Ammo reload", value, t->safety);
+    snprintf(value, sizeof(value), "%d", candidate->maxAmmo);
+    DrawMetric(UiRefRect(980, 450, 250, 42), UI_ICON_SUPER,
+               "Ammo cells", value, t->ready);
+
+    UiDrawPanel(UiRefRect(980, 510, 250, 84), t->deepBg, t->hullBright, false);
+    UiDrawText(UI_TEXT_CAPTION, "SELECTION STATUS", UiRefPoint(996, 524), t->muted);
+    UiDrawTextFit(UI_TEXT_BODY,
+                  w->tune.selectedKit == (int)g_candidate
+                    ? "Currently equipped." : "Preview only until confirmed.",
+                  UiRefRect(996, 544, 218, 34), UI_ALIGN_LEFT,
+                  w->tune.selectedKit == (int)g_candidate ? t->ally : t->mist);
+
+    Rectangle roster = UiRefRect(24, 640, 1232, 136);
+    UiDrawPanel(roster, t->deck, t->line, true);
+    UiDrawText(UI_TEXT_CAPTION, "CHOOSE A BRAWLER", UiRefPoint(48, 652), t->muted);
+    for (int i = 0; i < CLASS_COUNT; i++)
+        DrawRosterRow(w, (BrawlerClass)i, UiRefRect(48 + i*142, 678, 132, 72));
+
+    char selectLabel[96];
+    snprintf(selectLabel, sizeof(selectLabel), "SELECT %s", candidate->displayName);
+    UiResponse select = UiButton(UiHash("roster.confirm"), UiRefRect(790, 674, 442, 80),
+                                 selectLabel, UI_BUTTON_PRIMARY, UI_ICON_NEXT);
+    if (select.activated)
+    {
+        w->tune.selectedKit = g_candidate;
+        ConfigMarkDirty();
         ShellRequestScreen(w, SCREEN_MENU);
-
-    Rectangle panel = { sw*0.46f, 92.0f, sw*0.50f, sh - 150.0f };
-
-    DrawText("ROSTER", (int)panel.x + 2, (int)panel.y - 26, 16, ACCENT);
-    DrawText("scroll to browse", (int)panel.x + 78, (int)panel.y - 23, 12, TEXT_DIM);
-
-    //--- Scroll input --------------------------------------------------------
-    float total = CLASS_COUNT*(float)ENTRY_H;
-    Vector2 mouse = GetMousePosition();
-    bool overPanel = MouseIn(panel);
-
-    if (overPanel) g_scroll -= GetMouseWheelMove()*58.0f;
-
-    // Dragging the list is the natural gesture here, so a press only counts as a
-    // selection if the pointer barely moved.
-    if (overPanel && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-    {
-        g_dragging = true;
-        g_dragMoved = false;
-        g_dragStartY = mouse.y;
-        g_dragStartScroll = g_scroll;
     }
-    if (g_dragging)
-    {
-        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON))
-        {
-            float delta = mouse.y - g_dragStartY;
-            if (fabsf(delta) > 6.0f) g_dragMoved = true;
-            g_scroll = g_dragStartScroll - delta;
-        }
-        else g_dragging = false;
-    }
-
-    // Wrap rather than clamp: the roster has no ends.
-    while (g_scroll < 0.0f) g_scroll += total;
-    while (g_scroll >= total) g_scroll -= total;
-
-    //--- Entries -------------------------------------------------------------
-    BeginScissorMode((int)panel.x, (int)panel.y, (int)panel.width, (int)panel.height);
-
-    int first = (int)floorf(g_scroll/ENTRY_H) - 1;
-    int visible = (int)(panel.height/ENTRY_H) + 3;
-
-    for (int n = 0; n < visible; n++)
-    {
-        int slot = first + n;
-        int kit = ((slot % CLASS_COUNT) + CLASS_COUNT) % CLASS_COUNT;
-
-        Rectangle r = { panel.x + 6, panel.y + slot*(float)ENTRY_H - g_scroll,
-                        panel.width - 12, ENTRY_H - 12.0f };
-
-        bool hover = !g_blockCards && MouseIn(r) && MouseIn(panel);
-        bool selected = (t->selectedKit == kit);
-
-        DrawRosterEntry(w, r, kit, selected, hover);
-
-        if (hover) g_hoverKit = kit;
-
-        // Released without dragging, over this entry: that is a pick.
-        if (hover && IsMouseButtonReleased(MOUSE_LEFT_BUTTON) && !g_dragMoved && !selected)
-        {
-            t->selectedKit = kit;
-            ConfigMarkDirty();
-            RebuildPreview(w);
-        }
-    }
-
-    EndScissorMode();
-
-    // Fades top and bottom, so entries dissolve at the edges instead of being sliced.
-    DrawRectangleGradientV((int)panel.x, (int)panel.y, (int)panel.width, 34,
-                           (Color){ BG_TOP.r, BG_TOP.g, BG_TOP.b, 235 },
-                           (Color){ BG_TOP.r, BG_TOP.g, BG_TOP.b, 0 });
-    DrawRectangleGradientV((int)panel.x, (int)(panel.y + panel.height) - 34, (int)panel.width, 34,
-                           (Color){ BG_BOTTOM.r, BG_BOTTOM.g, BG_BOTTOM.b, 0 },
-                           (Color){ BG_BOTTOM.r, BG_BOTTOM.g, BG_BOTTOM.b, 235 });
-
-    //--- Name of the model on the left ---------------------------------------
-    const CharacterDefinition *shown =
-        ContentCharacter(&w->content, (BrawlerClass)t->selectedKit);
-    int nameX = (int)(sw*0.22f);
-    DrawLabel(shown->displayName, nameX, 96, 34, TEXT_MAIN);
-    DrawLabel(shown->flavor, nameX, 134, 14, TEXT_DIM);
 }
 
-//------------------------------------------------------------------------------------
+static void DrawControlRow(float x, float y, const char *binding, const char *action)
+{
+    const UiTheme *t = g_ui->theme;
+    UiDrawKeycap(UiRefRect(x, y, 124, 38), binding, false);
+    UiDrawText(UI_TEXT_BODY, action, UiRefPoint(x + 142, y + 8), t->paper);
+}
+
+static void DrawControlsOverlay(App *w)
+{
+    (void)w;
+    const UiTheme *t = g_ui->theme;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
+    Rectangle panel = UiRefRect(190, 76, 900, 648);
+    UiDrawPanel(panel, t->deckRaised, t->ion, true);
+    UiDrawSignalRail(panel, t->ion, false);
+    UiDrawText(UI_TEXT_TITLE, "CONTROLS", UiRefPoint(230, 100), t->paper);
+    UiDrawText(UI_TEXT_CAPTION, "ACTIVE INPUT GLYPHS FOLLOW THE LAST USED DEVICE",
+               UiRefPoint(232, 150), t->muted);
+
+    UiDrawText(UI_TEXT_LABEL, "MOVEMENT", UiRefPoint(232, 192), t->ion);
+    DrawControlRow(232, 218, UiBindingLabel("WASD / ARROWS", "LEFT STICK"), "Move");
+    DrawControlRow(232, 264, UiBindingLabel("LEFT SHIFT", "LEFT BUMPER"), "Brawler mobility");
+
+    UiDrawText(UI_TEXT_LABEL, "COMBAT", UiRefPoint(232, 326), t->safety);
+    DrawControlRow(232, 352, UiBindingLabel("HOLD LMB", "HOLD RT"), "Aim main attack");
+    DrawControlRow(232, 398, UiBindingLabel("RELEASE LMB", "RELEASE RT"), "Fire");
+    DrawControlRow(232, 444, UiBindingLabel("RMB", "RIGHT BUMPER"), "Aim and use ultimate");
+
+    UiDrawText(UI_TEXT_LABEL, "SYSTEM", UiRefPoint(680, 192), t->reactor);
+    DrawControlRow(680, 218, UiBindingLabel("TAB", "KEYBOARD"), "Command center in practice");
+    DrawControlRow(680, 264, UiBindingLabel("R", "KEYBOARD"), "Restart match");
+    DrawControlRow(680, 310, UiBindingLabel("ESC", "B"), "Back or close");
+    DrawControlRow(680, 356, UiBindingLabel("1 - 5", "KEYBOARD"), "Swap active brawler");
+
+    UiResponse close = UiButton(UiHash("controls.close"), UiRefRect(504, 644, 272, 56),
+                                "Close controls", UI_BUTTON_STANDARD, UI_ICON_CLOSE);
+    if (close.activated) CloseOverlay();
+}
+
+static void PreferenceToggle(UiId id, Rectangle bounds, const char *label, bool *value)
+{
+    UiResponse response = UiToggle(id, bounds, label, *value);
+    if (response.activated)
+    {
+        *value = !*value;
+        ConfigMarkDirty();
+    }
+}
+
+static void DrawSettingsOverlay(App *w)
+{
+    const UiTheme *t = g_ui->theme;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
+    Rectangle panel = UiRefRect(330, 78, 620, 644);
+    UiDrawPanel(panel, t->deckRaised, t->ion, true);
+    UiDrawSignalRail(panel, t->safety, false);
+    UiDrawText(UI_TEXT_TITLE, "SETTINGS", UiRefPoint(372, 102), t->paper);
+    UiDrawText(UI_TEXT_CAPTION, "PROFILE-SCOPED // SAVED AUTOMATICALLY",
+               UiRefPoint(374, 152), t->muted);
+
+    UiDrawText(UI_TEXT_LABEL, "INTERFACE SCALE", UiRefPoint(374, 198), t->ion);
+    UiDrawPanel(UiRefRect(374, 224, 532, 62), t->deepBg, t->line, false);
+    UiResponse smaller = UiIconButton(UiHash("settings.scale.down"),
+                                      UiRefRect(388, 233, 44, 44),
+                                      UI_ICON_PREVIOUS, "Decrease UI scale");
+    UiResponse larger = UiIconButton(UiHash("settings.scale.up"),
+                                     UiRefRect(848, 233, 44, 44),
+                                     UI_ICON_NEXT, "Increase UI scale");
+    char scale[32];
+    snprintf(scale, sizeof(scale), "%.0f%%", w->uiPreferences.scale*100.0f);
+    UiDrawTextAligned(UI_TEXT_DATA, scale, UiRefRect(448, 233, 384, 44),
+                      UI_ALIGN_CENTER, t->paper);
+    if (smaller.activated || larger.activated)
+    {
+        w->uiPreferences.scale = Clamp(w->uiPreferences.scale +
+            (larger.activated ? 0.10f : -0.10f), 0.75f, 1.50f);
+        ConfigMarkDirty();
+    }
+
+    PreferenceToggle(UiHash("settings.motion"), UiRefRect(374, 304, 532, 56),
+                     "Reduced decorative motion", &w->uiPreferences.reducedMotion);
+    PreferenceToggle(UiHash("settings.contrast"), UiRefRect(374, 370, 532, 56),
+                     "High-contrast gameplay cues", &w->uiPreferences.highContrast);
+    PreferenceToggle(UiHash("settings.hints"), UiRefRect(374, 436, 532, 56),
+                     "Action tutorial hints", &w->uiPreferences.showTutorialHints);
+
+    UiDrawText(UI_TEXT_LABEL, "INPUT GLYPHS", UiRefPoint(374, 520), t->reactor);
+    const char *glyphs[UI_GLYPH_MODE_COUNT] = { "AUTO", "KEYBOARD / MOUSE", "GAMEPAD" };
+    UiResponse prev = UiIconButton(UiHash("settings.glyph.prev"),
+                                   UiRefRect(374, 548, 44, 44),
+                                   UI_ICON_PREVIOUS, "Previous input glyph mode");
+    UiResponse next = UiIconButton(UiHash("settings.glyph.next"),
+                                   UiRefRect(862, 548, 44, 44),
+                                   UI_ICON_NEXT, "Next input glyph mode");
+    UiDrawTextAligned(UI_TEXT_DATA, glyphs[w->uiPreferences.inputGlyphMode],
+                      UiRefRect(432, 548, 416, 44), UI_ALIGN_CENTER, t->paper);
+    if (prev.activated || next.activated)
+    {
+        int direction = next.activated ? 1 : -1;
+        w->uiPreferences.inputGlyphMode =
+            (w->uiPreferences.inputGlyphMode + direction + UI_GLYPH_MODE_COUNT) %
+            UI_GLYPH_MODE_COUNT;
+        ConfigMarkDirty();
+    }
+
+    UiResponse reset = UiButton(UiHash("settings.reset.hints"),
+                                UiRefRect(374, 612, 250, 54),
+                                "Reset tutorial", UI_BUTTON_UTILITY, UI_ICON_CONTROLS);
+    if (reset.activated)
+    {
+        w->uiPreferences.tutorialFlags = 0;
+        ConfigMarkDirty();
+    }
+    UiResponse close = UiButton(UiHash("settings.close"), UiRefRect(642, 612, 264, 54),
+                                "Save and close", UI_BUTTON_STANDARD, UI_ICON_CLOSE);
+    if (close.activated)
+    {
+        ConfigFlush(w);
+        CloseOverlay();
+    }
+}
+
+bool MenuConsumeEscape(void)
+{
+    if (g_overlay == MENU_OVERLAY_NONE) return false;
+    CloseOverlay();
+    return true;
+}
+
+void MenuInit(Assets *assets, UiSystem *ui)
+{
+    g_ui = ui;
+    MenuSceneInit(&g_scene, assets);
+}
+
+void MenuUpdate(App *w, float dt)
+{
+    if (g_lastScreen != w->flow.screen)
+    {
+        g_lastScreen = w->flow.screen;
+        if (w->flow.screen == SCREEN_BRAWLERS)
+        {
+            g_candidate = (BrawlerClass)w->tune.selectedKit;
+            UiFocus(UiHash("roster.back"));
+            if (UiCurrentModality() == UI_INPUT_POINTER) g_ui->focusVisible = false;
+        }
+        else if (w->flow.screen == SCREEN_MENU)
+        {
+            UiFocus(UiHash("home.roster"));
+            if (UiCurrentModality() == UI_INPUT_POINTER) g_ui->focusVisible = false;
+        }
+    }
+
+    if (UiBackPressed())
+    {
+        if (g_overlay != MENU_OVERLAY_NONE) CloseOverlay();
+        else if (w->flow.screen == SCREEN_BRAWLERS) ShellRequestScreen(w, SCREEN_MENU);
+        else w->flow.quitRequested = true;
+    }
+
+    BrawlerClass preview = w->flow.screen == SCREEN_BRAWLERS
+        ? g_candidate : (BrawlerClass)w->tune.selectedKit;
+    float sceneDt = w->uiPreferences.reducedMotion ? 0.0f : dt;
+    MenuSceneUpdate(&g_scene, w, preview, w->flow.screen, sceneDt);
+}
+
 void MenuDraw(App *w)
 {
     DrawBackdrop();
-    DrawPodiumScene(w);
+    BrawlerClass preview = w->flow.screen == SCREEN_BRAWLERS
+        ? g_candidate : (BrawlerClass)w->tune.selectedKit;
+    MenuSceneDraw(&g_scene, w, preview, w->flow.screen);
 
-    if (w->flow.screen == SCREEN_BRAWLERS)
-    {
-        g_showControls = false;             // the modal belongs to the main menu only
-        DrawBrawlerSelect(w);
-        return;
-    }
+    UiSetInteractionsEnabled(g_overlay == MENU_OVERLAY_NONE);
+    if (w->flow.screen == SCREEN_BRAWLERS) DrawRoster(w);
+    else DrawHome(w);
 
-    // Underlying cards are drawn inert while the modal is up, then the modal on top.
-    g_blockCards = g_showControls;
-    DrawMainMenu(w);
-    g_blockCards = false;
-
-    if (g_showControls) DrawControlsModal(w);
+    UiSetInteractionsEnabled(true);
+    if (g_overlay == MENU_OVERLAY_CONTROLS) DrawControlsOverlay(w);
+    else if (g_overlay == MENU_OVERLAY_SETTINGS) DrawSettingsOverlay(w);
 }
 
-//------------------------------------------------------------------------------------
-// Screen flow
-//------------------------------------------------------------------------------------
-bool ShellIsTransitioning(const App *w) { return w->flow.fadingOut || w->flow.fade > 0.001f; }
+bool ShellIsTransitioning(const App *w)
+{
+    return w->flow.fadingOut || w->flow.fade > 0.001f;
+}
 
 void ShellRequestScreen(App *w, AppScreen screen)
 {
-    if (w->flow.fadingOut) return;               // ignore double clicks mid-transition
-    if (screen == w->flow.screen) return;
-
-    // Get any pending tweak onto disk now rather than relying on the debounce, so a
-    // change made a moment before quitting from the menu still survives.
+    if (w->flow.fadingOut || screen == w->flow.screen) return;
     ConfigFlush(w);
-
     w->flow.pending = screen;
     w->flow.fadingOut = true;
 }
@@ -655,10 +532,7 @@ void ShellUpdate(App *w, float dt)
             w->flow.fade = 1.0f;
             w->flow.fadingOut = false;
             w->flow.screen = w->flow.pending;
-
-            // Entering the menu should always show the current selection, and leaving a
-            // sandbox should not leave the flag set for the next thing you start.
-            if (w->flow.screen != SCREEN_MATCH) { w->session.sandbox = false; RebuildPreview(w); }
+            if (w->flow.screen != SCREEN_MATCH) w->session.sandbox = false;
         }
     }
     else if (w->flow.fade > 0.0f)
@@ -672,5 +546,6 @@ void ShellDrawFade(App *w)
 {
     if (w->flow.fade <= 0.001f) return;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                  (Color){ 0, 0, 0, (unsigned char)(255*Clamp(w->flow.fade, 0.0f, 1.0f)) });
+                  (Color){ 0, 0, 0,
+                    (unsigned char)(255*Clamp(w->flow.fade, 0.0f, 1.0f)) });
 }

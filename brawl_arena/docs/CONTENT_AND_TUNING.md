@@ -29,21 +29,24 @@ candidate without partially modifying live state. The command center displays
 
 ## Live authoring and save actions
 
-Command-center sliders edit `App.tune` and `App.content.weapons` immediately. The typed
-catalog is rebuilt after the panel processes edits, so gameplay and UI read the current
-values in the same session.
+Command-center sliders edit `App.tune`, `App.content.weapons`, character presentation
+profiles, and personal UI preferences immediately. The typed catalog is rebuilt only
+when an active weapon authoring record actually changes, so gameplay and UI read current
+ability values without redundant per-frame rebuilds.
 
 After 0.6 seconds of inactivity:
 
 - Project-scoped values that differ from `config/gameplay.cfg` are written to the sparse
   ignored `tuning.local.cfg`.
 - Local-only cheats/debug state is written there regardless of project equality.
-- Selected kit and win/loss/KO statistics are written to ignored `profile.cfg`.
+- Selected kit, win/loss/KO statistics, UI preferences, and completed tutorial actions
+  are written to ignored `profile.cfg`.
 
 Explicit actions:
 
-- `SAVE KIT AS PROJECT DEFAULT` copies the active kit into the canonical snapshot,
-  validates the complete result, and atomically rewrites `config/gameplay.cfg`.
+- `SAVE KIT + FRAMING AS PROJECT DEFAULT` copies the active kit and its presentation
+  profile into the canonical snapshot, validates the complete result, and atomically
+  rewrites `config/gameplay.cfg`.
 - `SAVE ALL AS PROJECT DEFAULTS` promotes every live project-scoped value.
 - `Reset kit to PROJECT default` restores one kit from the loaded canonical snapshot.
 - `Discard draft / restore PROJECT` restores all project-scoped live values.
@@ -81,6 +84,7 @@ they do not describe the rain/Resonance behavior.
 - `abilities[MAX_ABILITIES]`: typed main/ultimate definitions plus optional mobility
   definitions.
 - `maps[MAX_MAPS]`: validated map definitions and selected-map index.
+- `presentation[CLASS_COUNT]`: project-owned home/select model framing.
 
 Each runtime ability has:
 
@@ -95,6 +99,25 @@ wave. Game, AI, menu summaries, HUD, and aim previews resolve abilities through
 `ContentMainAbility()`, `ContentSuperAbility()`, and
 `ContentMobilityAbility()`. The current catalog has eleven active definitions in a
 fifteen-slot fixed array.
+
+## Global combat recovery
+
+Out-of-combat regeneration is project-scoped global tuning rather than character
+content:
+
+- `gameplay.health_regen_delay`: quiet time after combat before the first pulse.
+- `gameplay.health_regen_interval`: time between later pulses.
+- `gameplay.health_regen_max_ratio`: fraction of each brawler's maximum health restored
+  per pulse; zero disables the mechanic.
+
+Tracked defaults are 3.0 seconds, 1.0 second, and 0.13. The rule applies symmetrically to
+every living brawler. Successful main attacks and ultimates reset combat time; attacks
+that fail validation do not. Actual health loss resets it, including periodic damage.
+Movement, aiming, optional non-attacking mobility, and received healing do not. Recovery
+uses the normal capped healing API and cannot revive.
+
+These values are editable under WORLD / COMBAT RECOVERY and participate in the normal
+sparse-draft and Save All promotion flow.
 
 ## Tank
 
@@ -144,6 +167,22 @@ visualization may end before the status duration.
 
 The behavioral regression test derives expected pulse counts from the content values
 instead of duplicating them as implementation constants.
+
+## Presentation and player UI state
+
+Each stable character ID has a complete tracked `preview.<id>.*` record for home/select
+yaw, scale, two-dimensional model offset, camera target height, and camera distance.
+These values are content: they load from `config/gameplay.cfg`, can be drafted locally,
+and are promoted with kit framing or Save All.
+
+Tank's canonical home yaw is 205° and select yaw is 180°. Its select scale and offset are
+separate from home framing so the broad model remains centered and fully visible in the
+roster bay.
+
+Personal presentation choices are never project truth. `profile.ui_scale`,
+`profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,
+`profile.input_glyph_mode`, and `profile.tutorial_flags` live only in the ignored
+profile. Settings and the Preview / UI command-center tab edit them immediately.
 
 ## Validation commands
 

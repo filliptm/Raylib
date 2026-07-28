@@ -1,5 +1,6 @@
 #include "content_catalog.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,6 +18,14 @@ static const CharacterRole CHARACTER_ROLES[CLASS_COUNT] = {
     CHARACTER_ROLE_ARTILLERY,
     CHARACTER_ROLE_TANK,
     CHARACTER_ROLE_SUPPORT
+};
+
+static const CharacterPresentationDefinition PRESENTATION_DEFAULTS[CLASS_COUNT] = {
+    { 180.0f, 180.0f, 1.00f, 0.94f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.30f, 7.60f },
+    { 180.0f, 180.0f, 1.00f, 0.94f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.30f, 7.60f },
+    { 180.0f, 180.0f, 0.96f, 0.91f, { 0.0f, 0.0f }, { 3.10f, 0.0f }, 1.34f, 7.75f },
+    { 205.0f, 180.0f, 0.86f, 0.78f, { 0.0f, 0.0f }, { 3.28f, 0.0f }, 1.62f, 8.25f },
+    { 180.0f, 180.0f, 0.94f, 0.88f, { 0.0f, 0.0f }, { 3.08f, 0.0f }, 1.42f, 7.90f }
 };
 
 const WeaponDef WEAPON_DEFAULTS[CLASS_COUNT] = {
@@ -130,6 +139,9 @@ void TuningSetDefaults(Tuning *tuning)
         .dashSpeed = 26.0f,
         .bushReveal = DEFAULT_BUSH_REVEAL_RANGE,
         .fireReveal = DEFAULT_FIRE_REVEAL_TIME,
+        .healthRegenDelay = 3.0f,
+        .healthRegenInterval = 1.0f,
+        .healthRegenRatio = 0.13f,
         .playerRespawn = DEFAULT_PLAYER_RESPAWN,
         .enemyRespawn = DEFAULT_ENEMY_RESPAWN,
         .matchResultHold = DEFAULT_MATCH_RESULT_HOLD,
@@ -316,6 +328,7 @@ void ContentCatalogRebuildTyped(ContentCatalog *catalog)
 void ContentCatalogResetAll(ContentCatalog *catalog)
 {
     memcpy(catalog->weapons, WEAPON_DEFAULTS, sizeof(catalog->weapons));
+    memcpy(catalog->presentation, PRESENTATION_DEFAULTS, sizeof(catalog->presentation));
     ContentCatalogRebuildTyped(catalog);
 }
 
@@ -359,4 +372,26 @@ const AbilityDefinition *ContentAbility(const ContentCatalog *catalog, int abili
 {
     if (!catalog || abilityId < 0 || abilityId >= catalog->abilityCount) return 0;
     return &catalog->abilities[abilityId];
+}
+
+const CharacterPresentationDefinition *ContentCharacterPresentation(
+    const ContentCatalog *catalog, BrawlerClass character)
+{
+    if (!catalog || character < 0 || character >= CLASS_COUNT) return 0;
+    return &catalog->presentation[character];
+}
+
+bool ContentPresentationValid(const CharacterPresentationDefinition *presentation)
+{
+    if (!presentation) return false;
+    return isfinite(presentation->homeYawDegrees) &&
+           isfinite(presentation->selectYawDegrees) &&
+           presentation->homeScale >= 0.50f && presentation->homeScale <= 1.50f &&
+           presentation->selectScale >= 0.50f && presentation->selectScale <= 1.50f &&
+           fabsf(presentation->homeOffset.x) <= 8.0f &&
+           fabsf(presentation->homeOffset.y) <= 4.0f &&
+           fabsf(presentation->selectOffset.x) <= 8.0f &&
+           fabsf(presentation->selectOffset.y) <= 4.0f &&
+           presentation->cameraTargetY >= 0.2f && presentation->cameraTargetY <= 4.0f &&
+           presentation->cameraDistance >= 4.0f && presentation->cameraDistance <= 14.0f;
 }

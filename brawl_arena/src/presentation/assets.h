@@ -137,6 +137,7 @@ typedef struct Assets {
 
 bool AssetsLoad(Assets *a, int screenW, int screenH);
 void AssetsUnload(Assets *a);
+bool AssetsResizeViewport(Assets *a, int screenW, int screenH);
 
 // Draw a mesh through the lighting shader. uvScale tiles the texture; emissive lifts
 // the surface out of the lighting equation (0 = fully lit, 1 = self-lit).

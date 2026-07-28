@@ -58,6 +58,10 @@ int main(void)
 
     for (int frame = 0; frame < 120; frame++)
     {
+        const float dt = 1.0f/60.0f;
+        first.session.time += dt;
+        replay.session.time += dt;
+
         PlayerInput input = { 0 };
         input.selectedClass = -1;
         input.aimPoint = first.session.brawlers[1].position;
@@ -68,12 +72,14 @@ int main(void)
 
         PlayerInput replayInput = input;
         replayInput.aimPoint = replay.session.brawlers[1].position;
-        PlayerUpdate(&first, &input, 1.0f/60.0f);
-        PlayerUpdate(&replay, &replayInput, 1.0f/60.0f);
-        BrawlersUpdate(AppGameContext(&first), 1.0f/60.0f);
-        BrawlersUpdate(AppGameContext(&replay), 1.0f/60.0f);
-        ProjectilesUpdate(AppGameContext(&first), 1.0f/60.0f);
-        ProjectilesUpdate(AppGameContext(&replay), 1.0f/60.0f);
+        PlayerUpdate(&first, &input, dt);
+        PlayerUpdate(&replay, &replayInput, dt);
+        BrawlersUpdate(AppGameContext(&first), dt);
+        BrawlersUpdate(AppGameContext(&replay), dt);
+        ProjectilesUpdate(AppGameContext(&first), dt);
+        ProjectilesUpdate(AppGameContext(&replay), dt);
+        BrawlersUpdateRegeneration(AppGameContext(&first));
+        BrawlersUpdateRegeneration(AppGameContext(&replay));
 
         CHECK(first.session.events.count == replay.session.events.count,
               "replay emitted a different event count");

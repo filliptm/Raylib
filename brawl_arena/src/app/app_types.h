@@ -29,6 +29,18 @@ typedef struct AppFlow {
     bool quitRequested;
 } AppFlow;
 
+// Personal presentation preferences live beside the application shell rather than in
+// deterministic match state or project gameplay tuning. Config persists these fields
+// only to the ignored profile file.
+typedef struct UiPreferences {
+    float scale;
+    bool reducedMotion;
+    bool highContrast;
+    bool showTutorialHints;
+    int inputGlyphMode;
+    int tutorialFlags;
+} UiPreferences;
+
 typedef struct App {
     GameSession session;
     PlayerController controller;
@@ -37,6 +49,7 @@ typedef struct App {
     Tuning tune;
     ContentCatalog content;
     ConfigState config;
+    UiPreferences uiPreferences;
     bool matchRestartPending;
 } App;
 

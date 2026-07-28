@@ -9,8 +9,11 @@ make                    # architecture check + optimized game
 make run                # build and launch
 make debug              # clean debug build
 make check-architecture # dependency-policy check
+make check-ui           # Helios UI ownership/font policy check
+make character-assets   # bake mesh library + shared animations into runtime GLBs
+make check-character-assets # validate rigs, clips, outputs, and 1K textures
 make validate-config    # validate tracked canonical project values
-make test               # six headless behavior/integration executables
+make test               # Python character-pipeline tests + eight C test executables
 make sanitize           # clean sanitizer headless run
 make clean
 ```
@@ -37,8 +40,12 @@ require adding its object to that target.
 | Main loop, local controller/input, authoring commands | `src/app` |
 | Camera, assets, shaders, effects, visuals, environment | `src/presentation` |
 | Menu or HUD | `src/ui` |
+| Menu hangar/podium/preview scene | `src/presentation/menu_scene.[ch]` |
 | Command-center UI | `src/devtools` |
 | Map packages | `data/maps` |
+| Character asset manifest | `data/characters/asset_manifest.json` |
+| Mesh-only characters and reusable clips | `resources/characters` |
+| Character import, retargeting, and validation | `tools/character_pipeline`, `tools/*.py` |
 | Canonical numeric defaults | `config/gameplay.cfg` |
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before moving APIs between layers.
@@ -68,13 +75,19 @@ Current character slots are fixed:
 3. Add compiled recovery authoring values and complete canonical keys.
 4. Prefer existing ability behaviors; add a new behavior only when the rule is genuinely
    different.
-5. Import/convert a rigged model using
-   [CHARACTER_PIPELINE.md](CHARACTER_PIPELINE.md).
-6. Update asset loading/fallback selection.
-7. Add tests for behavior, tuning validation, no combat shake, and summaries.
+5. Import the rigged Meshy `Character_output` ZIP, directory, or GLB using
+   [CHARACTER_PIPELINE.md](CHARACTER_PIPELINE.md). The standard workflow needs only the
+   rigged model; `import_character.py` repairs raylib's bind representation, records its
+   animation rest pose, strips clips, and enforces 1K textures.
+6. Add the model and generated output to `data/characters/asset_manifest.json`, then
+   point `CHARACTER_MODEL_PATHS` at the generated `build/assets/characters/` file.
+7. Run `make character-assets`. The build retargets the shared animation library by bone
+   name and bind-relative motion. Add an animation-only override only when the character
+   intentionally needs a unique clip.
+8. Add tests for behavior, tuning validation, no combat shake, and summaries.
 
-Animations can be reused only for a compatible skeleton/rest pose. raylib does not
-retarget arbitrary rigs.
+raylib still does not retarget rigs at runtime. The Python build pipeline performs the
+retarget and emits self-contained runtime GLBs before the game starts.
 
 ## Adding a map
 
@@ -114,22 +127,29 @@ test exist to keep simulation usable without a window.
 | `test_no_attack_shake` | every kit plus impact/damage/death camera isolation |
 | `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability |
 | `test_gameplay` | identical input replay and simulation event/presentation isolation |
+| `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
+| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, and presentation profiles |
+| `test_character_pipeline.py` | rig rejection, bind-relative math, deterministic baking, canonical clips, and 1K model/output validation |
 
 Tests use path overrides and temporary fixtures. They must not touch the developer's
 ignored local tuning/profile files.
 
 ## Interactive smoke checklist
 
-After changes to runtime/presentation:
+Use [UI_SMOKE_CHECKLIST.md](UI_SMOKE_CHECKLIST.md) for the complete viewport/input
+matrix. At minimum, after changes to runtime/presentation:
 
 - Main menu, Brawlers, Practice, Play, Escape/back, and fade transitions.
 - All five kit previews and both main/ultimate firing.
 - Tank Reclamation healing, Shift Shoulder Jets cooldown/cover stop, and Charge.
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.
+- Three-second out-of-combat regeneration, one-second pulses, and attack/damage resets.
 - Static, Roam, and Fight bots.
 - Gem spawn, pickup, death drop, countdown, win/result return.
 - Command-center sliders, reset, project promotion, scrolling, and pointer capture.
+- Keyboard/gamepad menu focus, modal close/restore, and glyph switching.
+- Resize at 960×600, 1280×800, 1920×1080, and 2560×1440.
 - Helios-9 and Training Court selection/rebuild.
 - Imported models, animation direction, grass, station props, shaders, post effects.
 - Confirm attacks never shake either user's camera.

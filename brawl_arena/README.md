@@ -21,39 +21,38 @@ Requires raylib 5.5+ (`brew install raylib`).
 
 ## Screens
 
-The game opens on a **main menu** with the selected brawler on a lit podium and everything
-else arranged around the edges: profile and stats top-left, practice and quit top-right,
-brawler select and controls down the left, the kit's name badge above the model, its stats
-to the right, and the mode card and PLAY button along the bottom.
+The **launch deck** is a deliberately quiet deployment screen: the game title and
+utilities sit above an open character stage, while the bottom rail contains the active
+brawler switcher, active mode, Practice, and the single primary **DEPLOY** action. Combat
+stats and ability copy stay out of this screen so choosing a session remains the focus.
 
-Clicking **BRAWLERS** opens character select: the brawler stands on the left, and the
-roster scrolls on the right. Each entry carries the kit's name, health, damage, range,
-reload, cooldown and ammo, plus a line describing its attack and its super. Those
-descriptions are derived from the weapon data rather than written out, so they stay true
-after the numbers are tuned.
+**BRAWLERS** opens the roster bay. Navigation changes a candidate preview; **SELECT**
+commits that candidate to the profile, while Back leaves the previous selection intact.
+This is the detailed character view: identity and abilities sit beside the centered
+model, field telemetry sits opposite, and all five concise character choices remain
+visible along the bottom. The readouts derive health, attack, range, cooldown, ammo, and
+ability descriptions from the live content catalog, so tuned values remain accurate.
 
-The list wraps rather than stopping, so a short roster never hits a dead end at either
-edge. Scroll with the wheel or drag it; a press only counts as a pick if the pointer
-barely moved, so dragging never selects by accident.
+Controls and Settings are modal overlays. Settings persist UI scale, reduced motion,
+high-contrast combat cues, tutorial visibility, and keyboard/gamepad glyph preference to
+the ignored player profile. Menu, roster, overlays, result screen, and tuning controls
+support pointer and keyboard focus; player-facing screens also support gamepad focus.
 
-Nothing in the menu is a placeholder. Every card does something real - selecting a kit,
-toggling the rules, opening the tuning panel, starting a match, quitting - because a menu
-full of dead buttons teaches you to stop clicking things.
-
-`ESC` steps back a screen: select to menu, match to menu, menu to quit. raylib closes the
-window on `ESC` by default, so that is explicitly disabled and handled here instead.
+`ESC` closes the nearest overlay or command center first, then steps back a screen:
+roster to menu, match to menu, and menu to quit. raylib's default escape-to-close behavior
+is disabled so this navigation remains explicit.
 
 ## Controls
 
 | Input | Action |
 |-------|--------|
-| `WASD` / arrows | Move |
+| `WASD` / arrows or left stick | Move |
 | `Left Shift` | Tank: fire Shoulder Jets along movement input, or toward aim while stationary |
-| Hold `LMB` | Aim — shows a live trajectory preview |
-| Release `LMB` | Fire along the preview |
-| Tap `LMB` or `SPACE` | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
-| Hold `RMB` | Aim your super (only when charged) |
-| Release `RMB` | Fire the super |
+| Mouse or right stick | Aim |
+| Hold/release `LMB` or right trigger | Preview/fire the main attack |
+| Tap `LMB`, `SPACE`, or gamepad A | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
+| Hold/release `RMB` or right bumper | Preview/fire the super |
+| Left bumper | Tank Shoulder Jets |
 | `1` – `5` | Swap kit on the spot |
 | `TAB` | Open / close the command center |
 | `ESC` | Back a screen — select to menu, match to menu, menu quits |
@@ -85,6 +84,13 @@ and never costs you accuracy.
 **Ammo economy.** Capacity is configured per kit (all tracked defaults currently use
 three pips), with each pip reloading continuously and independently. You cannot hold the
 trigger; you manage a small budget of shots and reposition while it refills.
+
+**Out-of-combat regeneration.** Every living brawler follows the same recovery rule.
+After three gameplay seconds without successfully firing a main attack or ultimate and
+without losing health, the brawler immediately restores 13% of maximum health. Further
+pulses arrive once per gameplay second until full. Real damage—including each
+damage-over-time pulse—restarts the delay; failed attacks, movement, aiming, Shoulder
+Jets, and receiving healing do not. Recovery caps at maximum health and never revives.
 
 **Tank sustain and mobility.** Tank's Reclamation Rounds restore 20% of the enemy health
 actually removed by each main-attack pellet. Overkill cannot create extra healing,
@@ -170,8 +176,9 @@ independently when its controls are taller than the window.
 | **BOTS** | Behaviour mode, bot count (0–7), mixed or fixed kits, respawn delay, AI health thresholds/probe distance, and respawn / kill / heal buttons |
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
 | **KIT** | Live edit of the active kit, including ammo capacity and main-shot self-healing. Tank exposes Shoulder Jets cooldown/duration/speed; Guardian exposes rain duration/pulse/growth and Resonance duration/tick/wave controls, plus reset/save-as-project actions |
-| **STYLE** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
-| **WORLD** | Time scale, super gain, crate/result timing, stealth, grass, rendering, debug, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
+| **VISUAL** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
+| **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
+| **PREVIEW / UI** | Per-character home/select framing plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
 
 Editing a kit's max health updates living brawlers of that class immediately, keeping
 their health ratio, so you can feel a change without respawning.
@@ -202,11 +209,12 @@ labelled recovery mode instead of silently creating a hybrid configuration.
 
 Slider edits autosave after 0.6 seconds to ignored `tuning.local.cfg`. It is sparse:
 project keys appear only while they differ from `gameplay.cfg`; cheats and debug state
-are always local. `profile.cfg` separately owns the selected kit and win/loss/KO record.
+are always local. `profile.cfg` separately owns the selected kit, win/loss/KO record,
+personal UI preferences, and completed tutorial actions.
 
 The command center shows `PROJECT DEFAULTS` or `PROJECT + LOCAL DRAFT (N)`:
 
-- `SAVE KIT AS PROJECT DEFAULT` promotes only the active kit.
+- `SAVE KIT + FRAMING AS PROJECT DEFAULT` promotes the active kit and its menu framing.
 - `SAVE ALL AS PROJECT DEFAULTS` promotes all live project-scoped values.
 - Reset/discard actions restore the tracked project values and clear matching draft keys.
 
@@ -262,14 +270,14 @@ FXAA-style edge smoothing. Toggle the pass and dial bloom strength on the WORLD 
 The depth-based effects use the same 0.5-to-120 clip range as the 3D cameras rather than
 raylib's much wider default range, concentrating depth precision around the arena.
 
-**The STYLE tab** in the command center is a full mix-and-match viewport rig: toon
+**The VISUAL tab** in the command center is a full mix-and-match viewport rig: toon
 banding and ink outlines, painterly (Kuwahara), pixelate, halftone comic dots,
 posterize, saturation, brightness, bloom, vignette, film grain and chromatic fringe -
 every effect an independent live slider, all persisted, all composable in one post
 pass. HUD and menus draw after the pass, so the interface stays crisp whatever the
 world looks like.
 
-**The toon look** (STYLE tab, on by default) turns the scene illustrative: lighting is
+**The toon look** (VISUAL tab, on by default) turns the scene illustrative: lighting is
 quantised into hard cel bands with specular and rim killed, ambient lifted and colours
 saturated so shadow bands stay vivid, and a depth-based ink outline is drawn around
 every silhouette in the post pass. The outline needs a sampleable depth texture, so the
@@ -317,20 +325,29 @@ invisible.
 
 SCRAPPER, TANK, and GUARDIAN are played as rigged, animated character models - on the
 menu podium, in character select, and in the arena. Longshot and Mortar keep their
-primitive brawlers in their accent colours. In a match each model picks its clip from
-movement (idle, walking, running or dashing), flashes on hit, ghosts in bushes like
-everything else, and carries a red cast on enemies and a blue one on allied bots so a
-grey model still reads friend-or-foe at a glance. The WORLD-tab toggle turns rigged
-models off, and each kit falls back to primitives automatically if its file is missing.
+primitive brawlers in their accent colours. Menu and character-select previews hold a
+fixed direction while their idle animation continues. Every character has independently
+authorable home/select yaw, scale, offset, camera height, and distance. Tank's tracked
+profile uses a 25-degree right-facing home offset, then returns to a smaller direct-front
+character-select pose so its full stance fits the roster stage. In a match each model
+picks its clip from movement (idle, walking, running or dashing), flashes on hit, ghosts
+in bushes like everything else, and carries a red cast on enemies and a blue one on
+allied bots so a grey model still reads friend-or-foe at a glance. The WORLD-tab toggle
+turns rigged models off, and each kit falls back to primitives automatically if its file
+is missing.
 
 In a match the clip is picked from the movement direction relative to facing -
 forward, backward and four diagonals - so backpedaling and circle-strafing animate
 correctly instead of moonwalking, with playback rate following actual speed. Going
 down plays a death clip that holds until just before the respawn, and a brawler that
-just fired holds a combat stance. The AI-generated Meshy runtime assets are
-`resources/sentinel.glb` for Scrapper (13 clips, about 4.3 MiB),
-`resources/ironclad_guardian.glb` for Tank (13 clips, about 1.6 MiB), and
-`resources/gaia_guardian.glb` for Guardian (13 clips, about 1.7 MiB).
+just fired holds a combat stance. Tracked mesh-only models live under
+`resources/characters/models/`; the shared twelve-clip `meshy_humanoid_v1` library and
+small character-specific overrides live under `resources/characters/animations/`.
+`make character-assets` validates the common 24-bone topology, retargets motion relative
+to each model's animation rest pose, and writes self-contained raylib assets under
+`build/assets/characters/`. Every embedded character texture is exactly 1024×1024 (1K);
+`make check-character-assets` validates the model, animation, generated-output, root
+motion, and texture contracts.
 raylib has no animation crossfade, so clip changes restart the cycle - a known small pop.
 
 Raw Meshy/Tripo exports do NOT load correctly in raylib - they pass every load-time
@@ -338,9 +355,12 @@ check and then render as a collapsed spike-ball. The full story of why (raylib's
 glTF loader implements a much narrower contract than the spec), the converter that
 fixes it, the checklist for importing the next character, and the debugging traps to
 avoid are in **[docs/CHARACTER_PIPELINE.md](docs/CHARACTER_PIPELINE.md)**. Short
-version:
+version (a compatible Meshy `Character_output` model is sufficient; repeated animation
+exports are not required):
 
-    python3 tools/fix_meshy_glb.py <meshy-export-dir> resources/<name>.glb
+    python3 tools/import_character.py <meshy-zip-dir-or-glb> \
+      resources/characters/models/<name>.glb --id <name>
+    make character-assets
 
 ## The five kits
 
@@ -390,6 +410,10 @@ See:
 - [Content and tuning](docs/CONTENT_AND_TUNING.md)
 - [Map packages](docs/MAPS.md)
 - [Development guide](docs/DEVELOPMENT.md)
+- [Visual design field guide](docs/visual-design/index.html) — implemented Helios
+  Broadcast styling and screen references, plus the historical pre-implementation audit
+- [Helios Broadcast implementation plan](docs/visual-design/IMPLEMENTATION_PLAN.md) —
+  implementation record, architecture, milestones, and acceptance gates
 
 ## Gem Grab
 
@@ -408,8 +432,8 @@ When the match is decided everything **stops**: no AI, no movement, no shooting,
 round still in flight is cleared so nothing hangs frozen in mid-air. Only effects and the
 camera keep running, so the deciding blow finishes playing out. The result is held for a
 few seconds - with the count shown - and then you are returned to the menu, or you can
-click straight through. A finished match that carries on playing itself reads as a bug,
-not as a result.
+activate the explicit **CONTINUE** action. A finished match that carries on playing
+itself reads as a bug, not as a result.
 
 The reactor ring leaves the vent approachable from the centre or either wide flank. Four
 small L-shaped pylon groups interrupt cross-map fire without subdividing the atrium, while
@@ -440,5 +464,7 @@ sandbox it started as, with the static training bots.
 - Character animation clips switch without crossfading.
 - Longshot and Mortar still use the primitive fallback characters.
 - Headless tests cover configuration, Guardian behavior, Tank sustain/mobility/Charge,
-  all-kit camera isolation, external maps, deterministic replay, events, and presentation
-  isolation. Graphical and interaction paths still require runtime checks.
+  out-of-combat regeneration timing and interruption, all-kit camera isolation, external
+  maps, deterministic replay, events, presentation isolation, and deterministic
+  character retargeting/asset contracts. Graphical and interaction paths still require
+  runtime checks.

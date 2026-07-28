@@ -12,6 +12,13 @@ directory:
   workflows, tests, and interactive verification.
 - [Character pipeline](CHARACTER_PIPELINE.md): Meshy/Tripo conversion, raylib skeleton
   constraints, animation reuse, and model import.
+- [Visual design field guide](visual-design/index.html): implemented Helios Broadcast
+  styling and menu/HUD references, with a preserved pre-implementation audit.
+- [Helios Broadcast implementation record](visual-design/IMPLEMENTATION_PLAN.md): UI
+  architecture, state ownership, assets, persistence, screen migrations, milestones,
+  verification matrix, risks, and delivered scope.
+- [UI smoke checklist](UI_SMOKE_CHECKLIST.md): repeatable viewport, input, screen,
+  accessibility, and rendering checks for graphical releases.
 
 The player-facing overview remains at `../README.md`, and the detailed canonical config
 format remains at `../config/README.md`. Repository-wide project context lives in

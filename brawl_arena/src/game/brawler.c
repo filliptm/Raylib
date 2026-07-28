@@ -9,6 +9,12 @@
 #include <stdio.h>
 #include <math.h>
 
+static void InterruptHealthRegeneration(GameContext w, Brawler *b)
+{
+    b->lastCombatTime = w.session->time;
+    b->lastHealthRegenPulseTime = w.session->time;
+}
+
 void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 pos, bool isPlayer)
 {
     Brawler *b = &w.session->brawlers[idx];
@@ -31,6 +37,7 @@ void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 p
     b->renderYaw = b->aimAngle;
     b->shotYaw = b->aimAngle;
     b->dashAbility = -1;
+    InterruptHealthRegeneration(w, b);
     b->bobPhase = GameRandomInt(&w.session->random, 0, 628) / 100.0f;
     b->aiTarget = -1;
     b->strafeDir = (GameRandomInt(&w.session->random, 0, 1) == 0) ? -1.0f : 1.0f;
@@ -79,6 +86,7 @@ int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker, Vector3
     if (b->health < 0) b->health = 0;
     int removed = before - b->health;
     b->hitFlash = 1.0f;
+    if (removed > 0) InterruptHealthRegeneration(w, b);
 
     char buf[16];
     snprintf(buf, sizeof(buf), "%d", damage);
@@ -215,6 +223,7 @@ bool BrawlerTryAttack(GameContext w, int idx, float aimDist)
     if (!freeAmmo && b->ammo < 1.0f) return false;
     if (!freeAmmo) b->ammo -= 1.0f;
     b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown;
+    InterruptHealthRegeneration(w, b);
     WeaponsFire(w, idx, false, aimDist);
     return true;
 }
@@ -226,6 +235,7 @@ bool BrawlerTrySuper(GameContext w, int idx, float aimDist)
 
     if (!(b->isPlayer && w.tuning->infiniteAmmo)) b->superCharge = 0.0f;
     b->attackCd = ContentMainAbility(w.content, b->cls)->cooldown;
+    InterruptHealthRegeneration(w, b);
     WeaponsFire(w, idx, true, aimDist);
     return true;
 }
@@ -532,6 +542,49 @@ void BrawlersUpdate(GameContext w, float dt)
                 b->visible = true;
                 break;
             }
+        }
+    }
+}
+
+void BrawlersUpdateRegeneration(GameContext w)
+{
+    const float delay = w.tuning->healthRegenDelay;
+    const float interval = w.tuning->healthRegenInterval;
+    const float ratio = w.tuning->healthRegenRatio;
+    const float now = w.session->time;
+
+    if (interval <= 0.0f) return;
+
+    for (int i = 0; i < w.session->brawlerCount; i++)
+    {
+        Brawler *b = &w.session->brawlers[i];
+        if (!b->alive) continue;
+
+        // A zero ratio is the explicit live-authoring off state. Keep its schedule
+        // current so enabling it later cannot replay a backlog of disabled pulses.
+        if (ratio <= 0.0f)
+        {
+            b->lastHealthRegenPulseTime = now;
+            continue;
+        }
+
+        bool hasRegenerated =
+            b->lastHealthRegenPulseTime > b->lastCombatTime + 0.0001f;
+        float nextPulse = hasRegenerated
+                        ? b->lastHealthRegenPulseTime + interval
+                        : b->lastCombatTime + delay;
+
+        while (now + 0.0001f >= nextPulse)
+        {
+            int amount = (int)floorf(b->maxHealth*ratio + 0.5f);
+            if (amount < 1) amount = 1;
+            Vector3 position = { b->position.x, 0.85f, b->position.z };
+            BrawlerApplyHealing(w, i, amount, i, position);
+
+            // Advance the authored pulse schedule even at full health. Damage will
+            // reset both timestamps before recovery is evaluated later that frame.
+            b->lastHealthRegenPulseTime = nextPulse;
+            nextPulse += interval;
         }
     }
 }

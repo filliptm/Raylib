@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MAX_FIELDS 256
+#define MAX_FIELDS 384
 #define SAVE_DELAY 0.6f
 #define CONFIG_FORMAT_VERSION 1
 
@@ -133,7 +133,9 @@ static int AddField(Field *fields, int count, const char *key, FieldType type,
 #define ADD_BOOL(key, scope, member) \
     n = AddField(f, n, key, FIELD_BOOL, scope, &(member), 0, 1, -1)
 
-static int BuildFields(Tuning *t, WeaponDef *kits, Field *f)
+static int BuildFields(Tuning *t, UiPreferences *preferences,
+                       CharacterPresentationDefinition *presentations,
+                       WeaponDef *kits, Field *f)
 {
     int n = 0;
 
@@ -142,6 +144,12 @@ static int BuildFields(Tuning *t, WeaponDef *kits, Field *f)
     ADD_FLOAT("gameplay.dash_speed", SCOPE_PROJECT, t->dashSpeed, 1.0, 100.0);
     ADD_FLOAT("gameplay.bush_reveal_range", SCOPE_PROJECT, t->bushReveal, 0.0, 30.0);
     ADD_FLOAT("gameplay.fire_reveal_duration", SCOPE_PROJECT, t->fireReveal, 0.0, 20.0);
+    ADD_FLOAT("gameplay.health_regen_delay", SCOPE_PROJECT,
+              t->healthRegenDelay, 0.0, 30.0);
+    ADD_FLOAT("gameplay.health_regen_interval", SCOPE_PROJECT,
+              t->healthRegenInterval, 0.05, 10.0);
+    ADD_FLOAT("gameplay.health_regen_max_ratio", SCOPE_PROJECT,
+              t->healthRegenRatio, 0.0, 1.0);
     ADD_FLOAT("gameplay.player_respawn", SCOPE_PROJECT, t->playerRespawn, 0.1, 30.0);
     ADD_FLOAT("gameplay.enemy_respawn", SCOPE_PROJECT, t->enemyRespawn, 0.1, 30.0);
     ADD_FLOAT("gameplay.result_hold_duration", SCOPE_PROJECT, t->matchResultHold, 0.5, 30.0);
@@ -196,11 +204,38 @@ static int BuildFields(Tuning *t, WeaponDef *kits, Field *f)
     ADD_INT("profile.wins", SCOPE_PROFILE, t->statWins, 0, 1000000000);
     ADD_INT("profile.losses", SCOPE_PROFILE, t->statLosses, 0, 1000000000);
     ADD_INT("profile.kos", SCOPE_PROFILE, t->statKos, 0, 1000000000);
+    ADD_FLOAT("profile.ui_scale", SCOPE_PROFILE, preferences->scale, 0.75, 1.50);
+    ADD_BOOL("profile.reduced_motion", SCOPE_PROFILE, preferences->reducedMotion);
+    ADD_BOOL("profile.high_contrast", SCOPE_PROFILE, preferences->highContrast);
+    ADD_BOOL("profile.tutorial_hints", SCOPE_PROFILE, preferences->showTutorialHints);
+    ADD_INT("profile.input_glyph_mode", SCOPE_PROFILE,
+            preferences->inputGlyphMode, 0, 2);
+    ADD_INT("profile.tutorial_flags", SCOPE_PROFILE,
+            preferences->tutorialFlags, 0, 0x7fffffff);
 
     for (int i = 0; i < CLASS_COUNT; i++)
     {
+        CharacterPresentationDefinition *p = &presentations[i];
         WeaponDef *k = &kits[i];
         char key[96];
+
+        #define PRESENTATION_FIELD(suffix, member, lo, hi) do { \
+            snprintf(key, sizeof(key), "preview.%s.%s", KIT_KEYS[i], suffix); \
+            n = AddField(f, n, key, FIELD_FLOAT, SCOPE_PROJECT, &p->member, lo, hi, i); \
+        } while (0)
+
+        PRESENTATION_FIELD("home_yaw_degrees", homeYawDegrees, -360.0, 360.0);
+        PRESENTATION_FIELD("select_yaw_degrees", selectYawDegrees, -360.0, 360.0);
+        PRESENTATION_FIELD("home_scale", homeScale, 0.50, 1.50);
+        PRESENTATION_FIELD("select_scale", selectScale, 0.50, 1.50);
+        PRESENTATION_FIELD("home_offset_x", homeOffset.x, -8.0, 8.0);
+        PRESENTATION_FIELD("home_offset_y", homeOffset.y, -4.0, 4.0);
+        PRESENTATION_FIELD("select_offset_x", selectOffset.x, -8.0, 8.0);
+        PRESENTATION_FIELD("select_offset_y", selectOffset.y, -4.0, 4.0);
+        PRESENTATION_FIELD("camera_target_y", cameraTargetY, 0.20, 4.0);
+        PRESENTATION_FIELD("camera_distance", cameraDistance, 4.0, 14.0);
+
+        #undef PRESENTATION_FIELD
 
         #define KIT_KEY(suffix) \
             snprintf(key, sizeof(key), "kit.%s.%s", KIT_KEYS[i], suffix)
@@ -345,11 +380,16 @@ static bool AssignField(Field *field, const char *value, char *message, int mess
     return true;
 }
 
-static bool ValidateValues(const Tuning *t, const WeaponDef *kits,
+static bool ValidateValues(const Tuning *t,
+                           const CharacterPresentationDefinition *presentations,
+                           const WeaponDef *kits,
                            char *message, int messageSize)
 {
     Field fields[MAX_FIELDS];
-    int count = BuildFields((Tuning *)t, (WeaponDef *)kits, fields);
+    UiPreferences preferences = { .scale = 1.0f };
+    int count = BuildFields((Tuning *)t, &preferences,
+                            (CharacterPresentationDefinition *)presentations,
+                            (WeaponDef *)kits, fields);
     for (int i = 0; i < count; i++)
     {
         if (fields[i].scope != SCOPE_PROJECT) continue;
@@ -373,6 +413,11 @@ static bool ValidateValues(const Tuning *t, const WeaponDef *kits,
 
     for (int i = 0; i < CLASS_COUNT; i++)
     {
+        if (!ContentPresentationValid(&presentations[i]))
+        {
+            snprintf(message, messageSize, "preview.%s framing is invalid", KIT_KEYS[i]);
+            return false;
+        }
         const WeaponDef *k = &kits[i];
         if ((k->mainKind == ATTACK_PROJECTILE || k->mainKind == ATTACK_LOB) &&
             (k->pellets < 1 || k->speed <= 0.0f))
@@ -420,7 +465,8 @@ static bool ValidateValues(const Tuning *t, const WeaponDef *kits,
     return true;
 }
 
-static bool LoadTypedFile(const char *path, Tuning *t, WeaponDef *kits,
+static bool LoadTypedFile(const char *path, Tuning *t, UiPreferences *preferences,
+                          CharacterPresentationDefinition *presentations, WeaponDef *kits,
                           FieldScope allowedScope, bool projectFile,
                           char *message, int messageSize)
 {
@@ -432,7 +478,7 @@ static bool LoadTypedFile(const char *path, Tuning *t, WeaponDef *kits,
     }
 
     Field fields[MAX_FIELDS];
-    int count = BuildFields(t, kits, fields);
+    int count = BuildFields(t, preferences, presentations, kits, fields);
     int version = 0;
     bool versionSeen = false;
     char line[320];
@@ -529,7 +575,7 @@ static bool LoadTypedFile(const char *path, Tuning *t, WeaponDef *kits,
         }
     }
 
-    return ValidateValues(t, kits, message, messageSize);
+    return ValidateValues(t, presentations, kits, message, messageSize);
 }
 
 //------------------------------------------------------------------------------------
@@ -624,7 +670,9 @@ static int BuildLegacyFields(Tuning *t, WeaponDef *kits, Field *f)
     return n;
 }
 
-static bool LoadLegacyFile(const char *path, Tuning *t, WeaponDef *kits,
+static bool LoadLegacyFile(const char *path, Tuning *t,
+                           CharacterPresentationDefinition *presentations,
+                           WeaponDef *kits,
                            const WeaponDef *projectKits, char *message, int messageSize)
 {
     FILE *file = fopen(path, "r");
@@ -659,7 +707,7 @@ static bool LoadLegacyFile(const char *path, Tuning *t, WeaponDef *kits,
 
     // Version 1 predates rain/Resonance. Its Guardian numbers describe a different kit.
     if (version < 2) kits[CLASS_HEALER] = projectKits[CLASS_HEALER];
-    return ValidateValues(t, kits, message, messageSize);
+    return ValidateValues(t, presentations, kits, message, messageSize);
 }
 
 //------------------------------------------------------------------------------------
@@ -746,7 +794,8 @@ static FILE *OpenAtomicFile(const char *path, char *temporaryPath, int temporary
 static bool SaveProjectSnapshot(App *w)
 {
     char validation[160];
-    if (!ValidateValues(&w->config.projectTuning, w->config.projectWeapons,
+    if (!ValidateValues(&w->config.projectTuning, w->config.projectPresentation,
+                        w->config.projectWeapons,
                         validation, sizeof(validation)))
     {
         SetStatus(w, validation);
@@ -766,7 +815,9 @@ static bool SaveProjectSnapshot(App *w)
     fprintf(file, "format_version %d\n\n", CONFIG_FORMAT_VERSION);
 
     Field fields[MAX_FIELDS];
-    int count = BuildFields(&w->config.projectTuning, w->config.projectWeapons, fields);
+    int count = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                            w->config.projectPresentation,
+                            w->config.projectWeapons, fields);
     for (int i = 0; i < count; i++)
         if (fields[i].scope == SCOPE_PROJECT) WriteField(file, &fields[i]);
 
@@ -791,8 +842,11 @@ static bool SaveLocalDraft(App *w)
     fprintf(file, "format_version %d\n", CONFIG_FORMAT_VERSION);
 
     Field live[MAX_FIELDS], project[MAX_FIELDS];
-    int liveCount = BuildFields(&w->tune, w->content.weapons, live);
-    int projectCount = BuildFields(&w->config.projectTuning, w->config.projectWeapons, project);
+    int liveCount = BuildFields(&w->tune, &w->uiPreferences,
+                                w->content.presentation, w->content.weapons, live);
+    int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                                   w->config.projectPresentation,
+                                   w->config.projectWeapons, project);
 
     for (int i = 0; i < liveCount && i < projectCount; i++)
     {
@@ -814,7 +868,8 @@ static bool SaveProfile(App *w)
     fprintf(file, "format_version %d\n", CONFIG_FORMAT_VERSION);
 
     Field fields[MAX_FIELDS];
-    int count = BuildFields(&w->tune, w->content.weapons, fields);
+    int count = BuildFields(&w->tune, &w->uiPreferences,
+                            w->content.presentation, w->content.weapons, fields);
     for (int i = 0; i < count; i++)
         if (fields[i].scope == SCOPE_PROFILE) WriteField(file, &fields[i]);
 
@@ -830,21 +885,35 @@ bool ConfigInitialize(App *w)
     g_saveTimer = 0.0f;
 
     TuningSetDefaults(&w->tune);
+    w->uiPreferences = (UiPreferences){
+        .scale = 1.0f,
+        .reducedMotion = false,
+        .highContrast = false,
+        .showTutorialHints = true,
+        .inputGlyphMode = 0,
+        .tutorialFlags = 0
+    };
     ContentCatalogResetAll(&w->content);
     memset(&w->config, 0, sizeof(w->config));
 
     Tuning candidateTuning = w->tune;
+    CharacterPresentationDefinition candidatePresentation[CLASS_COUNT];
+    memcpy(candidatePresentation, w->content.presentation, sizeof(candidatePresentation));
     WeaponDef candidateWeapons[CLASS_COUNT];
     memcpy(candidateWeapons, w->content.weapons, sizeof(candidateWeapons));
 
     char message[160];
-    bool projectOk = LoadTypedFile(ProjectPath(), &candidateTuning, candidateWeapons,
+    UiPreferences candidatePreferences = w->uiPreferences;
+    bool projectOk = LoadTypedFile(ProjectPath(), &candidateTuning, &candidatePreferences,
+                                   candidatePresentation, candidateWeapons,
                                    SCOPE_PROJECT, true, message, sizeof(message));
     if (!projectOk)
     {
         w->config.projectTuning = w->tune;
         memcpy(w->config.projectWeapons, w->content.weapons,
                sizeof(w->config.projectWeapons));
+        memcpy(w->config.projectPresentation, w->content.presentation,
+               sizeof(w->config.projectPresentation));
         w->config.projectLoaded = false;
         w->config.recoveryDefaults = true;
         ContentCatalogRebuildTyped(&w->content);
@@ -853,8 +922,11 @@ bool ConfigInitialize(App *w)
     }
 
     w->tune = candidateTuning;
+    memcpy(w->content.presentation, candidatePresentation, sizeof(candidatePresentation));
     memcpy(w->content.weapons, candidateWeapons, sizeof(candidateWeapons));
     w->config.projectTuning = candidateTuning;
+    memcpy(w->config.projectPresentation, candidatePresentation,
+           sizeof(candidatePresentation));
     memcpy(w->config.projectWeapons, candidateWeapons, sizeof(candidateWeapons));
     w->config.projectLoaded = true;
 
@@ -863,12 +935,17 @@ bool ConfigInitialize(App *w)
     if (PathExists(LocalPath()))
     {
         Tuning localTuning = w->tune;
+        CharacterPresentationDefinition localPresentation[CLASS_COUNT];
+        memcpy(localPresentation, w->content.presentation, sizeof(localPresentation));
         WeaponDef localWeapons[CLASS_COUNT];
         memcpy(localWeapons, w->content.weapons, sizeof(localWeapons));
-        if (LoadTypedFile(LocalPath(), &localTuning, localWeapons,
+        UiPreferences localPreferences = w->uiPreferences;
+        if (LoadTypedFile(LocalPath(), &localTuning, &localPreferences,
+                          localPresentation, localWeapons,
                           SCOPE_LOCAL, false, message, sizeof(message)))
         {
             w->tune = localTuning;
+            memcpy(w->content.presentation, localPresentation, sizeof(localPresentation));
             memcpy(w->content.weapons, localWeapons, sizeof(localWeapons));
             localLoaded = true;
         }
@@ -882,7 +959,8 @@ bool ConfigInitialize(App *w)
             Tuning legacyTuning = w->tune;
             WeaponDef legacyWeapons[CLASS_COUNT];
             memcpy(legacyWeapons, w->content.weapons, sizeof(legacyWeapons));
-            if (LoadLegacyFile(legacyPath, &legacyTuning, legacyWeapons,
+            if (LoadLegacyFile(legacyPath, &legacyTuning, w->content.presentation,
+                               legacyWeapons,
                                w->config.projectWeapons, message, sizeof(message)))
             {
                 w->tune = legacyTuning;
@@ -899,11 +977,19 @@ bool ConfigInitialize(App *w)
     if (PathExists(ProfilePath()))
     {
         Tuning profileTuning = w->tune;
+        CharacterPresentationDefinition unchangedPresentation[CLASS_COUNT];
+        memcpy(unchangedPresentation, w->content.presentation,
+               sizeof(unchangedPresentation));
         WeaponDef unchangedWeapons[CLASS_COUNT];
         memcpy(unchangedWeapons, w->content.weapons, sizeof(unchangedWeapons));
-        if (LoadTypedFile(ProfilePath(), &profileTuning, unchangedWeapons,
+        UiPreferences profilePreferences = w->uiPreferences;
+        if (LoadTypedFile(ProfilePath(), &profileTuning, &profilePreferences,
+                          unchangedPresentation, unchangedWeapons,
                           SCOPE_PROFILE, false, message, sizeof(message)))
+        {
             w->tune = profileTuning;
+            w->uiPreferences = profilePreferences;
+        }
         else { SetStatus(w, message); overlayError = true; }
     }
 
@@ -957,18 +1043,24 @@ void ConfigAutoSave(App *w, float realDt)
 bool ConfigPromoteAll(App *w)
 {
     Tuning oldTuning = w->config.projectTuning;
+    CharacterPresentationDefinition oldPresentation[CLASS_COUNT];
+    memcpy(oldPresentation, w->config.projectPresentation, sizeof(oldPresentation));
     WeaponDef oldWeapons[CLASS_COUNT];
     memcpy(oldWeapons, w->config.projectWeapons, sizeof(oldWeapons));
 
     Field live[MAX_FIELDS], project[MAX_FIELDS];
-    int liveCount = BuildFields(&w->tune, w->content.weapons, live);
-    int projectCount = BuildFields(&w->config.projectTuning, w->config.projectWeapons, project);
+    int liveCount = BuildFields(&w->tune, &w->uiPreferences,
+                                w->content.presentation, w->content.weapons, live);
+    int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                                   w->config.projectPresentation,
+                                   w->config.projectWeapons, project);
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT) CopyFieldValue(&project[i], &live[i]);
 
     if (!SaveProjectSnapshot(w))
     {
         w->config.projectTuning = oldTuning;
+        memcpy(w->config.projectPresentation, oldPresentation, sizeof(oldPresentation));
         memcpy(w->config.projectWeapons, oldWeapons, sizeof(oldWeapons));
         return false;
     }
@@ -990,11 +1082,14 @@ bool ConfigPromoteKit(App *w, BrawlerClass cls)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return false;
     WeaponDef old = w->config.projectWeapons[cls];
+    CharacterPresentationDefinition oldPresentation = w->config.projectPresentation[cls];
     w->config.projectWeapons[cls] = w->content.weapons[cls];
+    w->config.projectPresentation[cls] = w->content.presentation[cls];
 
     if (!SaveProjectSnapshot(w))
     {
         w->config.projectWeapons[cls] = old;
+        w->config.projectPresentation[cls] = oldPresentation;
         return false;
     }
 
@@ -1017,8 +1112,11 @@ bool ConfigPromoteKit(App *w, BrawlerClass cls)
 void ConfigResetAllToProject(App *w)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
-    int liveCount = BuildFields(&w->tune, w->content.weapons, live);
-    int projectCount = BuildFields(&w->config.projectTuning, w->config.projectWeapons, project);
+    int liveCount = BuildFields(&w->tune, &w->uiPreferences,
+                                w->content.presentation, w->content.weapons, live);
+    int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                                   w->config.projectPresentation,
+                                   w->config.projectWeapons, project);
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT) CopyFieldValue(&live[i], &project[i]);
 
@@ -1031,6 +1129,7 @@ void ConfigResetKitToProject(App *w, BrawlerClass cls)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return;
     w->content.weapons[cls] = w->config.projectWeapons[cls];
+    w->content.presentation[cls] = w->config.projectPresentation[cls];
     ContentCatalogRebuildTyped(&w->content);
     ConfigMarkDirty();
 
@@ -1042,8 +1141,11 @@ void ConfigResetKitToProject(App *w, BrawlerClass cls)
 int ConfigProjectOverrideCount(App *w)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
-    int liveCount = BuildFields(&w->tune, w->content.weapons, live);
-    int projectCount = BuildFields(&w->config.projectTuning, w->config.projectWeapons, project);
+    int liveCount = BuildFields(&w->tune, &w->uiPreferences,
+                                w->content.presentation, w->content.weapons, live);
+    int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                                   w->config.projectPresentation,
+                                   w->config.projectWeapons, project);
     int different = 0;
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT && !SameFieldValue(&live[i], &project[i]))
@@ -1054,8 +1156,11 @@ int ConfigProjectOverrideCount(App *w)
 int ConfigKitOverrideCount(App *w, BrawlerClass cls)
 {
     Field live[MAX_FIELDS], project[MAX_FIELDS];
-    int liveCount = BuildFields(&w->tune, w->content.weapons, live);
-    int projectCount = BuildFields(&w->config.projectTuning, w->config.projectWeapons, project);
+    int liveCount = BuildFields(&w->tune, &w->uiPreferences,
+                                w->content.presentation, w->content.weapons, live);
+    int projectCount = BuildFields(&w->config.projectTuning, &w->uiPreferences,
+                                   w->config.projectPresentation,
+                                   w->config.projectWeapons, project);
     int different = 0;
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT && live[i].kit == (int)cls &&
@@ -1073,7 +1178,10 @@ bool ConfigValidateProjectFile(const char *path, char *message, int messageSize)
 {
     Tuning tuning;
     TuningSetDefaults(&tuning);
-    WeaponDef kits[CLASS_COUNT];
-    memcpy(kits, WEAPON_DEFAULTS, sizeof(kits));
-    return LoadTypedFile(path, &tuning, kits, SCOPE_PROJECT, true, message, messageSize);
+    ContentCatalog catalog = { 0 };
+    ContentCatalogResetAll(&catalog);
+    UiPreferences preferences = { .scale = 1.0f };
+    return LoadTypedFile(path, &tuning, &preferences,
+                         catalog.presentation, catalog.weapons,
+                         SCOPE_PROJECT, true, message, messageSize);
 }
