@@ -326,10 +326,18 @@ void UiDrawTextFit(UiTextRole role, const char *text, Rectangle bounds,
     float size = UiTextSize(role);
     float minimum = 11.0f*(g_ui ? g_ui->layout.viewportScale : 1.0f);
     Vector2 measure = MeasureTextEx(font, text, size, size*0.025f);
-    while (measure.x > bounds.width && size > minimum)
+    if (measure.x > bounds.width)
     {
-        size -= 1.0f;
+        // Text width scales near-linearly with font size, so one proportional step
+        // (plus a single verify-and-correct pass) replaces the old 1 px-at-a-time
+        // shrink loop that re-measured every fitted string every frame.
+        size = fmaxf(size*bounds.width/measure.x, minimum);
         measure = MeasureTextEx(font, text, size, size*0.025f);
+        while (measure.x > bounds.width && size > minimum)
+        {
+            size -= 1.0f;
+            measure = MeasureTextEx(font, text, size, size*0.025f);
+        }
     }
     Vector2 position = { bounds.x, bounds.y + (bounds.height - measure.y)*0.5f };
     if (align == UI_ALIGN_CENTER) position.x += (bounds.width - measure.x)*0.5f;

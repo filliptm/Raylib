@@ -72,6 +72,34 @@ void ArenaLoad(Arena *a, const MapDefinition *map, int crateHealth)
             }
         }
     }
+
+    ArenaRefreshNavigable(a, 0, 0, a->width - 1, a->height - 1);
+}
+
+static bool ComputeNavigable(const Arena *a, int tx, int tz)
+{
+    if (!ArenaInBounds(a, tx, tz)) return false;
+    TileType type = a->tiles[tz][tx].type;
+    if (type == TILE_WALL || type == TILE_CRATE) return false;
+    return ArenaCircleClear(a, ArenaTileCenter(a, tx, tz), ARENA_ROUTE_CLEARANCE);
+}
+
+void ArenaRefreshNavigable(Arena *a, int x0, int z0, int x1, int z1)
+{
+    if (x0 < 0) x0 = 0;
+    if (z0 < 0) z0 = 0;
+    if (x1 >= a->width) x1 = a->width - 1;
+    if (z1 >= a->height) z1 = a->height - 1;
+    for (int tz = z0; tz <= z1; tz++)
+        for (int tx = x0; tx <= x1; tx++)
+            a->navigable[tz][tx] = ComputeNavigable(a, tx, tz);
+    a->navVersion++;
+}
+
+bool ArenaNavigableAt(const Arena *a, int tx, int tz)
+{
+    if (!ArenaInBounds(a, tx, tz)) return false;
+    return a->navigable[tz][tx];
 }
 
 Vector3 ArenaSpawnFor(const Arena *a, int team, int slot)
@@ -319,6 +347,8 @@ bool ArenaDamageAt(Arena *a, float x, float z, int damage)
 
     tile->type = TILE_FLOOR;
     tile->health = 0;
+    // The broken crate can only affect clearance in its immediate neighbourhood.
+    ArenaRefreshNavigable(a, tx - 2, tz - 2, tx + 2, tz + 2);
     return true;
 }
 

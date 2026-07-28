@@ -1105,8 +1105,20 @@ void DrawLit(Assets *a, Mesh mesh, Matrix transform, Texture2D tex, Color tint,
 {
     if (a->lightingOk)
     {
-        SetShaderValue(a->lighting, a->locUvScale, &uvScale, SHADER_UNIFORM_VEC2);
-        SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
+        // Hundreds of lit draws per frame pass the identical {1,1}/0 values;
+        // uploading them every call was pure uniform churn.
+        if (!a->litStateValid ||
+            uvScale.x != a->litUvScale.x || uvScale.y != a->litUvScale.y)
+        {
+            SetShaderValue(a->lighting, a->locUvScale, &uvScale, SHADER_UNIFORM_VEC2);
+            a->litUvScale = uvScale;
+        }
+        if (!a->litStateValid || emissive != a->litEmissive)
+        {
+            SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
+            a->litEmissive = emissive;
+        }
+        a->litStateValid = true;
     }
 
     a->mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
@@ -1373,15 +1385,28 @@ static void StoreCharacterSockets(const RiggedCharacter *character,
                 world, character->model.boneCount);
 }
 
+void AssetsSkinnedFrame(Assets *a, const Vector3 *lightPos,
+                        const Vector3 *lightColor, int lightCount,
+                        Vector3 viewPos)
+{
+    if (!a->skinnedOk) return;
+    SetShaderValue(a->skinned, a->kViewPos, &viewPos, SHADER_UNIFORM_VEC3);
+    if (lightCount > MAX_SHADER_LIGHTS) lightCount = MAX_SHADER_LIGHTS;
+    if (lightCount > 0)
+    {
+        SetShaderValueV(a->skinned, a->kLightPos, lightPos, SHADER_UNIFORM_VEC3, lightCount);
+        SetShaderValueV(a->skinned, a->kLightColor, lightColor, SHADER_UNIFORM_VEC3, lightCount);
+    }
+    SetShaderValue(a->skinned, a->kLightCount, &lightCount, SHADER_UNIFORM_INT);
+}
+
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop,
                          int fadeClip, float fadeFrame, float fadeAlpha,
                          Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
-                         CharacterSocketPose *socketPose,
-                         const Vector3 *lightPos, const Vector3 *lightColor,
-                         int lightCount, Vector3 viewPos)
+                         CharacterSocketPose *socketPose)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return;
     RiggedCharacter *character = &a->characters[cls];
@@ -1389,16 +1414,8 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
 
     if (a->skinnedOk)
     {
-        SetShaderValue(a->skinned, a->kViewPos, &viewPos, SHADER_UNIFORM_VEC3);
         SetShaderValue(a->skinned, a->kDither, &dither, SHADER_UNIFORM_FLOAT);
         SetShaderValue(a->skinned, a->kEmissive, &emissive, SHADER_UNIFORM_FLOAT);
-        if (lightCount > MAX_SHADER_LIGHTS) lightCount = MAX_SHADER_LIGHTS;
-        if (lightCount > 0)
-        {
-            SetShaderValueV(a->skinned, a->kLightPos, lightPos, SHADER_UNIFORM_VEC3, lightCount);
-            SetShaderValueV(a->skinned, a->kLightColor, lightColor, SHADER_UNIFORM_VEC3, lightCount);
-        }
-        SetShaderValue(a->skinned, a->kLightCount, &lightCount, SHADER_UNIFORM_INT);
     }
 
     float s = character->scale*scaleMul;

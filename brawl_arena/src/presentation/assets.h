@@ -93,6 +93,12 @@ typedef struct Assets {
     int locFogColor, locFogDensity, locUvScale, locEmissive;
     int locLightPos, locLightColor, locLightCount;
 
+    // Last-uploaded per-draw lighting uniforms. Nearly every lit draw uses the same
+    // uv scale and emissive, so redundant glUniform traffic is skipped.
+    Vector2 litUvScale;
+    float litEmissive;
+    bool litStateValid;
+
     // post uniforms
     int locResolution, locBloom, locVignette, locDepthTex, locOutline;
     int locClipNear, locClipFar;
@@ -201,15 +207,20 @@ void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrengt
 // `fadeClip`/`fadeFrame`/`fadeAlpha` crossfade out of a previous clip: the outgoing
 // pose (frozen at `fadeFrame`) blends beneath the incoming clip with weight
 // 1-fadeAlpha. Pass fadeClip -1 (and fadeAlpha 1) when no fade is active.
+// Uploads the camera and light uniforms shared by every skinned character drawn
+// this frame. Call once per scene before AssetsDrawCharacter; the identical arrays
+// were previously re-uploaded for every single character.
+void AssetsSkinnedFrame(Assets *a, const Vector3 *lightPos,
+                        const Vector3 *lightColor, int lightCount,
+                        Vector3 viewPos);
+
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop,
                          int fadeClip, float fadeFrame, float fadeAlpha,
                          Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
-                         CharacterSocketPose *socketPose,
-                         const Vector3 *lightPos, const Vector3 *lightColor,
-                         int lightCount, Vector3 viewPos);
+                         CharacterSocketPose *socketPose);
 
 // Per-frame grass uniforms. Actors are the brawlers that push blades aside.
 void AssetsGrassFrame(Assets *a, const Tuning *t, float time, Vector3 viewPos,

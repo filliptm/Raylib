@@ -1,6 +1,7 @@
 #include "environment.h"
 
 #include "arena.h"
+#include "render.h"
 #include "render_state.h"
 #include "raymath.h"
 #include "rlgl.h"
@@ -75,15 +76,16 @@ static bool IsWall(const Arena *arena, int tx, int tz)
 
 static void DrawGroundGlow(Assets *assets, Vector3 position, float radius, Color tint)
 {
-    RenderBeginNoDepthWrite();
-    Matrix m = EnvTRS((Vector3){ radius*2.0f, 1.0f, radius*2.0f }, 0.0f,
-                      (Vector3){ position.x, ARENA_DECAL_Y, position.z });
-    DrawLit(assets, assets->plane, m, assets->texGlow, tint,
-            (Vector2){ 1.0f, 1.0f }, 1.0f);
-    RenderEndNoDepthWrite();
+    // Queued into the renderer's shared decal pass rather than paying a
+    // batch-flushing depth-write bracket per decal.
+    (void)assets;
+    RenderQueueGroundGlow(position, radius, tint);
 }
 
-static void DrawDeck(const Arena *arena, Assets *assets)
+typedef struct GroundRect GroundRect;
+static bool TileVisible(const GroundRect *view, const Arena *arena, int tx, int tz);
+
+static void DrawDeck(const Arena *arena, Assets *assets, const GroundRect *view)
 {
     float worldW = arena->width*arena->tileSize;
     float worldH = arena->height*arena->tileSize;
@@ -98,6 +100,7 @@ static void DrawDeck(const Arena *arena, Assets *assets)
         for (int tx = 0; tx < arena->width; tx++)
         {
             if (arena->visual[tz][tx].kind != MAP_VISUAL_FLOOR_ACCENT) continue;
+            if (!TileVisible(view, arena, tx, tz)) continue;
             Vector3 center = ArenaTileCenter(arena, tx, tz);
             Vector3 scale = { 1.95f, 1.95f, 1.95f };
             Matrix accent = EnvTRS(scale, ((tx + tz) & 1) ? PI*0.5f : 0.0f,
@@ -367,12 +370,57 @@ static void DrawMapProps(const Arena *arena, Assets *assets)
     }
 }
 
+// World-space ground rectangle visible to the top-down camera, from the four
+// corner rays intersected with the floor and wall-top planes. Falls back to
+// "everything" if a ray runs parallel to the ground.
+struct GroundRect {
+    float minX, maxX, minZ, maxZ;
+    bool valid;
+};
+
+static GroundRect VisibleGroundRect(const Camera3D *camera)
+{
+    GroundRect r = { 1e9f, -1e9f, 1e9f, -1e9f, true };
+    float w = (float)GetScreenWidth();
+    float h = (float)GetScreenHeight();
+    Vector2 corners[4] = { { 0, 0 }, { w, 0 }, { 0, h }, { w, h } };
+    float planes[2] = { 0.0f, WALL_HEIGHT };
+
+    for (int i = 0; i < 4; i++)
+    {
+        Ray ray = GetScreenToWorldRay(corners[i], *camera);
+        if (fabsf(ray.direction.y) < 0.0001f) { r.valid = false; return r; }
+        for (int p = 0; p < 2; p++)
+        {
+            float t = (planes[p] - ray.position.y)/ray.direction.y;
+            if (t < 0.0f) { r.valid = false; return r; }
+            float x = ray.position.x + ray.direction.x*t;
+            float z = ray.position.z + ray.direction.z*t;
+            if (x < r.minX) r.minX = x;
+            if (x > r.maxX) r.maxX = x;
+            if (z < r.minZ) r.minZ = z;
+            if (z > r.maxZ) r.maxZ = z;
+        }
+    }
+    return r;
+}
+
+static bool TileVisible(const GroundRect *view, const Arena *arena, int tx, int tz)
+{
+    if (!view->valid) return true;
+    Vector3 c = ArenaTileCenter(arena, tx, tz);
+    float margin = arena->tileSize*1.5f;
+    return c.x >= view->minX - margin && c.x <= view->maxX + margin &&
+           c.z >= view->minZ - margin && c.z <= view->maxZ + margin;
+}
+
 void EnvironmentDraw(const App *w, Assets *assets)
 {
     const Arena *arena = &w->session.arena;
+    GroundRect view = VisibleGroundRect(&w->presentation.camera);
 
     AssetsSetDither(assets, 0.0f);
-    DrawDeck(arena, assets);
+    DrawDeck(arena, assets, &view);
     DrawSpawnPads(arena, assets);
 
     for (int tz = 0; tz < arena->height; tz++)
@@ -380,6 +428,9 @@ void EnvironmentDraw(const App *w, Assets *assets)
         for (int tx = 0; tx < arena->width; tx++)
         {
             const Tile *tile = &arena->tiles[tz][tx];
+            if (tile->type == TILE_FLOOR) continue;
+            // Off-screen structures are the bulk of a large map's draw calls.
+            if (!TileVisible(&view, arena, tx, tz)) continue;
             if (tile->type == TILE_WALL) DrawWallTile(arena, assets, tx, tz);
             else if (tile->type == TILE_CRATE)
                 DrawCrateTile(arena, tile, assets, tx, tz, w->tune.crateHealth);

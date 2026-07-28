@@ -38,6 +38,17 @@ ArenaMoveResult ArenaMoveCircle(const Arena *a, Vector3 start, Vector3 displacem
 // True if nothing solid stands between the two points.
 bool ArenaLineOfSight(const Arena *a, Vector3 from, Vector3 to);
 
+// Routing clearance used by the precomputed navigable bitmap.
+#define ARENA_ROUTE_CLEARANCE (BRAWLER_RADIUS + 0.05f)
+
+// Recomputes the navigable bitmap over the inclusive tile window and bumps the
+// arena's nav version. ArenaLoad refreshes the whole map; a broken crate refreshes
+// only its neighbourhood.
+void ArenaRefreshNavigable(Arena *a, int x0, int z0, int x1, int z1);
+
+// Reads the precomputed body-clearance routing bitmap.
+bool ArenaNavigableAt(const Arena *a, int tx, int tz);
+
 // Damages the crate at a world position. Returns true if it was destroyed this call.
 bool ArenaDamageAt(Arena *a, float x, float z, int damage);
 

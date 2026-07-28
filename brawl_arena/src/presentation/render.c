@@ -195,11 +195,41 @@ static void DrawGroundGlowRaw(Assets *a, Vector3 pos, float radius, Color tint)
     DrawLit(a, a->plane, m, a->texGlow, tint, (Vector2){ 1.0f, 1.0f }, 1.0f);
 }
 
+// Every RenderBegin/EndNoDepthWrite pair force-flushes the rlgl batch, so wrapping
+// each decal individually multiplied pipeline flushes across the frame. Decals are
+// queued instead and drawn in a handful of shared brackets; depth testing (still on)
+// keeps their occlusion correct regardless of when the flush happens.
+typedef struct QueuedGroundGlow {
+    Vector3 position;
+    float radius;
+    Color tint;
+} QueuedGroundGlow;
+
+#define MAX_GROUND_GLOWS 256
+static QueuedGroundGlow g_glowQueue[MAX_GROUND_GLOWS];
+static int g_glowCount = 0;
+
+void RenderQueueGroundGlow(Vector3 pos, float radius, Color tint)
+{
+    if (g_glowCount >= MAX_GROUND_GLOWS) return;
+    g_glowQueue[g_glowCount++] = (QueuedGroundGlow){ pos, radius, tint };
+}
+
+void RenderFlushGroundGlows(Assets *a)
+{
+    if (g_glowCount == 0) return;
+    RenderBeginNoDepthWrite();
+    for (int i = 0; i < g_glowCount; i++)
+        DrawGroundGlowRaw(a, g_glowQueue[i].position,
+                          g_glowQueue[i].radius, g_glowQueue[i].tint);
+    RenderEndNoDepthWrite();
+    g_glowCount = 0;
+}
+
 static void DrawGroundGlow(Assets *a, Vector3 pos, float radius, Color tint)
 {
-    RenderBeginNoDepthWrite();
-    DrawGroundGlowRaw(a, pos, radius, tint);
-    RenderEndNoDepthWrite();
+    (void)a;
+    RenderQueueGroundGlow(pos, radius, tint);
 }
 
 static void DrawShadow(Assets *a, Vector3 pos, float radius)
@@ -616,30 +646,37 @@ static void DrawProjectiles(App *w, Assets *a)
         }
     }
 
-    // Particles ride in the same additive pass so sparks actually glow.
+    // Particles ride in the same additive pass so sparks actually glow. Spark
+    // streaks (untextured cylinders) and glow billboards (texGlow) draw in separate
+    // loops: interleaving them re-bound the batch texture on every particle.
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        Particle *pa = &w->presentation.particles[i];
+        if (!pa->active || pa->type != PARTICLE_SPARK) continue;
+
+        float t = pa->life/pa->maxLife;
+        Color c = pa->color;
+        c.a = (unsigned char)(c.a*(t > 1.0f ? 1.0f : t));
+
+        // Stretched along travel, so a blast throws streaks instead of dots.
+        Vector3 tail = Vector3Subtract(pa->position, Vector3Scale(pa->velocity, 0.035f));
+        DrawCylinderEx(tail, pa->position, pa->size*0.35f, pa->size*1.15f, 5, c);
+    }
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         Particle *pa = &w->presentation.particles[i];
         if (!pa->active) continue;
 
-        float t = pa->life/pa->maxLife;
-        Color c = pa->color;
-
         // Smoke is soft and dark; debris is solid. Both are handled elsewhere.
         if (pa->type == PARTICLE_SMOKE || pa->type == PARTICLE_DEBRIS) continue;
 
+        float t = pa->life/pa->maxLife;
+        Color c = pa->color;
         c.a = (unsigned char)(c.a*(t > 1.0f ? 1.0f : t));
 
-        if (pa->type == PARTICLE_SPARK)
-        {
-            // Stretched along travel, so a blast throws streaks instead of dots.
-            Vector3 tail = Vector3Subtract(pa->position, Vector3Scale(pa->velocity, 0.035f));
-            DrawCylinderEx(tail, pa->position, pa->size*0.35f, pa->size*1.15f, 5, c);
-            DrawBillboard(w->presentation.camera, a->texGlow, pa->position, pa->size*1.5f, c);
-            continue;
-        }
-
-        float size = pa->size*(0.6f + t*0.8f)*1.9f;
+        float size = (pa->type == PARTICLE_SPARK)
+                   ? pa->size*1.5f
+                   : pa->size*(0.6f + t*0.8f)*1.9f;
         DrawBillboard(w->presentation.camera, a->texGlow, pa->position, size, c);
     }
 
@@ -681,8 +718,8 @@ static void DrawProjectiles(App *w, Assets *a)
 // the backward clip and circling picks a diagonal. Facing +Z, the character's left is
 // +X, so a positive relative angle selects the left-side clips.
 //
-// There is no crossfade in raylib, so a clip change restarts its cycle - starting at
-// frame zero pops less than landing mid-stride.
+// A clip change restarts its cycle, softened by the short crossfade the animation
+// state carries.
 static void StoreFallbackSockets(PresentationState *presentation, int index,
                                  const Brawler *brawler)
 {
@@ -774,8 +811,7 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
                         w->presentation.actions[idx].action,
                         CharacterActionProgress(&w->presentation.actions[idx]),
                         CharacterActionBlendWeight(&w->presentation.actions[idx]),
-                        &w->presentation.sockets[idx],
-                        g_lightPos, g_lightCol, g_lightCount, w->presentation.camera.position);
+                        &w->presentation.sockets[idx]);
 
     if (b->alive && b->superCharge >= 1.0f)
     {
@@ -894,6 +930,8 @@ void RenderWorld(App *w)
     AssetsSetCamera(a, w->presentation.camera.position);
     AssetsSetToon(a, w->tune.toon, w->tune.toonBands);
     SubmitLights(w, a);
+    AssetsSkinnedFrame(a, g_lightPos, g_lightCol, g_lightCount,
+                       w->presentation.camera.position);
 
     BeginMode3D(w->presentation.camera);
 
@@ -904,6 +942,9 @@ void RenderWorld(App *w)
 
         for (int i = 0; i < w->session.brawlerCount; i++)
             DrawBrawler(w, a, &w->session.brawlers[i]);
+
+        // Environment and brawler decals (shadows, pads, rings) land under the grass.
+        RenderFlushGroundGlows(a);
 
         // Grass goes down after the brawlers so it can cover them, and before the
         // additive effects pass so muzzle flashes still read through the blades.
@@ -918,8 +959,10 @@ void RenderWorld(App *w)
                 float pulse = 0.5f + 0.5f*sinf(w->session.time*3.6f);
                 rlDisableDepthTest();
                 BeginBlendMode(BLEND_ADDITIVE);
-                DrawGroundGlow(a, me->position, 0.95f,
-                               (Color){ 80, 210, 120, (unsigned char)(48 + pulse*54) });
+                RenderBeginNoDepthWrite();
+                DrawGroundGlowRaw(a, me->position, 0.95f,
+                                  (Color){ 80, 210, 120, (unsigned char)(48 + pulse*54) });
+                RenderEndNoDepthWrite();
                 EndBlendMode();
                 rlEnableDepthTest();
             }
@@ -932,6 +975,9 @@ void RenderWorld(App *w)
         VfxDraw(&w->presentation, a, w->presentation.camera,
                 w->uiPreferences.reducedMotion);
         DrawProjectiles(w, a);
+
+        // Late decals: gem glows, aim auras, and arcing-shot landing markers.
+        RenderFlushGroundGlows(a);
 
         if (w->tune.showDebug) DrawDebugOverlay(w);
 

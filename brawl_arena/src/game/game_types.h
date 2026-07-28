@@ -23,6 +23,11 @@ typedef struct Arena {
     int height;
     float tileSize;
     Tile tiles[MAX_ARENA_HEIGHT][MAX_ARENA_WIDTH];
+    // Body-clearance routing bitmap, derived from tiles. Rebuilt for the whole map
+    // at load and refreshed around a crate when it breaks; navVersion bumps so
+    // cached routes know to recompute. Deterministic: derived only from tile state.
+    bool navigable[MAX_ARENA_HEIGHT][MAX_ARENA_WIDTH];
+    unsigned int navVersion;
     MapVisualCell visual[MAX_ARENA_HEIGHT][MAX_ARENA_WIDTH];
     MapPropDefinition props[MAX_MAP_PROPS];
     int propCount;
@@ -91,6 +96,12 @@ typedef struct Brawler {
     float aiReactTimer;
     int aiTarget;
     Vector3 aiWander;
+    // Cached route: packed goal/waypoint tiles plus the arena nav version and age
+    // they were computed against. -1 goal means no route is cached.
+    int aiNavGoal;
+    int aiNavWaypoint;
+    float aiNavAge;
+    unsigned int aiNavVersion;
     float strafeDir;
     bool deliberateAim;
 } Brawler;

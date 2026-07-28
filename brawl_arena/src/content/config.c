@@ -63,6 +63,18 @@ static const char *SECONDARY_KIND_NAMES[SECONDARY_KIND_COUNT] = {
 static bool g_dirty = false;
 static float g_saveTimer = 0.0f;
 
+// Override counts rebuild two full field registries to compute, and the command
+// center reads them several times per frame. They only change when a value is
+// edited or promoted, so they are cached and invalidated on those events.
+static int g_projectOverrideCount = -1;
+static int g_kitOverrideCount[CLASS_COUNT] = { -1, -1, -1, -1, -1 };
+
+static void InvalidateOverrideCounts(void)
+{
+    g_projectOverrideCount = -1;
+    for (int i = 0; i < CLASS_COUNT; i++) g_kitOverrideCount[i] = -1;
+}
+
 //------------------------------------------------------------------------------------
 // Paths
 //------------------------------------------------------------------------------------
@@ -1212,6 +1224,7 @@ bool ConfigInitialize(App *w)
 {
     g_dirty = false;
     g_saveTimer = 0.0f;
+    InvalidateOverrideCounts();
 
     TuningSetDefaults(&w->tune);
     w->uiPreferences = (UiPreferences){
@@ -1355,6 +1368,7 @@ void ConfigMarkDirty(void)
 {
     g_dirty = true;
     g_saveTimer = 0.0f;
+    InvalidateOverrideCounts();
 }
 
 void ConfigFlush(App *w)
@@ -1384,6 +1398,7 @@ void ConfigAutoSave(App *w, float realDt)
 
 bool ConfigPromoteAll(App *w)
 {
+    InvalidateOverrideCounts();
     Tuning oldTuning = w->config.projectTuning;
     CharacterShowcaseDefinition oldShowcase = w->config.projectShowcase;
     WeaponDef oldWeapons[CLASS_COUNT];
@@ -1422,6 +1437,7 @@ bool ConfigPromoteAll(App *w)
 bool ConfigPromoteKit(App *w, BrawlerClass cls)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return false;
+    InvalidateOverrideCounts();
     WeaponDef old = w->config.projectWeapons[cls];
     CharacterShowcaseDefinition oldShowcase = w->config.projectShowcase;
     w->config.projectWeapons[cls] = w->content.weapons[cls];
@@ -1481,6 +1497,8 @@ void ConfigResetKitToProject(App *w, BrawlerClass cls)
 
 int ConfigProjectOverrideCount(App *w)
 {
+    if (g_projectOverrideCount >= 0) return g_projectOverrideCount;
+
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
                                 &w->content.showcase, w->content.weapons, live);
@@ -1491,11 +1509,15 @@ int ConfigProjectOverrideCount(App *w)
     for (int i = 0; i < liveCount && i < projectCount; i++)
         if (live[i].scope == SCOPE_PROJECT && !SameFieldValue(&live[i], &project[i]))
             different++;
+    g_projectOverrideCount = different;
     return different;
 }
 
 int ConfigKitOverrideCount(App *w, BrawlerClass cls)
 {
+    if (cls >= 0 && cls < CLASS_COUNT && g_kitOverrideCount[cls] >= 0)
+        return g_kitOverrideCount[cls];
+
     Field live[MAX_FIELDS], project[MAX_FIELDS];
     int liveCount = BuildFields(&w->tune, &w->uiPreferences,
                                 &w->content.showcase, w->content.weapons, live);
@@ -1509,6 +1531,7 @@ int ConfigKitOverrideCount(App *w, BrawlerClass cls)
              strncmp(live[i].key, "preview.showcase.", 17) == 0) &&
             !SameFieldValue(&live[i], &project[i]))
             different++;
+    if (cls >= 0 && cls < CLASS_COUNT) g_kitOverrideCount[cls] = different;
     return different;
 }
 

@@ -162,12 +162,13 @@ void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candida
         RiggedCharacter *character = &a->characters[candidate];
         if (character->ok && app->tune.modelCharacter)
         {
+            AssetsSkinnedFrame(a, lightPos, lightCol, 2, scene->camera.position);
             AssetsDrawCharacter(a, candidate, scene->preview.position, yaw, scale,
                                 character->clipIdle,
                                 scene->previewTime*CHARACTER_CLIP_FPS,
                                 true, -1, 0.0f, 1.0f, WHITE,
                                 0.0f, 0.0f, CHARACTER_ACTION_NONE, 0.0f, 0.0f,
-                                0, lightPos, lightCol, 2, scene->camera.position);
+                                0);
         }
         else
         {

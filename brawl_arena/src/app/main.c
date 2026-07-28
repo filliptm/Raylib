@@ -210,8 +210,18 @@ int main(void)
         if (realDt > 0.05f) realDt = 0.05f;
         UiSystemBeginFrame(&ui, &world.uiPreferences,
                            GetScreenWidth(), GetScreenHeight(), realDt);
-        if (IsWindowResized())
-            AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight());
+
+        // A live drag-resize reports a new size every frame; rebuilding the scene
+        // framebuffer each time hitched the whole drag. The target is recreated once
+        // the size has settled, with direct rendering (no post) covering the gap.
+        static float resizeSettle = -1.0f;
+        if (IsWindowResized()) resizeSettle = 0.15f;
+        if (resizeSettle >= 0.0f)
+        {
+            resizeSettle -= realDt;
+            if (resizeSettle < 0.0f)
+                AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight());
+        }
 
         ShellUpdate(&world, realDt);
         bool locked = ShellIsTransitioning(&world);
@@ -298,7 +308,8 @@ int main(void)
         if (world.flow.screen == SCREEN_MATCH)
         {
             bool usePost = world.tune.postFx && assets.postOk &&
-                           assets.sceneTarget.texture.id > 0;
+                           assets.sceneTarget.texture.id > 0 &&
+                           resizeSettle < 0.0f;
 
             if (usePost)
             {

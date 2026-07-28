@@ -8,8 +8,6 @@
 #include "content_catalog.h"
 #include <math.h>
 
-#define AI_ROUTE_CLEARANCE (BRAWLER_RADIUS + 0.05f)
-
 //------------------------------------------------------------------------------------
 // Short-range steering uses the same circle body as movement. Point probes incorrectly
 // marked routes beside corners as clear even when a brawler could not fit there.
@@ -41,17 +39,14 @@ static Vector3 AvoidSteer(GameContext w, Vector3 pos, Vector3 dir, float side)
     return dir;
 }
 
-static bool NavigableCell(const Arena *arena, int tx, int tz)
-{
-    if (!ArenaInBounds(arena, tx, tz)) return false;
-    TileType type = arena->tiles[tz][tx].type;
-    if (type == TILE_WALL || type == TILE_CRATE) return false;
-    return ArenaCircleClear(
-        arena, ArenaTileCenter(arena, tx, tz), AI_ROUTE_CLEARANCE);
-}
+// How long a computed route stays trusted before the BFS reruns. Crate breaks
+// invalidate immediately through the arena nav version.
+#define AI_ROUTE_REFRESH 0.25f
 
-Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float side)
+Vector3 AINavigationDirection(GameContext w, Brawler *b, Vector3 goal)
 {
+    float side = b->strafeDir;
+    Vector3 from = b->position;
     from.y = 0.0f;
     goal.y = 0.0f;
     Vector3 direct = Vector3Subtract(goal, from);
@@ -60,13 +55,37 @@ Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float s
 
     if (ArenaSweepCircleClear(
             &w.session->arena, from, goal, BRAWLER_RADIUS))
+    {
+        b->aiNavGoal = -1;
         return Vector3Normalize(direct);
+    }
 
     const Arena *arena = &w.session->arena;
     int startX = ArenaTileX(arena, from.x);
     int startZ = ArenaTileZ(arena, from.z);
     if (!ArenaInBounds(arena, startX, startZ))
         return AvoidSteer(w, from, direct, side);
+
+    // A cached route stays valid while the goal tile, the arena, and a short time
+    // window hold; the full scan + BFS below then runs a few times a second per bot
+    // instead of every frame.
+    int goalTile = ArenaTileZ(arena, goal.z)*arena->width + ArenaTileX(arena, goal.x);
+    if (b->aiNavGoal == goalTile &&
+        b->aiNavVersion == arena->navVersion &&
+        b->aiNavAge < AI_ROUTE_REFRESH &&
+        b->aiNavWaypoint >= 0)
+    {
+        int wx = b->aiNavWaypoint%arena->width;
+        int wz = b->aiNavWaypoint/arena->width;
+        if (wx != startX || wz != startZ)
+        {
+            Vector3 waypoint = ArenaTileCenter(arena, wx, wz);
+            Vector3 toWaypoint = Vector3Subtract(waypoint, from);
+            toWaypoint.y = 0.0f;
+            return AvoidSteer(w, from, toWaypoint, side);
+        }
+        // Waypoint reached: fall through and compute the next leg.
+    }
 
     // If a target lies too close to cover, route to the closest body-clear tile. Combat
     // and gem pickup radii can finish the interaction without demanding an invalid pose.
@@ -76,7 +95,7 @@ Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float s
     {
         for (int tx = 0; tx < arena->width; tx++)
         {
-            if (!NavigableCell(arena, tx, tz)) continue;
+            if (!arena->navigable[tz][tx]) continue;
             Vector3 center = ArenaTileCenter(arena, tx, tz);
             float dx = center.x - goal.x;
             float dz = center.z - goal.z;
@@ -118,7 +137,7 @@ Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float s
             int direction = (step + directionOffset) & 3;
             int nextX = tx + DX[direction];
             int nextZ = tz + DZ[direction];
-            if (!NavigableCell(arena, nextX, nextZ) ||
+            if (!ArenaNavigableAt(arena, nextX, nextZ) ||
                 previous[nextZ][nextX] >= 0) continue;
             previous[nextZ][nextX] = (short)currentIndex;
             queueX[tail] = (short)nextX;
@@ -127,7 +146,10 @@ Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float s
     }
 
     if (previous[goalZ][goalX] < 0)
+    {
+        b->aiNavGoal = -1;
         return AvoidSteer(w, from, direct, side);
+    }
 
     int stepX = goalX;
     int stepZ = goalZ;
@@ -139,6 +161,11 @@ Vector3 AINavigationDirection(GameContext w, Vector3 from, Vector3 goal, float s
         stepX = stepIndex % arena->width;
         stepZ = stepIndex / arena->width;
     }
+
+    b->aiNavGoal = goalTile;
+    b->aiNavWaypoint = stepZ*arena->width + stepX;
+    b->aiNavAge = 0.0f;
+    b->aiNavVersion = arena->navVersion;
 
     Vector3 waypoint = ArenaTileCenter(arena, stepX, stepZ);
     Vector3 toWaypoint = Vector3Subtract(waypoint, from);
@@ -232,6 +259,7 @@ void AIUpdate(GameContext w, float dt)
 
         b->aiTimer -= dt;
         b->aiReactTimer -= dt;
+        b->aiNavAge += dt;
 
         bool shieldThreat = BrawlerProjectileThreat(w, i, 0.48f);
         if (b->shieldActive && !shieldThreat)
@@ -316,8 +344,7 @@ void AIUpdate(GameContext w, float dt)
                     if (allyDist > mainAbility->range*0.88f)
                     {
                         b->aiState = AI_CHASE;
-                        b->moveIntent = AINavigationDirection(
-                            w, b->position, ally->position, b->strafeDir);
+                        b->moveIntent = AINavigationDirection(w, b, ally->position);
                     }
                     else
                     {
@@ -349,8 +376,7 @@ void AIUpdate(GameContext w, float dt)
             if (gemIdx >= 0)
             {
                 b->moveIntent = AINavigationDirection(
-                    w, b->position, w.session->gems[gemIdx].position,
-                    b->strafeDir);
+                    w, b, w.session->gems[gemIdx].position);
                 if (Vector3Length(b->velocity) > 0.4f)
                     b->aimAngle = atan2f(b->velocity.x, b->velocity.z);
                 continue;
@@ -363,9 +389,7 @@ void AIUpdate(GameContext w, float dt)
             }
 
             b->moveIntent = Vector3Scale(
-                AINavigationDirection(
-                    w, b->position, b->aiWander, b->strafeDir),
-                0.7f);
+                AINavigationDirection(w, b, b->aiWander), 0.7f);
 
             if (Vector3Length(b->velocity) > 0.4f)
                 b->aimAngle = atan2f(b->velocity.x, b->velocity.z);
@@ -396,8 +420,7 @@ void AIUpdate(GameContext w, float dt)
             Vector3 bush;
             if (FindNearbyBush(w, b->position, &bush))
             {
-                b->moveIntent = AINavigationDirection(
-                    w, b->position, bush, b->strafeDir);
+                b->moveIntent = AINavigationDirection(w, b, bush);
             }
             else
                 b->moveIntent = AvoidSteer(
@@ -425,12 +448,10 @@ void AIUpdate(GameContext w, float dt)
             if (gemIdx >= 0 && gemDist < dist)
             {
                 b->moveIntent = AINavigationDirection(
-                    w, b->position, w.session->gems[gemIdx].position,
-                    b->strafeDir);
+                    w, b, w.session->gems[gemIdx].position);
             }
             else
-                b->moveIntent = AINavigationDirection(
-                    w, b->position, t->position, b->strafeDir);
+                b->moveIntent = AINavigationDirection(w, b, t->position);
 
             // Mobility kits spend their short cooldown closing meaningful gaps, while
             // retaining the charged super for its separate combat payoff.

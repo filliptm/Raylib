@@ -17,6 +17,11 @@ void RenderBrawlerModel(Assets *a, Brawler *b, float time, float dither, const C
 // Bakes grass instance transforms for the current arena. Call after ArenaLoad().
 void RenderBuildGrass(App *w);
 
+// Deferred ground decals: enqueue from any world pass; RenderWorld flushes the queue
+// in shared no-depth-write brackets instead of one costly bracket per decal.
+void RenderQueueGroundGlow(Vector3 pos, float radius, Color tint);
+void RenderFlushGroundGlows(Assets *a);
+
 void RenderWorld(App *w);
 
 #endif // RENDER_H

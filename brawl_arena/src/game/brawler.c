@@ -47,6 +47,8 @@ void BrawlerSpawn(GameContext w, int idx, Team team, BrawlerClass cls, Vector3 p
     InterruptHealthRegeneration(w, b);
     b->bobPhase = GameRandomInt(&w.session->random, 0, 628) / 100.0f;
     b->aiTarget = -1;
+    b->aiNavGoal = -1;
+    b->aiNavWaypoint = -1;
     b->strafeDir = (GameRandomInt(&w.session->random, 0, 1) == 0) ? -1.0f : 1.0f;
     b->aiWander = pos;
 
