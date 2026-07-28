@@ -24,8 +24,8 @@ static GameEvent Event(VfxEffectId effect, float size)
 int main(void)
 {
     char message[128];
-    CHECK(VFX_RENDER_SCALE == 2.0f,
-          "imported VFX are not using the documented 2x readability scale");
+    CHECK(VFX_RENDER_SCALE == 4.0f,
+          "imported VFX are not using the documented 4x readability scale");
     CHECK(VfxCatalogValidate(message, sizeof(message)), message);
     for (int effect = VFX_NONE + 1; effect < VFX_EFFECT_COUNT; effect++)
         CHECK(VfxCatalogGet((VfxEffectId)effect) != NULL,

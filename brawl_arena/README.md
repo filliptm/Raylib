@@ -288,7 +288,7 @@ and authoritative telegraphs. Scrapper uses compact industrial sparks, Longshot 
 clean cyan rail energy, Mortar adds animated explosions/smoke/scorch, Tank distinguishes
 blue non-damaging Shoulder Jets from gold destructive Charge and draws teal reclaim
 energy back from successful hits, and Guardian layers restorative rain and resonance
-marks over its real field geometry. Imported recipe layers render at a shared `2.0×`
+marks over its real field geometry. Imported recipe layers render at a shared `4.0×`
 readability scale; gameplay ranges, hitboxes, field radii, and authoritative telegraphs
 retain their simulation-authored dimensions.
 

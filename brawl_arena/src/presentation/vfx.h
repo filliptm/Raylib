@@ -7,9 +7,9 @@
 #include "vfx_catalog.h"
 
 // Imported ability art is authored conservatively inside its atlas cells. Present every
-// recipe at twice its catalog scale for match-camera readability; gameplay dimensions
-// and authoritative procedural telegraphs are intentionally unaffected.
-#define VFX_RENDER_SCALE 2.0f
+// recipe at four times its catalog scale for match-camera readability; gameplay
+// dimensions and authoritative procedural telegraphs are intentionally unaffected.
+#define VFX_RENDER_SCALE 4.0f
 
 // Expands one typed simulation event into the recipe's presentation-owned layers.
 // Returns the number of layers admitted to the fixed pool.

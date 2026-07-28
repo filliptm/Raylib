@@ -883,7 +883,7 @@ The presentation layer owns:
   shoulder jets, healing returns, and received effects can follow semantic hand,
   shoulder, chest, foot, or center sockets from the final animated pose; primitive and
   incomplete rigs retain approximate socket positions. Imported recipe layers use a
-  shared `2.0×` presentation scale for match-camera readability without changing
+  shared `4.0×` presentation scale for match-camera readability without changing
   gameplay dimensions or authoritative telegraphs.
 - Optional toon/post-processing controls, including outline, bloom, painterly,
   pixelation, halftone, posterization, grade, vignette, grain, and chromatic fringe.

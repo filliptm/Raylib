@@ -141,10 +141,10 @@ Persistent Guardian field boundaries remain procedural in `ability_visuals.c`. I
 art decorates each cast and tick without replacing the true growing rain radius or
 Resonance cone.
 
-All imported recipe layers use the shared `VFX_RENDER_SCALE` value of `2.0`. This doubles
+All imported recipe layers use the shared `VFX_RENDER_SCALE` value of `4.0`. This makes
 billboard dimensions, flipbook dimensions, ground-art dimensions, smoke dimensions, and
-beam widths at presentation time without changing gameplay ranges, collision, field
-radii, or authoritative aim/area telegraphs.
+beam widths four times their catalog-authored size at presentation time without changing
+gameplay ranges, collision, field radii, or authoritative aim/area telegraphs.
 
 ## Depth and blend rules
 
