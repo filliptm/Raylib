@@ -9,6 +9,7 @@
 #include "raymath.h"
 #include <math.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 static StudioSession g_studio;      // loop configuration persists across visits
@@ -480,6 +481,23 @@ static void DrawEditorPanel(App *w, Assets *assets)
     //--- Save / promote -----------------------------------------------------------
     CommandUiSection(&ui, "SAVE");
     CommandUiText(&ui, "Edits autosave to the local draft.", COMMAND_TEXT_DIM);
+    if (FileExists(ATTACK_DRAFT_PATH))
+    {
+        // The draft loads after the project file, so anything authored in it
+        // overrides the tracked documents until promoted or discarded.
+        CommandUiText(&ui, "A draft file is overriding project docs.",
+                      COMMAND_WARN);
+        if (CommandUiButton(&ui, "Discard draft file (reload project)"))
+        {
+            remove(ATTACK_DRAFT_PATH);
+            char message[160];
+            AttackContentDefaults(&w->content);
+            if (AttackContentLoadFile(&w->content, ATTACK_PRESENTATION_PATH,
+                                      message, (int)sizeof(message)))
+                SetStatus("Draft discarded; project documents reloaded.");
+            else SetStatus(message);
+        }
+    }
     if (CommandUiButton(&ui, "SAVE AS PROJECT DEFAULT"))
     {
         char message[160];
