@@ -873,6 +873,13 @@ Regeneration uses the normal capped healing path and never revives. Periodic eff
 generic, team-aware `StatusEffect` slots: the same status heals allies and damages
 enemies according to the source team.
 
+Floating damage, healing, regeneration, and shield values enter the event queue only
+when the local player index is their source or target. The player therefore sees damage
+dealt and received, healing given and received, self-healing, and shield absorption
+involving their attacks or body. Bot-only combat values are suppressed before they can
+consume float-text presentation slots. Generic non-combat labels, including class-change
+and gem feedback, use a separate unfiltered event path.
+
 Tank's tracked main projectiles restore about 49.9% of enemy health actually removed, so
 overkill, blocked damage, crates, Charge, and overheal do not create extra sustain.
 Shoulder Jets is a non-damaging roughly four-unit boost on a 2.5-second cooldown. It

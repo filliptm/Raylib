@@ -58,6 +58,10 @@ At every size verify:
   the body-anchored health bar.
 - Team readability: the player and allied bots remain green at every health level,
   enemies remain red at every health level, and ally/enemy shape cues remain visible.
+- Combat-text relevance: damage dealt to or received by the player, healing given or
+  received by the player, self-healing, and player-involved shield absorption remain
+  visible. Damage, healing, regeneration, and shield exchanges involving bots alone do
+  not produce numbers; gem and class-change labels remain available.
 - Result: explicit Continue works; timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay
   commands, provenance, Restore Project, Save All, and Preview / UI framing.

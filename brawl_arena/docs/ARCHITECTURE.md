@@ -131,6 +131,11 @@ Game systems write to `GameEventQueue`. `FxConsumeGameEvents()` converts those e
 presentation-owned particles, text, lights, and shockwaves after simulation. Dropped
 events are counted when the fixed queue is full.
 
+Generic floating labels use `GameEmitFloatText()`. Damage, healing, and shield values use
+`GameEmitCombatText()`, which queues text only when `GameSession.playerIdx` is the source
+or target. This keeps bot-only exchanges out of both the event queue and presentation
+pool while retaining local outgoing, incoming, self-heal, and shield feedback.
+
 Combat does not emit camera shake. The event type remains available only for intentional
 non-combat match presentation; tests assert that all five kits, impacts, damage, and
 eliminations leave camera shake unchanged.

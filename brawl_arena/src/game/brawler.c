@@ -116,8 +116,8 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         char shieldText[16];
         snprintf(shieldText, sizeof(shieldText), "SH -%d",
                  result.shieldAbsorbed);
-        GameEmitFloatText(w.session, hitPos, shieldText,
-                          (Color){ 112, 232, 255, 255 });
+        GameEmitCombatText(w.session, attacker, idx, hitPos, shieldText,
+                           (Color){ 112, 232, 255, 255 });
         GameEmitImpact(w.session, hitPos, (Color){ 104, 226, 255, 255 }, 10);
         GameEmitVfxAttached(
             w.session, VFX_SCRAPPER_SHIELD_HIT,
@@ -166,8 +166,8 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
 
         char buf[16];
         snprintf(buf, sizeof(buf), "%d", result.healthRemoved);
-        GameEmitFloatText(
-            w.session, hitPos, buf,
+        GameEmitCombatText(
+            w.session, attacker, idx, hitPos, buf,
             (attacker == w.session->playerIdx)
                 ? (Color){ 255, 235, 140, 255 }
                 : (Color){ 255, 150, 150, 255 });
@@ -193,7 +193,8 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         if (attacker == w.session->playerIdx && !b->isPlayer)
         {
             w.session->kills++;
-            GameEmitFloatText(w.session, b->position, "KO!", (Color){ 255, 210, 80, 255 });
+            GameEmitCombatText(w.session, attacker, idx, b->position, "KO!",
+                               (Color){ 255, 210, 80, 255 });
             // A takedown tops up the killer's super, the way a finished fight should feel.
             BrawlerAwardSuper(w, attacker, 0.20f);
         }
@@ -211,7 +212,6 @@ int BrawlerApplyDamage(GameContext w, int idx, int damage, int attacker,
 
 int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 hitPos)
 {
-    (void)healer;
     if (idx < 0 || idx >= w.session->brawlerCount || amount <= 0) return 0;
 
     Brawler *b = &w.session->brawlers[idx];
@@ -224,7 +224,8 @@ int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 
 
     char buf[16];
     snprintf(buf, sizeof(buf), "+%d", restored);
-    GameEmitFloatText(w.session, hitPos, buf, (Color){ 112, 255, 174, 255 });
+    GameEmitCombatText(w.session, healer, idx, hitPos, buf,
+                       (Color){ 112, 255, 174, 255 });
     GameEmitImpact(w.session, hitPos, (Color){ 70, 244, 166, 255 }, 7);
     GameEmitLight(w.session, (Vector3){ hitPos.x, hitPos.y + 0.7f, hitPos.z },
                  (Color){ 70, 244, 166, 255 }, 1.7f, 0.18f);

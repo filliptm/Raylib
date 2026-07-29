@@ -1,5 +1,6 @@
 #include "brawler.h"
 #include "content_catalog.h"
+#include "game_events.h"
 #include "game_random.h"
 #include "weapons.h"
 
@@ -84,6 +85,30 @@ static const GameEvent *FindVfx(const GameSession *session, VfxEffectId id)
             session->events.items[i].vfxId == id)
             return &session->events.items[i];
     return NULL;
+}
+
+static int CountFloatText(const GameSession *session)
+{
+    int count = 0;
+    for (int i = 0; i < session->events.count; i++)
+        if (session->events.items[i].type == GAME_EVENT_FLOAT_TEXT)
+            count++;
+    return count;
+}
+
+static bool HasFloatText(const GameSession *session, const char *text,
+                         int sourceBrawler, int targetBrawler)
+{
+    for (int i = 0; i < session->events.count; i++)
+    {
+        const GameEvent *event = &session->events.items[i];
+        if (event->type == GAME_EVENT_FLOAT_TEXT &&
+            event->sourceBrawler == sourceBrawler &&
+            event->targetBrawler == targetBrawler &&
+            strcmp(event->text, text) == 0)
+            return true;
+    }
+    return false;
 }
 
 static bool HasAction(const GameSession *session, CharacterActionId action)
@@ -284,6 +309,98 @@ int main(void)
     CHECK(HasVfx(&session, VFX_GUARDIAN_RAIN_DAMAGE),
           "Guardian rain did not emit target damage feedback");
 
-    printf("VFX event tests passed: all kits, saw, shield, grapple, mine, reclaim, jets, and rain are mapped\n");
+    // Combat numbers only enter the presentation queue when the local player is
+    // their source or target. Generic labels remain available to non-combat systems.
+    SetupDuel(&session, &content, CLASS_SHOTGUNNER);
+    session.brawlerCount = 4;
+    SetupBrawler(&content, &session.brawlers[1], TEAM_PLAYER, CLASS_HEALER,
+                 (Vector3){ -2.0f, 0.0f, 1.0f });
+    SetupBrawler(&content, &session.brawlers[2], TEAM_ENEMY, CLASS_BRUISER,
+                 (Vector3){ 2.0f, 0.0f, 1.0f });
+    SetupBrawler(&content, &session.brawlers[3], TEAM_ENEMY, CLASS_HEALER,
+                 (Vector3){ 3.0f, 0.0f, 1.0f });
+    game.session = &session;
+
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 2, 100, 1, session.brawlers[2].position);
+    CHECK(CountFloatText(&session) == 0,
+          "ally-versus-enemy damage leaked unrelated combat text");
+
+    session.brawlers[3].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyHealing(game, 3, 100, 2, session.brawlers[3].position);
+    CHECK(CountFloatText(&session) == 0,
+          "bot-only healing leaked unrelated combat text");
+
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 2, 123, 0, session.brawlers[2].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "123", 0, 2),
+          "player damage did not retain its outgoing combat number");
+
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 0, 124, 2, session.brawlers[0].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "124", 2, 0),
+          "incoming player damage did not retain its combat number");
+
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 0, 125, -1, session.brawlers[0].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "125", -1, 0),
+          "environmental player damage did not retain its combat number");
+
+    session.brawlers[1].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyHealing(game, 1, 126, 0, session.brawlers[1].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "+126", 0, 1),
+          "player-provided healing did not retain its combat number");
+
+    session.brawlers[0].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyHealing(game, 0, 127, 1, session.brawlers[0].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "+127", 1, 0),
+          "healing received by the player did not retain its combat number");
+
+    SetupBrawler(&content, &session.brawlers[1], TEAM_PLAYER,
+                 CLASS_SHOTGUNNER, (Vector3){ -2.0f, 0.0f, 1.0f });
+    session.brawlers[1].shieldActive = true;
+    session.brawlers[1].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 1, 100, 2, session.brawlers[1].position);
+    CHECK(CountFloatText(&session) == 0,
+          "an AI-only shield exchange leaked absorb or healing text");
+
+    SetupBrawler(&content, &session.brawlers[0], TEAM_PLAYER,
+                 CLASS_SHOTGUNNER, (Vector3){ 0.0f, 0.0f, 0.0f });
+    session.brawlers[0].isPlayer = true;
+    session.brawlers[0].shieldActive = true;
+    session.brawlers[0].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 0, 100, 2, session.brawlers[0].position);
+    CHECK(CountFloatText(&session) == 2 &&
+          HasFloatText(&session, "SH -100", 2, 0) &&
+          HasFloatText(&session, "+30", 0, 0),
+          "the player's shield did not retain absorb and self-heal text");
+
+    SetupBrawler(&content, &session.brawlers[2], TEAM_ENEMY,
+                 CLASS_SHOTGUNNER, (Vector3){ 2.0f, 0.0f, 1.0f });
+    session.brawlers[2].shieldActive = true;
+    session.brawlers[2].health -= 200;
+    GameEventsClear(&session);
+    BrawlerApplyDamage(game, 2, 100, 0, session.brawlers[2].position);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "SH -100", 0, 2),
+          "the player's shield damage lost its absorb number or exposed AI healing");
+
+    GameEventsClear(&session);
+    GameEmitFloatText(&session, session.brawlers[0].position, "READY", WHITE);
+    CHECK(CountFloatText(&session) == 1 &&
+          HasFloatText(&session, "READY", -1, -1),
+          "combat filtering changed generic floating labels");
+
+    printf("VFX event tests passed: kit effects and player-relevant combat text are mapped\n");
     return 0;
 }

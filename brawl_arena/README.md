@@ -528,6 +528,9 @@ is sufficient; repeated animation exports are not required):
 | **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 255-damage/263-healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
 
 Health and damage use Brawl Stars' numeric scale, so the damage numbers read familiarly.
+Floating combat numbers appear only when the local player deals or receives damage,
+provides or receives healing, self-heals, or participates in a shield absorption.
+Bot-only damage, healing, regeneration, and shield exchanges stay hidden.
 
 ## Architecture
 
