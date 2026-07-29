@@ -183,7 +183,9 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 - `assets.c`: shader/model/material/render-target lifetime.
 - `generated_assets.c`: procedural textures and the grass cross-quad mesh.
 - `environment.c`: map-cell and prop presentation.
-- `camera.c`: camera initialization, lead, follow, and permitted shake.
+- `camera.c`: camera initialization, project-tuned distance, lead, follow, and permitted
+  shake. Distance scales the fixed-pitch offset and never enters deterministic
+  simulation state.
 - `effects.c`: game-event consumption and transient visual pools.
 - `vfx_catalog.c`: stable, kit-specific effect recipes.
 - `vfx.c`: fixed VFX layer pool, animation, pose-socket resolution, sorting, and draw

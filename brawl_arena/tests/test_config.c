@@ -156,6 +156,8 @@ int main(int argc, char **argv)
           first.tune.healthRegenInterval == 1.0f &&
           first.tune.healthRegenRatio == 0.13f,
           "health regeneration did not load from canonical config");
+    CHECK(first.tune.matchCameraDistance == DEFAULT_MATCH_CAMERA_DISTANCE,
+          "match camera distance did not load from canonical config");
     CHECK(ConfigProjectOverrideCount(&first) == 0, "clean load reported draft overrides");
 
     int projectGuardianDamage =
@@ -197,6 +199,7 @@ int main(int argc, char **argv)
 
     promotedReload.tune.moveSpeed = 12.25f;
     promotedReload.tune.healthRegenRatio = 0.18f;
+    promotedReload.tune.matchCameraDistance = 44.0f;
     promotedReload.tune.godMode = true;
     promotedReload.content.weapons[CLASS_LOBBER].maxAmmo = 4;
     ConfigMarkDirty();
@@ -207,6 +210,7 @@ int main(int argc, char **argv)
     CHECK(ConfigInitialize(&allReload), "full promotion reload failed");
     CHECK(allReload.tune.moveSpeed == 12.25f &&
           allReload.tune.healthRegenRatio == 0.18f &&
+          allReload.tune.matchCameraDistance == 44.0f &&
           allReload.content.weapons[CLASS_LOBBER].maxAmmo == 4,
           "full promotion was not reproducible from project config");
     CHECK(allReload.tune.godMode,

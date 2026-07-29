@@ -234,6 +234,8 @@ typedef struct ContentCatalog {
     int selectedMap;
 } ContentCatalog;
 
+#define DEFAULT_MATCH_CAMERA_DISTANCE 38.013156f
+
 typedef struct Tuning {
     float moveSpeed;
     float moveAccel;
@@ -270,6 +272,7 @@ typedef struct Tuning {
     float styleExposure;
     float styleTonemap;
     float backdropBrightness;
+    float matchCameraDistance;
     bool postFx;
     float bloom;
     int selectedKit;

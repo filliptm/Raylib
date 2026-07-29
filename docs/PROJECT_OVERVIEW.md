@@ -605,6 +605,8 @@ The headless suite covers:
 - Symmetric out-of-combat regeneration delay/cadence, percentage healing, combat
   interruption, caps, and disable state.
 - The rule that no attack, impact, damage, or elimination shakes any user's camera.
+- Match-camera distance tuning at the original framing and a live alternate distance,
+  including fixed pitch and aim-lead separation.
 - Tank self-healing, projectile snapshotting, Shoulder Jets timing/cover behavior, and
   preservation of Charge damage/crate destruction.
 - Scrapper Ripsaw/Wrecking Disc outbound and return hits, cover policy, ownership,
@@ -725,7 +727,7 @@ Startup:
 6. Generate procedural fallback assets, then load shaders, optional characters, station
    models, build-generated ability-VFX atlases, local Helios fonts, and the curated UI
    skin.
-7. Build the initial match and open the main menu.
+7. Build the initial match with the command center closed, then open the main menu.
 
 During an active match:
 
@@ -764,9 +766,9 @@ Play constructs Gem Grab when enabled. Team size is configurable from one to fou
 side; slot zero is the human and other player-side slots are allied bots. Teams race to
 hold the target gem count for the full countdown. Death drops carried gems.
 
-Practice is a session-only free-form range. It places targets at stepped distances,
-opens the command center, and does not rewrite the saved Play mode. Bot behavior can be
-Static, Roam, or Fight.
+Practice is a session-only free-form range. On a fresh application launch, whichever
+mode is entered first starts with the command center closed. Practice does not rewrite
+the saved Play mode; bot behavior can be Static, Roam, or Fight.
 
 ## Content and tuning
 
@@ -816,7 +818,8 @@ paths with `BRAWL_PROJECT_CONFIG`, `BRAWL_TUNING`, `BRAWL_PROFILE`, and
 `BRAWL_LEGACY_TUNING`.
 
 The tracked project format is version 3. It stores returning-attack values, typed
-`secondary.*` values, and one `preview.showcase.*` camera/transform. Version-1 files are
+`secondary.*` values, project-scoped `presentation.match_camera_distance`, and one
+`preview.showcase.*` camera/transform. Version-1 files are
 migrated in memory: Tank mobility becomes a dash secondary, legacy Scrapper weapon
 numbers are discarded in favor of Ripsaw/Shell, and the shared showcase is derived from
 Scrapper's old home profile. Version-2 typed files migrate `guard` to `shield`, retain
@@ -931,7 +934,9 @@ damage/elimination paths.
 
 The presentation layer owns:
 
-- A perspective follow camera with aim lead.
+- A perspective follow camera with aim lead and a project-scoped 20–60-unit distance.
+  The tracked 38.013156-unit default reproduces the original `{0, 31, -22}` offset;
+  live distance edits scale that vector without changing pitch.
 - Imported/fallback brawler drawing and movement-owned animation selection. Stationary
   casts retain idle as their base and cannot be changed by the independent bush-reveal
   timer. Successful actions emit an explicit presentation-only one-shot that blends an
@@ -1140,6 +1145,8 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
 - Gem pickup/drop/countdown/result.
 - Full restart and menu return.
 - Command-center input capture and persistence.
+- Closed-by-default command-center entry on a fresh launch plus live match-camera
+  distance at both slider endpoints.
 - Primitive fallback plus rigged Scrapper, Longshot, Tank, and Guardian rendering.
 - Identical home/roster showcase framing while rapidly changing candidates, without
   resetting the hangar background.

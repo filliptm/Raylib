@@ -156,6 +156,7 @@ test exist to keep simulation usable without a window.
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
+| `test_camera` | live match-camera distance, original default framing, fixed pitch, follow, and aim-lead separation |
 | `test_character_pipeline.py` | rig rejection, merged-source rest-pose fallback, bind-relative math, deterministic baking, canonical clips, raylib-safe mesh indices, and 1K model/output validation |
 | `test_vfx_pipeline.py` | deterministic atlas generation, source provenance, and manifest validation |
 
@@ -189,6 +190,9 @@ matrix. At minimum, after changes to runtime/presentation:
 - Helios-9 and Training Court selection/rebuild.
 - Imported models, animation direction, grass, station props, shaders, post effects.
 - Confirm attacks never shake either user's camera.
+- On separate fresh launches, confirm Play and Practice each begin with the command
+  center closed, `TAB` opens it, and the WORLD match-camera slider changes framing live
+  without changing pitch or clipping the arena at either endpoint.
 
 Report when the graphical checklist was not run; passing headless tests does not compile
 GPU shaders or validate visual alignment.

@@ -34,6 +34,11 @@ showcase, and personal UI preferences immediately. The typed catalog is rebuilt 
 when an active weapon authoring record actually changes, so gameplay and UI read current
 ability values without redundant per-frame rebuilds.
 
+The WORLD tab's `presentation.match_camera_distance` is project-scoped and applies live.
+Its 20–60-unit range scales the complete follow-camera offset, preserving the established
+pitch, aim lead, and smoothing. The tracked 38.013156-unit default reproduces the
+original `{0, 31, -22}` offset.
+
 After 0.6 seconds of inactivity:
 
 - Project-scoped values that differ from `config/gameplay.cfg` are written to the sparse
@@ -236,6 +241,10 @@ Personal presentation choices are never project truth. `profile.ui_scale`,
 `profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,
 `profile.input_glyph_mode`, and `profile.tutorial_flags` live only in the ignored
 profile. Settings and the Preview / UI command-center tab edit them immediately.
+
+The match camera is separate from this menu showcase. Its project-owned
+`presentation.match_camera_distance` value lives in `Tuning` and is edited on the WORLD
+tab.
 
 ## Validation commands
 

@@ -186,6 +186,7 @@ void TuningSetDefaults(Tuning *tuning)
         .styleExposure = 1.0f,
         .styleTonemap = 0.65f,
         .backdropBrightness = 1.0f,
+        .matchCameraDistance = DEFAULT_MATCH_CAMERA_DISTANCE,
         .postFx = true,
         .bloom = 0.85f,
         .selectedKit = CLASS_SHOTGUNNER,

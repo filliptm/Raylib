@@ -55,7 +55,7 @@ typedef struct CommandCenterState {
 
 // Explicit long-lived editor state. Match resets cannot erase navigation or scroll.
 static CommandCenterState g_command = {
-    .open = true,
+    .open = false,
     .tab = TAB_MATCH,
     .vfxPreview = VFX_SCRAPPER_CAST
 };
@@ -505,6 +505,8 @@ static void TabWorld(CommandUi *ui)
 
     CommandUiSection(ui, "LOOK");
     CommandUiToggle(ui, "Rigged character models", &t->modelCharacter);
+    CommandUiSliderF(ui, "Match camera distance", &t->matchCameraDistance,
+                     20.0f, 60.0f, "%.1f");
     CommandUiSliderF(ui, "Bloom strength", &t->bloom, 0.0f, 3.0f, "%.2f");
 
     CommandUiSection(ui, "DEBUG");

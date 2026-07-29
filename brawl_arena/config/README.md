@@ -53,6 +53,9 @@ identifiers. Main/super kinds include `projectile`, `lob`, `rain`, `dash`,
 Global out-of-combat recovery is authored with
 `gameplay.health_regen_delay`, `gameplay.health_regen_interval`, and
 `gameplay.health_regen_max_ratio`; a zero ratio disables passive regeneration.
+`presentation.match_camera_distance` is the project-scoped 20–60-unit distance from the
+match camera to its smoothed player/aim focus. It scales the established camera offset
+without changing its pitch.
 Each kit declares `main.self_heal_ratio`, `main.return_speed`, a complete
 `secondary.*` block, and returning-super speed/pull/knockback fields. The shared
 secondary record includes cooldown/duration/speed plus `range`, `delay`, `radius`,

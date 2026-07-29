@@ -231,7 +231,8 @@ never have to think about which is which mid-fight:
 
 ## The command center
 
-Press `TAB`. It opens on launch, because this build is a sandbox.
+The panel starts closed so a match opens on unobstructed gameplay. Press `TAB` to open
+or close it.
 
 Effective tuning lives in `App.tune` and its owned `ContentCatalog`, sourced from tracked
 `config/gameplay.cfg`. Sliders apply immediately, rebuild typed runtime content, and
@@ -246,7 +247,7 @@ independently when its controls are taller than the window.
 | **PLAYER** | Active kit, god mode, infinite ammo, move speed, acceleration, dash speed, respawn delay, plus charge-super and heal buttons |
 | **KIT** | Live edit of the active kit, including ammo capacity and behavior-specific main/super/secondary values. Scrapper exposes Shell lifecycle; Longshot exposes Grapple range/launch/pull timing; Mortar exposes Mine arm/trigger/blast/damage/knockback; Tank exposes Shoulder Jets and self-healing; Guardian exposes rain and Resonance timing, plus reset/save-as-project actions |
 | **VISUAL** | Post-processing master switch, toon controls, painterly/pixel/print effects, color grade, bloom, vignette, grain, and chromatic fringe |
-| **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, rendering, debug, live VFX diagnostics, direct effect/action previews, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
+| **WORLD** | Time scale, super gain, out-of-combat regeneration delay/interval/ratio, crate/result timing, stealth, grass, 20–60-unit match-camera distance, rendering, debug, live VFX diagnostics, direct effect/action previews, draft discard, and `SAVE ALL AS PROJECT DEFAULTS` |
 | **PREVIEW / UI** | One shared home/roster showcase transform and camera plus personal UI scale, motion, contrast, tutorial, and glyph preferences |
 
 Editing a kit's max health updates living brawlers of that class immediately, keeping
@@ -259,10 +260,12 @@ blocking it. It's the fastest way to check the stealth rules are doing what you 
 ### The sandbox
 
 **PRACTICE** from the menu drops you into a firing range: three static targets fanned out
-ahead of you at stepped distances, no objective, no return fire, and the command center
-already open. `TAB` hides the panel if you just want the range. Reading weapon range and damage falloff off the screen
-is the whole point, so the targets spawn in front of you rather than at the far end of
-the map, and the spawner nudges them clear of walls and bushes so nothing hides.
+ahead of you at stepped distances, no objective, and no return fire. On a fresh
+application launch, the command center starts closed just as it does when Play is the
+first selected mode; `TAB` opens the tuning panel. Reading weapon range and damage
+falloff off the screen is the whole point, so the targets spawn in front of you rather
+than at the far end of the map, and the spawner nudges them clear of walls and bushes so
+nothing hides.
 
 The sandbox is a **session**, not a saved setting. Entering it never rewrites which mode
 `PLAY` gives you, and the MATCH tab says so rather than showing a Gem Grab toggle that
@@ -384,6 +387,10 @@ See [the VFX pipeline](docs/VFX_PIPELINE.md).
 FXAA-style edge smoothing. Toggle the pass and dial bloom strength on the WORLD tab.
 The depth-based effects use the same 0.5-to-120 clip range as the 3D cameras rather than
 raylib's much wider default range, concentrating depth precision around the arena.
+The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
+units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
+follow offset—so changing it moves the camera along the established pitch without
+altering aim lead or vertical framing.
 
 **The VISUAL tab** in the command center is a full mix-and-match viewport rig: toon
 banding and ink outlines, painterly (Kuwahara), pixelate, halftone comic dots,

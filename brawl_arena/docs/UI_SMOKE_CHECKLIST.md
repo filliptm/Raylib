@@ -57,6 +57,10 @@ At every size verify:
 - Result: explicit Continue works; timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay
   commands, provenance, Restore Project, Save All, and Preview / UI framing.
+- On separate fresh launches, Play and Practice each begin with the command center
+  closed; `TAB` opens and closes it.
+- WORLD match-camera distance applies live at 20 and 60 units without changing pitch,
+  breaking aim lead, or clipping the playable arena.
 
 ## Input matrix
 

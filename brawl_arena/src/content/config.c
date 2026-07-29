@@ -224,6 +224,8 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
     ADD_FLOAT("presentation.exposure", SCOPE_PROJECT, t->styleExposure, 0.5, 2.0);
     ADD_FLOAT("presentation.tonemap", SCOPE_PROJECT, t->styleTonemap, 0.0, 1.0);
     ADD_FLOAT("presentation.backdrop", SCOPE_PROJECT, t->backdropBrightness, 0.0, 2.0);
+    ADD_FLOAT("presentation.match_camera_distance", SCOPE_PROJECT,
+              t->matchCameraDistance, 20.0, 60.0);
 
     ADD_FLOAT("preview.showcase.yaw_degrees", SCOPE_PROJECT,
               showcase->yawDegrees, -360.0, 360.0);

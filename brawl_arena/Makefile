@@ -55,6 +55,7 @@ UI_TEST_TARGET = $(BUILD_DIR)/test_ui$(OBJ_FLAVOR)
 CHARACTER_ANIMATION_TEST_TARGET = $(BUILD_DIR)/test_character_animation$(OBJ_FLAVOR)
 VFX_TEST_TARGET = $(BUILD_DIR)/test_vfx$(OBJ_FLAVOR)
 VFX_EVENTS_TEST_TARGET = $(BUILD_DIR)/test_vfx_events$(OBJ_FLAVOR)
+CAMERA_TEST_TARGET = $(BUILD_DIR)/test_camera$(OBJ_FLAVOR)
 CHARACTER_MANIFEST = data/characters/asset_manifest.json
 CHARACTER_ASSET_STAMP = $(BUILD_DIR)/assets/characters/.built
 CHARACTER_PIPELINE_SOURCES = \
@@ -171,6 +172,12 @@ $(VFX_EVENTS_TEST_TARGET): tests/test_vfx_events.c $(GAME_CORE_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_vfx_events.c \
 		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
+$(CAMERA_TEST_TARGET): tests/test_camera.c $(OBJ_DIR)/presentation/camera.o \
+		$(OBJ_DIR)/game/arena.o $(OBJ_DIR)/content/map_content.o
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_camera.c \
+		$(OBJ_DIR)/presentation/camera.o $(OBJ_DIR)/game/arena.o \
+		$(OBJ_DIR)/content/map_content.o $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) -MMD -MP $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -c $< -o $@
@@ -200,7 +207,7 @@ sanitize:
 	$(MAKE) OBJ_FLAVOR=-sanitize CFLAGS="-Wall -Wextra -std=c99 $(SANITIZE_FLAGS)" \
 		sanitize-run
 
-sanitize-run: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
+sanitize-run: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
@@ -217,13 +224,14 @@ sanitize-run: check-architecture check-ui check-character-assets check-vfx-asset
 	$(SANITIZER_ENV) ./$(CHARACTER_ANIMATION_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(VFX_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(VFX_EVENTS_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(CAMERA_TEST_TARGET)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
 rebuild: clean all
 
-test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
+test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	./$(TEST_TARGET)
@@ -240,6 +248,7 @@ test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST
 	./$(CHARACTER_ANIMATION_TEST_TARGET)
 	./$(VFX_TEST_TARGET)
 	./$(VFX_EVENTS_TEST_TARGET)
+	./$(CAMERA_TEST_TARGET)
 
 validate-config: $(TEST_TARGET)
 	./$(TEST_TARGET) --validate config/gameplay.cfg

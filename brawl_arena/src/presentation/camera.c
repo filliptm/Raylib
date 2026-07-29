@@ -6,11 +6,22 @@
 
 static const Vector3 CAMERA_OFFSET = { 0.0f, 31.0f, -22.0f };
 
+static Vector3 MatchCameraOffset(const Tuning *tuning)
+{
+    // Scale the established offset as one vector. This keeps the camera pitch fixed
+    // while exposing a true focus-to-camera distance instead of independently moving
+    // its height or depth.
+    return Vector3Scale(
+        CAMERA_OFFSET,
+        tuning->matchCameraDistance/DEFAULT_MATCH_CAMERA_DISTANCE);
+}
+
 void CameraInit(App *world)
 {
     PresentationState *view = &world->presentation;
     view->camFocus = ArenaSpawnFor(&world->session.arena, TEAM_PLAYER, 0);
-    view->camera.position = Vector3Add(view->camFocus, CAMERA_OFFSET);
+    view->camera.position =
+        Vector3Add(view->camFocus, MatchCameraOffset(&world->tune));
     view->camera.target = view->camFocus;
     view->camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
     view->camera.fovy = 46.0f;
@@ -51,7 +62,7 @@ void CameraUpdate(App *world, float deltaTime)
         shake.z = (sinf(t*151.0f + 3.1f) + 0.6f*sinf(t*103.0f))*strength;
     }
 
-    view->camera.position =
-        Vector3Add(Vector3Add(view->camFocus, CAMERA_OFFSET), shake);
+    view->camera.position = Vector3Add(
+        Vector3Add(view->camFocus, MatchCameraOffset(&world->tune)), shake);
     view->camera.target = Vector3Add(view->camFocus, shake);
 }
