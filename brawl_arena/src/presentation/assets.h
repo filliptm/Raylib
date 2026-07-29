@@ -107,6 +107,7 @@ typedef struct Assets {
     int locClipNear, locClipFar;
     int locStyleTime, locPixelate, locPainterly, locHalftone, locPosterize;
     int locGrain, locCA, locSaturation, locBrightness;
+    int locExposure, locTonemap;
     bool depthOk;           // scene target carries a sampleable depth texture
 
     // toon uniforms, one pair per lit shader
@@ -162,6 +163,8 @@ typedef struct Assets {
     Texture2D texCloth;
     Texture2D texFlat;      // 1x1 white
     Texture2D texGlow;      // soft radial falloff, used for glows and shadows
+    Texture2D texStarfield; // deep-space backdrop with stars and nebula wisps
+    Texture2D texPlanet;    // shaded planet disc with atmosphere rim, alpha edged
 
     // Optional presentation-only ability flipbooks. If an atlas is missing, the
     // event still produces the existing procedural particles/lights/telegraphs.

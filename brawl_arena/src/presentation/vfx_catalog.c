@@ -178,10 +178,8 @@ static const VfxRecipeDefinition RECIPES[VFX_EFFECT_COUNT] = {
         }
     },
     [VFX_LONGSHOT_GRAPPLE_FIRE] = {
-        "longshot_grapple_fire", 1.55f, 2, 3, {
-            SHAPE_BILLBOARD(SHAPE_MUZZLE, 0.30f, 0.72f, 1.82f, 1.0f, 0.0f, VFX_ANCHOR_START, true),
-            SHAPE_BEAM(SHAPE_TRACE, 0.34f, 0.34f, 1.0f, 0.0f, true),
-            SHAPE_BILLBOARD(SHAPE_SPARK, 0.28f, 0.36f, 1.28f, 0.95f, 0.0f, VFX_ANCHOR_END, true)
+        "longshot_grapple_fire", 1.55f, 2, 1, {
+            SHAPE_BILLBOARD(SHAPE_MUZZLE, 0.30f, 0.72f, 1.82f, 1.0f, 0.0f, VFX_ANCHOR_START, true)
         }
     },
     [VFX_LONGSHOT_GRAPPLE_HOOK] = {

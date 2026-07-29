@@ -38,6 +38,10 @@ bool BrawlerTrySecondary(GameContext game, int idx, Vector3 direction);
 // Compatibility helper for callers that specifically require a dash secondary.
 bool BrawlerTryMobility(GameContext game, int idx, Vector3 direction);
 bool BrawlerIsGrappling(const Brawler *brawler);
+// Resolves the exact body-safe grapple endpoint used by both activation and the
+// player's targeting preview. Cover shortens the result without sliding it.
+Vector3 BrawlerGrappleEndpoint(const Arena *arena, Vector3 start,
+                               Vector3 direction, float range);
 // Applies an external pull/knockback through terrain and cancels an active grapple.
 void BrawlerDisplace(GameContext game, int idx, Vector3 displacement);
 // Lowers a held shield and clears its release-to-rearm latch.

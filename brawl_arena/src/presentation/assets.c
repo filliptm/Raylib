@@ -255,6 +255,8 @@ static const char *FS_POST =
 "uniform float styleCA;\n"
 "uniform float styleSaturation;\n"
 "uniform float styleBrightness;\n"
+"uniform float styleExposure;\n"
+"uniform float styleTonemap;\n"
 "out vec4 finalColor;\n"
 "float linDepth(vec2 uv)\n"
 "{\n"
@@ -296,7 +298,7 @@ static const char *FS_POST =
 "{\n"
 "    vec3 c = texture(texture0, uv).rgb;\n"
 "    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));\n"
-"    return c*smoothstep(0.55, 1.0, lum);\n"
+"    return c*smoothstep(0.45, 0.95, lum);\n"
 "}\n"
 "vec3 kuwahara(vec2 uv)\n"                                 // painterly: pick the flattest quadrant
 "{\n"
@@ -354,8 +356,16 @@ static const char *FS_POST =
 "            vec2 dir = vec2(cos(a), sin(a));\n"
 "            bloom += sampleBright(uv + dir*px*3.0);\n"
 "            bloom += sampleBright(uv + dir*px*7.0);\n"
+"            bloom += sampleBright(uv + dir*px*13.0)*0.6;\n"
 "        }\n"
-"        color += (bloom/24.0)*bloomStrength;\n"
+"        color += (bloom/28.8)*bloomStrength;\n"
+"    }\n"
+"\n"
+"    color *= styleExposure;\n"
+"    if (styleTonemap > 0.003)\n"                            // ACES-style filmic roll-off
+"    {\n"
+"        vec3 mapped = (color*(2.51*color + 0.03))/(color*(2.43*color + 0.59) + 0.14);\n"
+"        color = mix(color, clamp(mapped, 0.0, 1.0), styleTonemap);\n"
 "    }\n"
 "\n"
 "    if (styleHalftone > 0.003)\n"                          // comic shading dots in the darks
@@ -901,6 +911,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->locCA         = GetShaderLocation(a->post, "styleCA");
         a->locSaturation = GetShaderLocation(a->post, "styleSaturation");
         a->locBrightness = GetShaderLocation(a->post, "styleBrightness");
+        a->locExposure   = GetShaderLocation(a->post, "styleExposure");
+        a->locTonemap    = GetShaderLocation(a->post, "styleTonemap");
 
         Vector2 res = { (float)screenW, (float)screenH };
         SetShaderValue(a->post, a->locResolution, &res, SHADER_UNIFORM_VEC2);
@@ -1066,6 +1078,8 @@ void AssetsUnload(Assets *a)
     UnloadTexture(a->texFlat);
     UnloadTexture(a->texGlow);
     UnloadTexture(a->texGrass);
+    UnloadTexture(a->texStarfield);
+    UnloadTexture(a->texPlanet);
     for (int atlas = 0; atlas < VFX_ATLAS_COUNT; atlas++)
         if (a->vfxAtlasesOk[atlas] && a->vfxAtlases[atlas].id > 0)
             UnloadTexture(a->vfxAtlases[atlas]);
@@ -1629,6 +1643,8 @@ void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrengt
     SetShaderValue(a->post, a->locCA, &t->styleCA, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locSaturation, &t->styleSaturation, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locBrightness, &t->styleBrightness, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locExposure, &t->styleExposure, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(a->post, a->locTonemap, &t->styleTonemap, SHADER_UNIFORM_FLOAT);
 }
 
 void AssetsSetToon(Assets *a, bool enabled, float bands)

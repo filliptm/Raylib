@@ -267,6 +267,9 @@ typedef struct Tuning {
     float styleSaturation;
     float styleBrightness;
     float styleVignette;
+    float styleExposure;
+    float styleTonemap;
+    float backdropBrightness;
     bool postFx;
     float bloom;
     int selectedKit;

@@ -414,12 +414,44 @@ static bool TileVisible(const GroundRect *view, const Arena *arena, int tx, int 
            c.z >= view->minZ - margin && c.z <= view->maxZ + margin;
 }
 
+// The station floats in space: a starfield plane and a planet disc sit well below
+// deck level, so the map's edges open onto sky instead of a flat clear colour and
+// camera movement gives them a little parallax. Both are fullbright (emissive 1);
+// the distance fog still dims them slightly, which reads as depth.
+#define BACKDROP_Y (-16.0f)
+
+static void DrawBackdrop(const App *w, const Arena *arena, Assets *assets)
+{
+    float glow = w->tune.backdropBrightness;
+    if (glow <= 0.01f) return;
+
+    float worldW = arena->width*arena->tileSize;
+    float worldH = arena->height*arena->tileSize;
+    float span = fmaxf(worldW, worldH)*4.0f;
+    unsigned char level = (unsigned char)Clamp(glow*255.0f, 0.0f, 255.0f);
+    Color tint = { level, level, level, 255 };
+
+    Matrix sky = EnvTRS((Vector3){ span, 1.0f, span }, 0.0f,
+                        (Vector3){ 0.0f, BACKDROP_Y, 0.0f });
+    DrawLit(assets, assets->plane, sky, assets->texStarfield, tint,
+            (Vector2){ 3.0f, 3.0f }, 1.0f);
+
+    // One large planet past the north-west corner, slowly drifting into view when
+    // fights reach that side of the station.
+    float planetSize = span*0.17f;
+    Matrix planet = EnvTRS((Vector3){ planetSize, 1.0f, planetSize }, 0.6f,
+                           (Vector3){ -worldW*0.9f, BACKDROP_Y + 2.0f, worldH*0.85f });
+    DrawLit(assets, assets->plane, planet, assets->texPlanet, tint,
+            (Vector2){ 1.0f, 1.0f }, 1.0f);
+}
+
 void EnvironmentDraw(const App *w, Assets *assets)
 {
     const Arena *arena = &w->session.arena;
     GroundRect view = VisibleGroundRect(&w->presentation.camera);
 
     AssetsSetDither(assets, 0.0f);
+    DrawBackdrop(w, arena, assets);
     DrawDeck(arena, assets, &view);
     DrawSpawnPads(arena, assets);
 

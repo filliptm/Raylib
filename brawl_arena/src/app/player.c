@@ -99,6 +99,7 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     {
         w->controller.charging = false;
         w->controller.aimingSuper = false;
+        w->controller.aimingSecondary = false;
         b->deliberateAim = false;
         b->moveIntent = (Vector3){ 0 };
         return;
@@ -120,6 +121,7 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     {
         w->controller.charging = false;
         w->controller.aimingSuper = false;
+        w->controller.aimingSecondary = false;
         b->deliberateAim = false;
         return;
     }
@@ -131,6 +133,7 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
             BrawlerReleaseShield(game, idx);
         w->controller.charging = false;
         w->controller.aimingSuper = false;
+        w->controller.aimingSecondary = false;
         b->deliberateAim = false;
         return;
     }
@@ -148,16 +151,57 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     {
         w->controller.charging = false;
         w->controller.aimingSuper = false;
+        w->controller.aimingSecondary = false;
         b->deliberateAim = false;
         return;
     }
 
-    if (input->secondaryPressed || input->mobilityPressed)
+    bool grappleSecondary =
+        secondary && secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE;
+
+    // Grapple is Longshot's deliberate skill shot: holding Shift/LB owns the
+    // action channel and exposes the exact path preview; releasing commits the
+    // same aim direction. Cooldown is spent only if the launch succeeds.
+    if (grappleSecondary)
+    {
+        if ((input->secondaryPressed || input->mobilityPressed) &&
+            b->mobilityCooldown <= 0.0f)
+        {
+            w->controller.aimingSecondary = true;
+            w->controller.charging = false;
+            w->controller.aimingSuper = false;
+            w->controller.attackBufferTimer = 0.0f;
+        }
+
+        if (w->controller.aimingSecondary)
+        {
+            b->deliberateAim = true;
+            if (input->secondaryHeld && !input->secondaryReleased)
+                return;
+
+            w->controller.aimingSecondary = false;
+            Vector3 direction = toAim;
+            if (Vector3Length(direction) < 0.001f)
+                direction = (Vector3){
+                    sinf(b->aimAngle), 0.0f, cosf(b->aimAngle)
+                };
+            if (BrawlerTrySecondary(game, idx, direction))
+            {
+                b->deliberateAim = false;
+                return;
+            }
+        }
+    }
+    else
+    {
+        w->controller.aimingSecondary = false;
+    }
+
+    if (!grappleSecondary &&
+        (input->secondaryPressed || input->mobilityPressed))
     {
         Vector3 direction = input->moveIntent;
-        if (secondary &&
-            (secondary->behavior == ABILITY_BEHAVIOR_SHIELD ||
-             secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE))
+        if (secondary && secondary->behavior == ABILITY_BEHAVIOR_SHIELD)
             direction = toAim;
         if (Vector3Length(direction) < 0.001f)
             direction = (Vector3){ sinf(b->aimAngle), 0.0f, cosf(b->aimAngle) };
@@ -230,5 +274,7 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
             BrawlerFaceShot(game, idx, b->aimAngle, 0.25f);
     }
 
-    b->deliberateAim = w->controller.charging || w->controller.aimingSuper;
+    b->deliberateAim = w->controller.charging ||
+                       w->controller.aimingSuper ||
+                       w->controller.aimingSecondary;
 }

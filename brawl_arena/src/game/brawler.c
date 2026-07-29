@@ -379,9 +379,17 @@ void BrawlerReleaseShield(GameContext w, int idx)
     b->shieldRearmRequired = false;
 }
 
-static Vector3 GrappleEndpoint(const Arena *arena, Vector3 start,
+Vector3 BrawlerGrappleEndpoint(const Arena *arena, Vector3 start,
                                Vector3 direction, float range)
 {
+    direction.y = 0.0f;
+    if (Vector3LengthSqr(direction) < 0.000001f || range <= 0.0f)
+    {
+        start.y = 0.0f;
+        return start;
+    }
+    direction = Vector3Normalize(direction);
+
     float stepLength =
         fminf(arena->tileSize*0.25f, BRAWLER_RADIUS*0.5f);
     if (stepLength < 0.05f) stepLength = 0.05f;
@@ -438,7 +446,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
     {
         if (Vector3Length(direction) < 0.001f) return false;
         direction = Vector3Normalize(direction);
-        Vector3 endpoint = GrappleEndpoint(
+        Vector3 endpoint = BrawlerGrappleEndpoint(
             &w.session->arena, b->position, direction, ability->range);
         if (Vector3Distance(b->position, endpoint) < 1.5f)
             return false;

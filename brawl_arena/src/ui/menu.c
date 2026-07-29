@@ -112,7 +112,7 @@ static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int s
                  ability->data.shield.capacity,
                  ability->data.shield.healRatio*100.0f);
     else if (ability->behavior == ABILITY_BEHAVIOR_GRAPPLE)
-        snprintf(buffer, size, "%.0f range pull // %.1fs cooldown",
+        snprintf(buffer, size, "Aim + release // %.0f range // %.1fs cooldown",
                  ability->range, ability->cooldown);
     else if (ability->behavior == ABILITY_BEHAVIOR_MINE)
         snprintf(buffer, size, "%d damage // %.1f trigger // %.1fs cooldown",

@@ -305,7 +305,11 @@ static void DrawAbilities(App *w, const Brawler *player)
                       0.0f, 1.0f);
             ready = player->mobilityCooldown <= 0.0f;
             if (secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE &&
-                BrawlerIsGrappling(player))
+                w->controller.aimingSecondary)
+                snprintf(secondaryName, sizeof(secondaryName),
+                         "%s // AIMING", secondary->name);
+            else if (secondary->behavior == ABILITY_BEHAVIOR_GRAPPLE &&
+                     BrawlerIsGrappling(player))
                 snprintf(secondaryName, sizeof(secondaryName),
                          "%s // PULLING", secondary->name);
             else if (secondary->behavior == ABILITY_BEHAVIOR_MINE)

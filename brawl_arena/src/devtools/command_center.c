@@ -324,7 +324,7 @@ static void TabKit(CommandUi *ui)
                              2.0f, 24.0f, "%.1f");
             CommandUiSliderF(ui, "Launch delay", &k->secondaryDelay,
                              0.0f, 0.8f, "%.2fs");
-            CommandUiText(ui, "Shift/LB anchors toward the current aim point.",
+            CommandUiText(ui, "Hold Shift/LB to preview; release to launch.",
                           COMMAND_TEXT_DIM);
         }
         else if (k->secondaryKind == SECONDARY_MINE)
@@ -436,8 +436,11 @@ static void TabStyle(CommandUi *ui)
     CommandUiSection(ui, "GRADE");
     CommandUiSliderF(ui, "Saturation", &t->styleSaturation, 0.0f, 2.0f, "%.2f");
     CommandUiSliderF(ui, "Brightness", &t->styleBrightness, 0.6f, 1.5f, "%.2f");
+    CommandUiSliderF(ui, "Exposure", &t->styleExposure, 0.5f, 2.0f, "%.2f");
+    CommandUiSliderF(ui, "Filmic tonemap", &t->styleTonemap, 0.0f, 1.0f, "%.2f");
     CommandUiSliderF(ui, "Bloom", &t->bloom, 0.0f, 3.0f, "%.2f");
     CommandUiSliderF(ui, "Vignette", &t->styleVignette, 0.0f, 1.5f, "%.2f");
+    CommandUiSliderF(ui, "Space backdrop", &t->backdropBrightness, 0.0f, 2.0f, "%.2f");
 
     CommandUiSection(ui, "FILM");
     CommandUiSliderF(ui, "Grain", &t->styleGrain, 0.0f, 1.0f, "%.2f");
@@ -458,6 +461,9 @@ static void TabStyle(CommandUi *ui)
         t->styleGrain = p->styleGrain;
         t->styleCA = p->styleCA;
         t->styleSaturation = p->styleSaturation;
+        t->styleExposure = p->styleExposure;
+        t->styleTonemap = p->styleTonemap;
+        t->backdropBrightness = p->backdropBrightness;
         t->styleBrightness = p->styleBrightness;
         t->styleVignette = p->styleVignette;
         t->bloom = p->bloom;

@@ -54,6 +54,10 @@ static float RayGroundDistance(const App *world, Vector3 origin,
     return maximum;
 }
 
+static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge);
+static void DrawGroundRing(Vector3 center, float radius, float thickness,
+                           Color color);
+
 static void DrawAimCone(const App *world, Vector3 origin, float centerAngle,
                         float halfSpread, float range, Color fill, Color edge)
 {
@@ -88,10 +92,18 @@ static void DrawAimBeam(const App *world, Vector3 origin, float angle,
                         float range, float halfWidth, Color fill, Color edge)
 {
     float distance = RayGroundDistance(world, origin, angle, range);
-    float forwardX = sinf(angle);
-    float forwardZ = cosf(angle);
-    float perpendicularX = cosf(angle);
-    float perpendicularZ = -sinf(angle);
+    Vector3 endpoint = {
+        origin.x + sinf(angle)*distance,
+        ARENA_PREVIEW_Y,
+        origin.z + cosf(angle)*distance
+    };
+    origin.y = ARENA_PREVIEW_Y;
+
+    Vector3 forward = Vector3Subtract(endpoint, origin);
+    if (Vector3LengthSqr(forward) < 0.000001f) return;
+    forward = Vector3Normalize(forward);
+    float perpendicularX = forward.z;
+    float perpendicularZ = -forward.x;
 
     Vector3 nearLeft = {
         origin.x + perpendicularX*halfWidth,
@@ -104,14 +116,14 @@ static void DrawAimBeam(const App *world, Vector3 origin, float angle,
         origin.z - perpendicularZ*halfWidth
     };
     Vector3 farLeft = {
-        nearLeft.x + forwardX*distance,
+        endpoint.x + perpendicularX*halfWidth,
         ARENA_PREVIEW_Y,
-        nearLeft.z + forwardZ*distance
+        endpoint.z + perpendicularZ*halfWidth
     };
     Vector3 farRight = {
-        nearRight.x + forwardX*distance,
+        endpoint.x - perpendicularX*halfWidth,
         ARENA_PREVIEW_Y,
-        nearRight.z + forwardZ*distance
+        endpoint.z - perpendicularZ*halfWidth
     };
 
     rlDisableBackfaceCulling();
@@ -122,6 +134,53 @@ static void DrawAimBeam(const App *world, Vector3 origin, float angle,
     DrawGroundEdge(nearLeft, farLeft, 0.055f, edge);
     DrawGroundEdge(nearRight, farRight, 0.055f, edge);
     DrawGroundEdge(farLeft, farRight, 0.055f, edge);
+}
+
+static void DrawGrapplePreview(App *world, Brawler *brawler,
+                                const AbilityDefinition *ability)
+{
+    Vector3 direction = {
+        sinf(brawler->aimAngle), 0.0f, cosf(brawler->aimAngle)
+    };
+    Vector3 endpoint = BrawlerGrappleEndpoint(
+        &world->session.arena, brawler->position, direction, ability->range);
+    float distance = Vector3Distance(brawler->position, endpoint);
+    bool valid = distance >= 1.5f;
+    bool coverLimited = distance < ability->range - 0.08f;
+    float pulse = 0.5f + 0.5f*sinf(world->session.time*8.0f);
+
+    Color rangeColor = { 94, 222, 255, 72 };
+    Color fill = valid ? (Color){ 54, 210, 255, 64 }
+                       : (Color){ 255, 74, 92, 68 };
+    Color edge = !valid ? (Color){ 255, 112, 126, 235 }
+               : coverLimited ? (Color){ 255, 202, 92, 230 }
+                              : (Color){ 154, 244, 255, 235 };
+
+    // The outer ring communicates the authored maximum even when cover shortens
+    // the actual body-safe endpoint.
+    DrawGroundRing(brawler->position, ability->range, 0.032f, rangeColor);
+
+    if (distance > 0.001f)
+    {
+        float angle = atan2f(direction.x, direction.z);
+        DrawAimBeam(world, brawler->position, angle, distance,
+                    0.12f, fill, edge);
+
+        int pulses = (int)fminf(9.0f, floorf(distance/1.15f));
+        for (int marker = 1; marker <= pulses; marker++)
+        {
+            float travel = fmodf(
+                marker/(float)(pulses + 1) +
+                world->session.time*0.65f, 1.0f);
+            Vector3 point = Vector3Lerp(brawler->position, endpoint, travel);
+            point.y = ARENA_PREVIEW_Y + 0.025f;
+            DrawSphere(point, 0.045f,
+                       (Color){ edge.r, edge.g, edge.b, 190 });
+        }
+    }
+
+    DrawAimDisc(endpoint, 0.24f, fill, edge);
+    DrawGroundRing(endpoint, 0.38f + pulse*0.08f, 0.050f, edge);
 }
 
 static void DrawAimDisc(Vector3 center, float radius, Color fill, Color edge)
@@ -327,20 +386,35 @@ static void DrawActiveGrapples(App *world)
         Vector3 anchor = {
             brawler->grappleAnchor.x, 0.24f, brawler->grappleAnchor.z
         };
+        Vector3 hook = anchor;
+        const AbilityDefinition *ability =
+            ContentAbility(&world->content, brawler->grappleAbility);
+        if (brawler->grappleDelayTimer > 0.0f && ability &&
+            ability->behavior == ABILITY_BEHAVIOR_GRAPPLE &&
+            ability->data.grapple.launchDelay > 0.0001f)
+        {
+            float progress = Clamp(
+                1.0f - brawler->grappleDelayTimer/
+                       ability->data.grapple.launchDelay,
+                0.0f, 1.0f);
+            progress = 1.0f - (1.0f - progress)*(1.0f - progress);
+            hook = Vector3Lerp(hand, anchor, progress);
+        }
         Color cable = { 88, 224, 255, 225 };
-        DrawCylinderEx(hand, anchor, 0.045f, 0.070f, 7, cable);
+        if (Vector3Distance(hand, hook) > 0.03f)
+            DrawCylinderEx(hand, hook, 0.045f, 0.070f, 7, cable);
 
-        float length = Vector3Distance(hand, anchor);
+        float length = Vector3Distance(hand, hook);
         int nodes = (int)fminf(12.0f, ceilf(length/0.75f));
         for (int node = 1; node < nodes; node++)
         {
             float travel = fmodf(
                 node/(float)nodes + world->session.time*2.2f, 1.0f);
-            Vector3 point = Vector3Lerp(hand, anchor, travel);
+            Vector3 point = Vector3Lerp(hand, hook, travel);
             DrawSphere(point, 0.055f,
                        (Color){ 198, 250, 255, 210 });
         }
-        DrawSphere(anchor, 0.14f,
+        DrawSphere(hook, 0.14f,
                    (Color){ 126, 238, 255, 230 });
     }
 
@@ -413,12 +487,27 @@ static void DrawAimPreview(App *world, Assets *assets)
     if (!brawler->alive || brawler->dashTimer > 0.0f ||
         brawler->shieldActive)
         return;
-    if (!world->controller.charging && !world->controller.aimingSuper) return;
+    if (!world->controller.charging && !world->controller.aimingSuper &&
+        !world->controller.aimingSecondary)
+        return;
 
     bool super = world->controller.aimingSuper;
+    bool secondary = world->controller.aimingSecondary;
     const AbilityDefinition *ability =
-        super ? ContentSuperAbility(&world->content, brawler->cls)
-              : ContentMainAbility(&world->content, brawler->cls);
+        secondary ? ContentSecondaryAbility(&world->content, brawler->cls)
+        : super ? ContentSuperAbility(&world->content, brawler->cls)
+                : ContentMainAbility(&world->content, brawler->cls);
+    if (!ability) return;
+
+    BeginBlendMode(BLEND_ADDITIVE);
+    RenderBeginNoDepthWrite();
+
+    if (secondary && ability->behavior == ABILITY_BEHAVIOR_GRAPPLE)
+    {
+        DrawGrapplePreview(world, brawler, ability);
+        FinishAimPass();
+        return;
+    }
 
     float range = ability->range;
     float spreadDegrees = 0.0f;
@@ -453,9 +542,6 @@ static void DrawAimPreview(App *world, Assets *assets)
         fill = (Color){ 75, 215, 255, 56 };
         edge = (Color){ 152, 246, 255, 220 };
     }
-
-    BeginBlendMode(BLEND_ADDITIVE);
-    RenderBeginNoDepthWrite();
 
     if (!super && ability->behavior == ABILITY_BEHAVIOR_RAIN)
     {

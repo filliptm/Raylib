@@ -18,6 +18,9 @@ typedef struct PlayerController {
     bool charging;
     float chargeTime;
     bool aimingSuper;
+    // Longshot's grapple is a deliberate hold-to-preview, release-to-launch
+    // secondary. Other secondaries remain press or hold activated.
+    bool aimingSecondary;
     // Edge-detection memory for gamepad triggers; owned here so a match reset also
     // resets it instead of leaking state through file-scope statics.
     bool gamepadAttackHeld;

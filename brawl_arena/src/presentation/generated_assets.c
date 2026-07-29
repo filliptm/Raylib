@@ -334,6 +334,100 @@ static Mesh MakeGrassBlade(void)
     return mesh;
 }
 
+// Deep space: near-black base, faint nebula wisps, and two star layers whose cells
+// each own one star's position, brightness, and colour temperature.
+static void StarfieldPixel(int x, int y, int size, Color *output)
+{
+    float u = (float)x/size;
+    float v = (float)y/size;
+
+    float nebula = FractalNoise(u*3.0f, v*3.0f, 401, 4);
+    float wisp = FractalNoise(u*6.0f + 7.0f, v*6.0f, 431, 4);
+    wisp = wisp*wisp*wisp;
+    float baseR = 5.0f + nebula*8.0f + wisp*40.0f;
+    float baseG = 5.0f + nebula*6.0f + wisp*26.0f;
+    float baseB = 9.0f + nebula*13.0f + wisp*56.0f;
+
+    float star = 0.0f;
+    float warmth = 0.5f;
+    for (int layer = 0; layer < 2; layer++)
+    {
+        int cells = (layer == 0) ? 48 : 22;
+        float density = (layer == 0) ? 0.30f : 0.14f;
+        float radius = (layer == 0) ? 0.085f : 0.16f;
+        float cx = u*cells, cy = v*cells;
+        int ix = (int)cx, iy = (int)cy;
+        if (Hash2(ix, iy, 701 + layer) >= density) continue;
+
+        float dx = (cx - ix) - (0.2f + Hash2(ix, iy, 501 + layer)*0.6f);
+        float dy = (cy - iy) - (0.2f + Hash2(ix, iy, 601 + layer)*0.6f);
+        float d = sqrtf(dx*dx + dy*dy);
+        float bright = 1.0f - d/radius;
+        if (bright <= 0.0f) continue;
+        bright *= bright;
+        if (bright > star)
+        {
+            star = bright;
+            warmth = Hash2(ix, iy, 801 + layer);
+        }
+    }
+
+    float sr = warmth > 0.66f ? 1.00f : 0.86f;
+    float sg = warmth > 0.66f ? 0.84f : 0.92f;
+    float sb = warmth > 0.66f ? 0.60f : 1.00f;
+    output->r = ClampByte(baseR + star*255.0f*sr);
+    output->g = ClampByte(baseG + star*255.0f*sg);
+    output->b = ClampByte(baseB + star*255.0f*sb);
+    output->a = 255;
+}
+
+// A lit planet disc: sphere-projected normal, banded surface noise, a soft
+// terminator, and a blue atmosphere halo that fades out through the alpha channel.
+static void PlanetPixel(int x, int y, int size, Color *output)
+{
+    float u = (float)x/size - 0.5f;
+    float v = (float)y/size - 0.5f;
+    float r = sqrtf(u*u + v*v)/0.44f;
+
+    if (r > 1.12f) { *output = (Color){ 0, 0, 0, 0 }; return; }
+    if (r > 1.0f)
+    {
+        float halo = 1.0f - (r - 1.0f)/0.12f;
+        halo *= halo;
+        *output = (Color){ 120, 190, 255, ClampByte(halo*95.0f) };
+        return;
+    }
+
+    float nx = u/0.44f;
+    float ny = v/0.44f;
+    float nz = sqrtf(fmaxf(0.0f, 1.0f - nx*nx - ny*ny));
+    float diffuse = fmaxf(0.0f, -0.50f*nx - 0.55f*ny + 0.67f*nz);
+    float shade = 0.06f + 0.94f*diffuse;
+
+    // Latitude bands with a longitudinal swirl, plus sparse warm storm streaks.
+    float band = FractalNoise((ny*0.5f + 0.5f)*7.0f,
+                              (nx*0.5f + 0.5f)*1.6f, 901, 4);
+    float storm = FractalNoise((nx*0.5f + 0.5f)*5.0f + band,
+                               (ny*0.5f + 0.5f)*5.0f, 931, 3);
+    storm = fmaxf(0.0f, storm - 0.62f)*2.6f;
+
+    float cr = 28.0f + band*46.0f + storm*150.0f;
+    float cg = 62.0f + band*66.0f + storm*96.0f;
+    float cb = 104.0f + band*58.0f + storm*36.0f;
+
+    // Atmosphere rim brightens the limb even on the night side.
+    float rim = powf(1.0f - nz, 2.5f);
+    cr = cr*shade + rim*70.0f;
+    cg = cg*shade + rim*120.0f;
+    cb = cb*shade + rim*180.0f;
+
+    float edge = 1.0f - fmaxf(0.0f, (r - 0.985f)/0.015f);
+    output->r = ClampByte(cr);
+    output->g = ClampByte(cg);
+    output->b = ClampByte(cb);
+    output->a = ClampByte(edge*255.0f);
+}
+
 void GeneratedAssetsLoad(Assets *assets)
 {
     assets->grassBlade = MakeGrassBlade();
@@ -346,4 +440,6 @@ void GeneratedAssetsLoad(Assets *assets)
     assets->texFlat = MakeTexture(4, FlatPixel, false);
     assets->texGlow = MakeTexture(128, GlowPixel, false);
     assets->texGrass = MakeTexture(256, GrassPixel, true);
+    assets->texStarfield = MakeTexture(512, StarfieldPixel, true);
+    assets->texPlanet = MakeTexture(512, PlanetPixel, true);
 }
