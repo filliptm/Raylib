@@ -1,4 +1,5 @@
 #include "effects.h"
+#include "attack_effects.h"
 #include "vfx.h"
 #include "character_animation.h"
 #include "raymath.h"
@@ -253,6 +254,25 @@ void FxConsumeGameEvents(App *w)
             case GAME_EVENT_MATCH_SHAKE:
                 FxMatchShake(w, event->size);
                 break;
+            case GAME_EVENT_ATTACK_CAST:
+                if (event->abilityIndex >= 0 &&
+                    event->abilityIndex < w->content.abilityCount)
+                {
+                    const AttackPresentation *doc =
+                        &w->content.attacks[event->abilityIndex];
+                    AttackFxSpawn(w, doc, ATTACK_ANCHOR_CAST, event->position,
+                                  event->angle, event->sourceBrawler);
+                    AttackFxSpawn(w, doc, ATTACK_ANCHOR_SELF, event->position,
+                                  event->angle, event->sourceBrawler);
+                }
+                break;
+            case GAME_EVENT_ATTACK_IMPACT:
+                if (event->abilityIndex >= 0 &&
+                    event->abilityIndex < w->content.abilityCount)
+                    AttackFxSpawn(w, &w->content.attacks[event->abilityIndex],
+                                  ATTACK_ANCHOR_IMPACT, event->position,
+                                  event->angle, -1);
+                break;
         }
     }
     queue->count = 0;
@@ -260,6 +280,7 @@ void FxConsumeGameEvents(App *w)
 
 void FxUpdate(App *w, float dt)
 {
+    AttackFxUpdate(w, dt);
     for (int i = 0; i < MAX_PARTICLES; i++)
     {
         Particle *p = &w->presentation.particles[i];

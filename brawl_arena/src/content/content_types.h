@@ -2,6 +2,7 @@
 #define BRAWL_CONTENT_TYPES_H
 
 #include "core_types.h"
+#include "attack_types.h"
 
 typedef enum {
     MAP_PALETTE_ORANGE = 0,
@@ -229,6 +230,9 @@ typedef struct ContentCatalog {
     CharacterShowcaseDefinition showcase;
     AbilityDefinition abilities[MAX_ABILITIES];
     int abilityCount;
+    // Authored attack presentation, indexed alongside abilities. Survives typed
+    // rebuilds because the ability construction order per class is stable.
+    AttackPresentation attacks[MAX_ABILITIES];
     MapDefinition maps[MAX_MAPS];
     int mapCount;
     int selectedMap;

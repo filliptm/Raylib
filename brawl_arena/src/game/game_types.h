@@ -152,6 +152,7 @@ typedef struct Projectile {
     ProjectileMotion motion;
     BrawlerClass ownerClass;
     int hitMask;
+    int abilityIndex;       // ability that fired this projectile, -1 if untracked
     Color color;
     bool active;
 } Projectile;
@@ -223,7 +224,10 @@ typedef enum {
     GAME_EVENT_PARTICLE,
     GAME_EVENT_VFX,
     GAME_EVENT_CHARACTER_ACTION,
-    GAME_EVENT_MATCH_SHAKE
+    GAME_EVENT_MATCH_SHAKE,
+    // Authored-attack anchors: presentation resolves the ability's document.
+    GAME_EVENT_ATTACK_CAST,
+    GAME_EVENT_ATTACK_IMPACT
 } GameEventType;
 
 typedef struct GameEvent {
@@ -244,6 +248,7 @@ typedef struct GameEvent {
     CharacterActionId characterAction;
     int sourceBrawler;
     int targetBrawler;
+    int abilityIndex;       // -1 unless the event is bound to an ability document
     char text[16];
 } GameEvent;
 

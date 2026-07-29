@@ -15,6 +15,7 @@ hearthstone/build/
 brawl_arena/tuning.cfg
 brawl_arena/tuning.local.cfg
 brawl_arena/profile.cfg
+brawl_arena/attacks.local.cfg
 
 # Local logs
 logs/

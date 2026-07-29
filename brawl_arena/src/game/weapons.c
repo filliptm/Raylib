@@ -1,4 +1,5 @@
 #include "weapons.h"
+#include "attack_content.h"
 #include "arena.h"
 #include "brawler.h"
 #include "game_events.h"
@@ -450,6 +451,7 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         if (!p) break;
 
         *p = (Projectile){ 0 };
+        p->abilityIndex = (int)(ability - w.content->abilities);
         Vector3 projectileOrigin = {
             origin.x + cosf(b->aimAngle)*laneOffset,
             origin.y,
@@ -512,13 +514,23 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
     }
 
     b->revealTimer = w.tuning->fireReveal;
-    GameEmitMuzzle(w.session, (Vector3){ origin.x + sinf(b->aimAngle) * 0.6f, origin.y, origin.z + cosf(b->aimAngle) * 0.6f },
-                  b->aimAngle, muzzle);
     Vector3 castPosition = {
         origin.x + sinf(b->aimAngle)*0.6f,
         origin.y,
         origin.z + cosf(b->aimAngle)*0.6f
     };
+
+    // An authored document replaces the legacy muzzle/cast recipe wholesale; the
+    // game only reports where the cast happened.
+    int abilityIndex = (int)(ability - w.content->abilities);
+    if (AttackAuthored(w.content, abilityIndex))
+    {
+        GameEmitAttackCast(w.session, abilityIndex, idx, castPosition,
+                           b->aimAngle, muzzle);
+        return;
+    }
+
+    GameEmitMuzzle(w.session, castPosition, b->aimAngle, muzzle);
     GameEmitVfxAttached(
         w.session, CastVfxFor(b->cls, super), castPosition,
         AimEndpoint(castPosition, b->aimAngle,
@@ -687,11 +699,24 @@ static void AbilityFieldsUpdate(GameContext w, float dt)
 //------------------------------------------------------------------------------------
 // Splash damage where an arcing shot lands, or where a super detonates.
 //------------------------------------------------------------------------------------
+// Authored attacks own their impact look; the legacy recipe pair only fires for
+// unauthored abilities. Returns true when the document handled it.
+static bool EmitAuthoredImpact(GameContext w, const Projectile *p, Vector3 at)
+{
+    if (!AttackAuthored(w.content, p->abilityIndex)) return false;
+    float yaw = atan2f(p->velocity.x, p->velocity.z);
+    GameEmitAttackImpact(w.session, p->abilityIndex, at, yaw, p->color);
+    return true;
+}
+
 static void Detonate(GameContext w, Projectile *p, Vector3 at)
 {
-    GameEmitVfx(w.session, ImpactVfxFor(w, p), at, at, 0.0f,
-                p->radius, p->color);
-    GameEmitExplosion(w.session, at, p->radius, p->color);
+    if (!EmitAuthoredImpact(w, p, at))
+    {
+        GameEmitVfx(w.session, ImpactVfxFor(w, p), at, at, 0.0f,
+                    p->radius, p->color);
+        GameEmitExplosion(w.session, at, p->radius, p->color);
+    }
 
     for (int i = 0; i < w.session->brawlerCount; i++)
     {
@@ -742,10 +767,13 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             }
             if (p->outbound && BeginProjectileReturn(w, p)) return false;
 
-            GameEmitImpact(w.session, p->position, p->color, 8);
-            GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
-                        p->position, 0.0f, p->isSuper ? 1.35f : 1.0f,
-                        p->color);
+            if (!EmitAuthoredImpact(w, p, p->position))
+            {
+                GameEmitImpact(w.session, p->position, p->color, 8);
+                GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                            p->position, 0.0f, p->isSuper ? 1.35f : 1.0f,
+                            p->color);
+            }
             return true;
         }
 
@@ -756,9 +784,12 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             // Supers punch through crates but still stop at solid walls.
             if (ArenaTypeAt(&w.session->arena, p->position.x, p->position.z) != TILE_WALL) return false;
         }
-        GameEmitImpact(w.session, p->position, p->color, 6);
-        GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
-                    p->position, 0.0f, 1.0f, p->color);
+        if (!EmitAuthoredImpact(w, p, p->position))
+        {
+            GameEmitImpact(w.session, p->position, p->color, 6);
+            GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                        p->position, 0.0f, 1.0f, p->color);
+        }
         return true;
     }
 
@@ -830,10 +861,13 @@ static bool ProjectileHitCheck(GameContext w, Projectile *p)
             }
         }
 
-        GameEmitImpact(w.session, p->position, p->color, 8);
-        GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
-                    p->position, 0.0f, p->isSuper ? 1.25f : 0.9f,
-                    p->color);
+        if (!EmitAuthoredImpact(w, p, p->position))
+        {
+            GameEmitImpact(w.session, p->position, p->color, 8);
+            GameEmitVfx(w.session, ImpactVfxFor(w, p), p->position,
+                        p->position, 0.0f, p->isSuper ? 1.25f : 0.9f,
+                        p->color);
+        }
         p->hitMask |= (1 << i);
 
         if (!p->piercing) return true;

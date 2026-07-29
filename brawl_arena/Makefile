@@ -57,6 +57,7 @@ VFX_TEST_TARGET = $(BUILD_DIR)/test_vfx$(OBJ_FLAVOR)
 VFX_EVENTS_TEST_TARGET = $(BUILD_DIR)/test_vfx_events$(OBJ_FLAVOR)
 CAMERA_TEST_TARGET = $(BUILD_DIR)/test_camera$(OBJ_FLAVOR)
 STUDIO_TEST_TARGET = $(BUILD_DIR)/test_studio$(OBJ_FLAVOR)
+ATTACKS_TEST_TARGET = $(BUILD_DIR)/test_attacks$(OBJ_FLAVOR)
 CHARACTER_MANIFEST = data/characters/asset_manifest.json
 CHARACTER_ASSET_STAMP = $(BUILD_DIR)/assets/characters/.built
 CHARACTER_PIPELINE_SOURCES = \
@@ -88,6 +89,7 @@ GAME_CORE_OBJECTS = \
 	$(OBJ_DIR)/game/ai.o \
 	$(OBJ_DIR)/game/arena.o \
 	$(OBJ_DIR)/game/brawler.o \
+	$(OBJ_DIR)/content/attack_content.o \
 	$(OBJ_DIR)/content/content_catalog.o \
 	$(OBJ_DIR)/game/game_events.o \
 	$(OBJ_DIR)/core/game_random.o \
@@ -115,10 +117,12 @@ $(HEALER_TEST_TARGET): tests/test_healer.c $(CONFIG_TEST_OBJECTS)
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(NO_SHAKE_TEST_TARGET): tests/test_no_attack_shake.c $(CONFIG_TEST_OBJECTS) \
-		$(OBJ_DIR)/presentation/effects.o $(OBJ_DIR)/presentation/character_animation.o \
+		$(OBJ_DIR)/presentation/effects.o $(OBJ_DIR)/presentation/attack_effects.o \
+		$(OBJ_DIR)/presentation/character_animation.o \
 		$(VFX_TEST_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_no_attack_shake.c \
 		$(CONFIG_TEST_OBJECTS) $(OBJ_DIR)/presentation/effects.o \
+		$(OBJ_DIR)/presentation/attack_effects.o \
 		$(OBJ_DIR)/presentation/character_animation.o $(VFX_TEST_OBJECTS) \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
@@ -147,6 +151,11 @@ $(LONGSHOT_TEST_TARGET): tests/test_longshot.c $(GAME_CORE_OBJECTS)
 $(SCRAPPER_TEST_TARGET): tests/test_scrapper.c $(GAME_CORE_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_scrapper.c \
 		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+
+$(ATTACKS_TEST_TARGET): tests/test_attacks.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/studio_session.o
+	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_attacks.c \
+		$(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/studio_session.o \
+		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(STUDIO_TEST_TARGET): tests/test_studio.c $(GAME_CORE_OBJECTS) $(OBJ_DIR)/app/studio_session.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_studio.c \
@@ -213,7 +222,7 @@ sanitize:
 	$(MAKE) OBJ_FLAVOR=-sanitize CFLAGS="-Wall -Wextra -std=c99 $(SANITIZE_FLAGS)" \
 		sanitize-run
 
-sanitize-run: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(STUDIO_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
+sanitize-run: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(STUDIO_TEST_TARGET) $(ATTACKS_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
@@ -227,6 +236,7 @@ sanitize-run: check-architecture check-ui check-character-assets check-vfx-asset
 	$(SANITIZER_ENV) ./$(SCRAPPER_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(SECONDARIES_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(STUDIO_TEST_TARGET)
+	$(SANITIZER_ENV) ./$(ATTACKS_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(UI_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(CHARACTER_ANIMATION_TEST_TARGET)
 	$(SANITIZER_ENV) ./$(VFX_TEST_TARGET)
@@ -238,7 +248,7 @@ clean:
 
 rebuild: clean all
 
-test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(STUDIO_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
+test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(STUDIO_TEST_TARGET) $(ATTACKS_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	./$(TEST_TARGET)
@@ -252,6 +262,7 @@ test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST
 	./$(SCRAPPER_TEST_TARGET)
 	./$(SECONDARIES_TEST_TARGET)
 	./$(STUDIO_TEST_TARGET)
+	./$(ATTACKS_TEST_TARGET)
 	./$(UI_TEST_TARGET)
 	./$(CHARACTER_ANIMATION_TEST_TARGET)
 	./$(VFX_TEST_TARGET)

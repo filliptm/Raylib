@@ -1,5 +1,6 @@
 #include "render.h"
 #include "arena.h"
+#include "attack_effects.h"
 #include "brawler.h"
 #include "weapons.h"
 #include "effects.h"
@@ -1054,6 +1055,7 @@ void RenderWorld(App *w)
         DrawShockwaves(w);
         VfxDraw(&w->presentation, a, w->presentation.camera,
                 w->uiPreferences.reducedMotion);
+        AttackFxDraw(w, a);
         DrawProjectiles(w, a);
 
         // Late decals: gem glows, aim auras, and arcing-shot landing markers.

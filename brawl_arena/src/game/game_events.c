@@ -15,6 +15,7 @@ static GameEvent *Push(GameSession *session, GameEventType type)
     event->type = type;
     event->sourceBrawler = -1;
     event->targetBrawler = -1;
+    event->abilityIndex = -1;
     return event;
 }
 
@@ -157,4 +158,27 @@ void GameEmitMatchShake(GameSession *session, float amount)
 {
     GameEvent *event = Push(session, GAME_EVENT_MATCH_SHAKE);
     if (event) event->size = amount;
+}
+
+void GameEmitAttackCast(GameSession *session, int abilityIndex, int brawlerIndex,
+                        Vector3 position, float angle, Color color)
+{
+    GameEvent *event = Push(session, GAME_EVENT_ATTACK_CAST);
+    if (!event) return;
+    event->position = position;
+    event->angle = angle;
+    event->color = color;
+    event->sourceBrawler = brawlerIndex;
+    event->abilityIndex = abilityIndex;
+}
+
+void GameEmitAttackImpact(GameSession *session, int abilityIndex,
+                          Vector3 position, float angle, Color color)
+{
+    GameEvent *event = Push(session, GAME_EVENT_ATTACK_IMPACT);
+    if (!event) return;
+    event->position = position;
+    event->angle = angle;
+    event->color = color;
+    event->abilityIndex = abilityIndex;
 }

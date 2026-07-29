@@ -90,6 +90,31 @@ typedef struct CharacterAnimState {
     float fadeAge;      // seconds since the switch
 } CharacterAnimState;
 
+// Live particle spawned by an authored attack document layer.
+#define MAX_ATTACK_PARTICLES 512
+typedef struct AttackParticle {
+    bool active;
+    int atlas;
+    int frame;
+    int frameCount;
+    float fps;
+    Vector3 position;
+    Vector3 velocity;
+    float gravity;
+    float drag;
+    float delay;            // seconds before the particle appears
+    float age;
+    float duration;
+    float scaleStart, scaleEnd;
+    Color colorStart, colorEnd;
+    int blend;              // AttackBlendMode
+    float rotation;         // degrees
+    float rotateSpeed;
+    bool ground;
+    int follow;             // brawler index for caster-anchored layers, else -1
+    Vector3 followOffset;
+} AttackParticle;
+
 typedef struct PresentationState {
     Camera3D camera;
     Vector3 camFocus;
@@ -101,6 +126,7 @@ typedef struct PresentationState {
     CharacterSocketPose sockets[MAX_BRAWLERS];
     CharacterActionState actions[MAX_BRAWLERS];
     CharacterAnimState anim[MAX_BRAWLERS];
+    AttackParticle attackParticles[MAX_ATTACK_PARTICLES];
     int droppedVfx;
     int vfxEventsConsumed;
     int vfxLayersSpawned;

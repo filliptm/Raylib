@@ -19,6 +19,7 @@
 #include "camera.h"
 #include "effects.h"
 #include "hud.h"
+#include "attack_content.h"
 #include "command_center.h"
 #include "studio.h"
 #include "assets.h"
@@ -205,6 +206,18 @@ int main(void)
         CloseWindow();
         return 1;
     }
+
+    // Authored attack documents: tracked project truth first, then the local
+    // draft overlays it. Either file may be absent; a malformed one is skipped
+    // with its message logged rather than blocking launch.
+    char attackStatus[256];
+    AttackContentDefaults(&world.content);
+    if (!AttackContentLoadFile(&world.content, ATTACK_PRESENTATION_PATH,
+                               attackStatus, (int)sizeof(attackStatus)))
+        TraceLog(LOG_WARNING, "Attack presentation: %s", attackStatus);
+    if (!AttackContentLoadFile(&world.content, ATTACK_DRAFT_PATH,
+                               attackStatus, (int)sizeof(attackStatus)))
+        TraceLog(LOG_WARNING, "Attack draft: %s", attackStatus);
 
     AssetsLoad(&assets, GetScreenWidth(), GetScreenHeight());
     RenderSetAssets(&assets);

@@ -25,5 +25,9 @@ void GameEmitCharacterAction(GameSession *session, int brawlerIndex,
 void GameEmitCharacterActionTimed(GameSession *session, int brawlerIndex,
                                   CharacterActionId action, float duration);
 void GameEmitMatchShake(GameSession *session, float amount);
+void GameEmitAttackCast(GameSession *session, int abilityIndex, int brawlerIndex,
+                        Vector3 position, float angle, Color color);
+void GameEmitAttackImpact(GameSession *session, int abilityIndex,
+                          Vector3 position, float angle, Color color);
 
 #endif
