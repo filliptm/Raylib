@@ -887,6 +887,43 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
     if (fadeClip >= 0 && CHARACTER_CROSSFADE_DURATION > 0.0f)
         fadeAlpha = anim->fadeAge/CHARACTER_CROSSFADE_DURATION;
 
+    // An authored motion stack overrides the clip/procedural action overlay for
+    // the ability the current action belongs to.
+    const AttackMotion *authoredMotions = NULL;
+    float actionSeconds = 0.0f;
+    const CharacterActionState *actionState = &w->presentation.actions[idx];
+    if (actionState->active)
+    {
+        const CharacterDefinition *def = ContentCharacter(&w->content, b->cls);
+        int abilityIndex = -1;
+        if (def)
+        {
+            switch (actionState->action)
+            {
+                case CHARACTER_ACTION_MAIN:
+                case CHARACTER_ACTION_CAST:
+                    abilityIndex = def->mainAbility; break;
+                case CHARACTER_ACTION_SUPER:
+                    abilityIndex = def->superAbility; break;
+                default:
+                    abilityIndex = def->mobilityAbility; break;
+            }
+        }
+        if (abilityIndex >= 0 && abilityIndex < w->content.abilityCount &&
+            w->content.attacks[abilityIndex].authored)
+        {
+            const AttackPresentation *doc = &w->content.attacks[abilityIndex];
+            for (int m = 0; m < MAX_ATTACK_MOTIONS; m++)
+                if (doc->motions[m].used &&
+                    doc->motions[m].kind != ATTACK_MOTION_NONE)
+                {
+                    authoredMotions = doc->motions;
+                    actionSeconds = actionState->age;
+                    break;
+                }
+        }
+    }
+
     AssetsDrawCharacter(a, b->cls, b->position, b->renderYaw, b->spawnScale,
                         clip, time*CHARACTER_CLIP_FPS, loop,
                         fadeClip, anim->fadeTime*CHARACTER_CLIP_FPS, fadeAlpha,
@@ -894,6 +931,7 @@ static void DrawBrawlerCharacterModel(App *w, Assets *a, Brawler *b)
                         w->presentation.actions[idx].action,
                         CharacterActionProgress(&w->presentation.actions[idx]),
                         CharacterActionBlendWeight(&w->presentation.actions[idx]),
+                        authoredMotions, actionSeconds,
                         &w->presentation.sockets[idx]);
 
     if (b->alive && b->superCharge >= 1.0f)

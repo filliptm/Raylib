@@ -220,12 +220,16 @@ void AssetsSkinnedFrame(Assets *a, const Vector3 *lightPos,
                         const Vector3 *lightColor, int lightCount,
                         Vector3 viewPos);
 
+// `authoredMotions` (nullable) replaces the clip/procedural action overlay with a
+// stacked motion vocabulary; `actionSeconds` is the action's age driving their
+// per-motion envelopes.
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
                          int animIndex, float frame, bool loop,
                          int fadeClip, float fadeFrame, float fadeAlpha,
                          Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
+                         const AttackMotion *authoredMotions, float actionSeconds,
                          CharacterSocketPose *socketPose);
 
 // Per-frame grass uniforms. Actors are the brawlers that push blades aside.

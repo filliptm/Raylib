@@ -1323,6 +1323,72 @@ static void AimPoseArm(const RiggedCharacter *character, Transform *pose,
     RotatePoseSubtree(character, pose, shoulder, delta, weight);
 }
 
+// Authored motion vocabulary: each parameterized motion rotates a bone group over
+// its own eased envelope, so stacked motions compose a custom action pose. The
+// sine envelope guarantees an identity pose at both boundaries.
+static void ApplyAuthoredMotions(const RiggedCharacter *character, Transform *pose,
+                                 const AttackMotion *motions, float seconds)
+{
+    for (int i = 0; i < MAX_ATTACK_MOTIONS; i++)
+    {
+        const AttackMotion *m = &motions[i];
+        if (!m->used || m->kind == ATTACK_MOTION_NONE) continue;
+        float t = (seconds - m->delay)/fmaxf(m->duration, 0.02f);
+        if (t <= 0.0f || t >= 1.0f) continue;
+        float envelope = sinf(t*PI);
+        float weight = Clamp(envelope, 0.0f, 1.0f);
+        float a = m->amplitude;
+
+        switch (m->kind)
+        {
+            case ATTACK_MOTION_RECOIL:
+                RotatePoseSubtree(character, pose, character->boneChest,
+                                  QuaternionFromEuler(-0.18f*a, 0.0f, 0.0f), weight);
+                break;
+            case ATTACK_MOTION_RAISE_RIGHT_ARM:
+                AimPoseArm(character, pose, character->boneRightShoulder,
+                           character->boneRightHand,
+                           (Vector3){ 0.15f, 0.35f + 0.45f*a, 0.85f }, weight);
+                break;
+            case ATTACK_MOTION_RAISE_LEFT_ARM:
+                AimPoseArm(character, pose, character->boneLeftShoulder,
+                           character->boneLeftHand,
+                           (Vector3){ -0.15f, 0.35f + 0.45f*a, 0.85f }, weight);
+                break;
+            case ATTACK_MOTION_SWING_RIGHT:
+            {
+                float sweep = (-0.9f + 1.8f*t)*a;
+                AimPoseArm(character, pose, character->boneRightShoulder,
+                           character->boneRightHand,
+                           (Vector3){ sinf(sweep), 0.25f, cosf(sweep) }, weight);
+                break;
+            }
+            case ATTACK_MOTION_TWIST:
+                RotatePoseSubtree(character, pose, character->boneSpine,
+                                  QuaternionFromEuler(0.0f, 0.55f*a, 0.0f), weight);
+                break;
+            case ATTACK_MOTION_SLAM:
+            {
+                float pitch = 1.15f - 2.0f*t;
+                AimPoseArm(character, pose, character->boneLeftShoulder,
+                           character->boneLeftHand,
+                           (Vector3){ -0.25f, pitch*a, 0.62f }, weight);
+                AimPoseArm(character, pose, character->boneRightShoulder,
+                           character->boneRightHand,
+                           (Vector3){ 0.25f, pitch*a, 0.62f }, weight);
+                RotatePoseSubtree(character, pose, character->boneChest,
+                                  QuaternionFromEuler(0.20f*a*t, 0.0f, 0.0f), weight);
+                break;
+            }
+            case ATTACK_MOTION_LEAN:
+                RotatePoseSubtree(character, pose, character->boneSpine,
+                                  QuaternionFromEuler(0.40f*a, 0.0f, 0.0f), weight);
+                break;
+            default: break;
+        }
+    }
+}
+
 static void ApplyProceduralAction(const RiggedCharacter *character, Transform *pose,
                                   CharacterActionId action, float progress,
                                   float weight)
@@ -1515,6 +1581,7 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                          Color tint, float dither,
                          float emissive, CharacterActionId action,
                          float actionProgress, float actionWeight,
+                         const AttackMotion *authoredMotions, float actionSeconds,
                          CharacterSocketPose *socketPose)
 {
     if (cls < 0 || cls >= CLASS_COUNT) return;
@@ -1566,6 +1633,15 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                     }
                 }
 
+                // Authored motion stacks replace both the optional authored
+                // clip and the procedural overlay for their ability.
+                if (authoredMotions)
+                {
+                    ApplyAuthoredMotions(character, pose, authoredMotions,
+                                         actionSeconds);
+                }
+                else
+                {
                 bool authoredApplied = false;
                 int actionClip = ActionClipFor(character, action);
                 if (actionWeight > 0.001f && actionClip >= 0 &&
@@ -1591,6 +1667,7 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                 if (!authoredApplied)
                     ApplyProceduralAction(character, pose, action, actionProgress,
                                           actionWeight);
+                }
 
                 Transform *frames[1] = { pose };
                 ModelAnimation composed = {

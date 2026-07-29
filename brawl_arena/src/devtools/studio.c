@@ -322,6 +322,37 @@ static void DrawEditorPanel(App *w)
             LayerEditor(&ui, &doc->layers[g_selectedLayer]);
     }
 
+    //--- Motions ------------------------------------------------------------------
+    CommandUiSection(&ui, "MOTIONS");
+    static const char *MOTION_LABELS[ATTACK_MOTION_COUNT] = {
+        "None", "Recoil", "Raise right", "Raise left", "Swing right",
+        "Twist", "Slam", "Lean"
+    };
+    for (int i = 0; i < MAX_ATTACK_MOTIONS; i++)
+    {
+        AttackMotion *motion = &doc->motions[i];
+        bool used = motion->used;
+        if (CommandUiToggle(&ui, TextFormat("Motion %d", i), &used))
+        {
+            motion->used = used;
+            if (used && motion->duration <= 0.0f)
+                *motion = (AttackMotion){ .used = true,
+                                          .kind = ATTACK_MOTION_RECOIL,
+                                          .duration = 0.3f, .amplitude = 1.0f };
+            MarkDraftDirty();
+        }
+        if (!motion->used) continue;
+        bool changed = false;
+        changed |= CommandUiCycler(&ui, "Kind", &motion->kind,
+                                   ATTACK_MOTION_COUNT, MOTION_LABELS);
+        changed |= CommandUiSliderF(&ui, "Delay", &motion->delay, 0.0f, 1.0f, "%.2f");
+        changed |= CommandUiSliderF(&ui, "Duration", &motion->duration,
+                                    0.05f, 1.5f, "%.2f");
+        changed |= CommandUiSliderF(&ui, "Amplitude", &motion->amplitude,
+                                    0.0f, 2.0f, "%.2f");
+        if (changed) MarkDraftDirty();
+    }
+
     //--- Projectile block ---------------------------------------------------------
     CommandUiSection(&ui, "PROJECTILE");
     AttackProjectileVisual *pv = &doc->projectile;

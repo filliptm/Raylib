@@ -5,6 +5,7 @@
 #include "render.h"
 #include "raymath.h"
 #include <math.h>
+#include <stddef.h>
 
 static const Color KIT_ACCENT[CLASS_COUNT] = {
     { 74, 142, 236, 255 },
@@ -168,7 +169,7 @@ void MenuSceneDrawBrawler(MenuScene *scene, const App *app, BrawlerClass candida
                                 scene->previewTime*CHARACTER_CLIP_FPS,
                                 true, -1, 0.0f, 1.0f, WHITE,
                                 0.0f, 0.0f, CHARACTER_ACTION_NONE, 0.0f, 0.0f,
-                                0);
+                                NULL, 0.0f, 0);
         }
         else
         {
