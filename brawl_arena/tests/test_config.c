@@ -103,6 +103,8 @@ int main(int argc, char **argv)
     App first = { 0 };
     CHECK(ConfigInitialize(&first), "canonical configuration did not initialize");
     CHECK(first.config.projectLoaded, "project source was not marked loaded");
+    CHECK(first.tune.renderScale == 1.5f,
+          "world render scale did not load from canonical config");
     CHECK(first.content.weapons[CLASS_HEALER].mainKind == ATTACK_RAIN,
           "Guardian main kind did not load");
     CHECK(first.content.weapons[CLASS_HEALER].superKind == SUPER_SOUND_WAVE,

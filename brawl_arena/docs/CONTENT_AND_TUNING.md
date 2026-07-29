@@ -39,6 +39,12 @@ Its 20–60-unit range scales the complete follow-camera offset, preserving the 
 pitch, aim lead, and smoothing. The tracked 38.013156-unit default reproduces the
 original `{0, 31, -22}` offset.
 
+The VISUAL tab's `presentation.render_scale` is also project-scoped and applies after a
+short target-recreation debounce. Its 1.0×–2.0× range scales the world color/depth
+target independently of the window and native-resolution UI. The tracked 1.5× default
+reduces temporal aliasing on thin station geometry while leaving authored screen-space
+post-effect sizes unchanged.
+
 After 0.6 seconds of inactivity:
 
 - Project-scoped values that differ from `config/gameplay.cfg` are written to the sparse
@@ -244,7 +250,8 @@ profile. Settings and the Preview / UI command-center tab edit them immediately.
 
 The match camera is separate from this menu showcase. Its project-owned
 `presentation.match_camera_distance` value lives in `Tuning` and is edited on the WORLD
-tab.
+tab. The project-owned `presentation.render_scale` also lives in `Tuning` and is edited
+on the VISUAL tab.
 
 ## Validation commands
 

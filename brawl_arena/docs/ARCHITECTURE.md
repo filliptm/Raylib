@@ -180,8 +180,9 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 
 ## Presentation decomposition
 
-- `assets.c`: shader/model/material/render-target lifetime, including mipmapped,
-  trilinear, 8× anisotropic station-atlas sampling and temporally stable post grain.
+- `assets.c`: shader/model/material/render-target lifetime, including project-scaled
+  color/sampleable-depth targets, separate source/output post resolutions, mipmapped
+  trilinear 8× anisotropic station-atlas sampling, and temporally stable post grain.
 - `generated_assets.c`: procedural textures and the grass cross-quad mesh.
 - `environment.c`: map-cell and prop presentation. Wall collision keeps its full tile,
   while visible per-cell plinths remain inset to prevent adjacent coplanar geometry.
@@ -234,10 +235,15 @@ The player-facing shell is split by responsibility:
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
   body, provenance header, and persistent save/reset footer.
 
-The resizable window has a 960×600 minimum. Layout scales from the reference canvas and
-the scene render target is recreated on resize, with direct world rendering as a failure
-fallback. UI preference state is profile-scoped; presentation framing is project-scoped
-content and participates in transactional validation/promotion.
+The resizable window has a 960×600 minimum. Layout scales from the reference canvas.
+When post-processing is active, the world renders into a color/sampleable-depth target
+at `presentation.render_scale` (1.0×–2.0×, tracked default 1.5×) and downsamples before
+native-resolution UI. Window-size and render-scale changes are debounced together, then
+recreate the target and refresh separate source/output resolution uniforms. Failed
+scaled allocation retries at native resolution before direct world rendering. The
+backbuffer requests 4× MSAA for direct, post-disabled, resize, and failure-fallback
+frames. UI preference state is profile-scoped; presentation framing and render scale are
+project-scoped content and participate in transactional validation/promotion.
 
 ## Dependency-safe feature placement
 

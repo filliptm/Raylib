@@ -34,6 +34,8 @@ At every size verify:
 - Every action remains visible and pointer targets are at least 44 reference pixels.
 - Pointer hit testing follows the visual control after resize.
 - The world/post-process target fills the viewport without stretching or stale edges.
+- At the default 1.5× world render scale, 1280×800 creates a 1920×1200 scene target
+  and 960×600 creates a 1440×900 target while the HUD remains native-resolution.
 - Modal dimming, command-center scrolling, footer actions, and result actions remain
   reachable.
 
@@ -59,6 +61,8 @@ At every size verify:
   commands, provenance, Restore Project, Save All, and Preview / UI framing.
 - On separate fresh launches, Play and Practice each begin with the command center
   closed; `TAB` opens and closes it.
+- VISUAL World render scale applies live at 1.0×, 1.5×, and 2.0× without stretching,
+  stale borders, or changing HUD scale.
 - WORLD match-camera distance applies live at 20 and 60 units without changing pitch,
   breaking aim lead, or clipping the playable arena.
 
@@ -105,9 +109,13 @@ screens:
 - Helios-9 and Training Court render with and without post effects.
 - Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
   shallow-angle side textures remain stable without flashing, crawling, or coplanar
-  flicker. Leave grain enabled and confirm flat wall colors do not pulse while standing
-  still.
-- Resize repeatedly during a match and menu transition; render targets recreate cleanly.
+  flicker at the default 1.5× render scale. Leave grain enabled and confirm flat wall
+  colors do not pulse while standing still.
+- Resize repeatedly during a match and menu transition; scaled color/depth targets
+  recreate cleanly and post effects do not retain the previous source or output
+  resolution.
+- Disable post effects and confirm direct world rendering remains antialiased through
+  the 4× MSAA backbuffer path.
 - Temporarily missing station/character assets use coherent procedural fallbacks.
 - Temporarily missing individual UI skin textures fall back independently to the
   code-drawn Helios geometry without changing layout or preventing startup.

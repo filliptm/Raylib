@@ -818,8 +818,8 @@ paths with `BRAWL_PROJECT_CONFIG`, `BRAWL_TUNING`, `BRAWL_PROFILE`, and
 `BRAWL_LEGACY_TUNING`.
 
 The tracked project format is version 3. It stores returning-attack values, typed
-`secondary.*` values, project-scoped `presentation.match_camera_distance`, and one
-`preview.showcase.*` camera/transform. Version-1 files are
+`secondary.*` values, project-scoped `presentation.match_camera_distance` and
+`presentation.render_scale`, and one `preview.showcase.*` camera/transform. Version-1 files are
 migrated in memory: Tank mobility becomes a dash secondary, legacy Scrapper weapon
 numbers are discarded in favor of Ripsaw/Shell, and the shared showcase is derived from
 Scrapper's old home profile. Version-2 typed files migrate `guard` to `shield`, retain
@@ -979,7 +979,9 @@ The presentation layer owns:
   gameplay dimensions or authoritative telegraphs.
 - Optional toon/post-processing controls, including outline, bloom, painterly,
   pixelation, halftone, posterization, grade, vignette, temporally stable screen-space
-  grain, and chromatic fringe.
+  grain, and chromatic fringe. The project-scoped `presentation.render_scale` ranges
+  from 1.0× to 2.0× and defaults to 1.5×, supersampling world geometry before the
+  native-resolution HUD to stabilize thin wall bevels and shallow seams during motion.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
@@ -994,7 +996,11 @@ billboard rectangles from entering the depth-based ink outline. The World comman
 tab reports atlas load state, active/pool/dropped counts, event/layer totals, and the
 last recipe, and exposes direct recipe and character action previews for graphical
 checks. The window is resizable down to 960×600; the scene/depth target is
-recreated only when framebuffer size changes and has a direct-render failure fallback.
+recreated after framebuffer-size or render-scale changes settle. The post shader tracks
+separate scene-source and native-output resolutions so resize and supersampling do not
+distort screen-space effects. A failed scaled allocation retries at native resolution
+before the direct-render fallback, and the window requests 4× MSAA for post-disabled,
+resize, and failure-fallback frames.
 
 Sentinel, Longshot, Ironclad Guardian, and Gaia Guardian share a compatible 24-joint
 hierarchy, so

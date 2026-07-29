@@ -389,6 +389,12 @@ The depth-based effects use the same 0.5-to-120 clip range as the 3D cameras rat
 raylib's much wider default range, concentrating depth precision around the arena.
 Optional grain uses a stable screen-space pattern rather than generating new noise every
 frame, so flat station panels retain texture without temporal flicker.
+With post-processing enabled, the world renders into a project-scaled color/depth target
+and is downsampled before the native-resolution HUD. `presentation.render_scale` ranges
+from 1.0× to 2.0× on the VISUAL tab and defaults to 1.5×, stabilizing thin station
+bevels and shallow wall seams during camera movement. The shader receives separate
+source- and output-resolution uniforms, so resize and scale changes preserve both scene
+sampling and authored screen-space effect sizes.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
 follow offset—so changing it moves the camera along the established pitch without
@@ -405,11 +411,13 @@ world looks like.
 quantised into hard cel bands with specular and rim killed, ambient lifted and colours
 saturated so shadow bands stay vivid, and a depth-based ink outline is drawn around
 every silhouette in the post pass. The outline needs a sampleable depth texture, so the
-scene renders into a hand-built framebuffer (raylib's stock render texture keeps depth
-in a renderbuffer); if that setup fails, outlines quietly turn off and everything else
-still works. The outline transition is softened in screen space so it does not introduce
-a second source of hard edge shimmer. Band count and ink strength are sliders, everything
-is live, and toggling it off returns the original smooth-lit look.
+scene renders into a hand-built scaled framebuffer (raylib's stock render texture keeps
+depth in a renderbuffer). If scaled allocation fails, the renderer retries at native
+resolution before falling back to direct world rendering; outlines quietly turn off
+when no sampleable depth is available and everything else still works. The outline
+transition is softened in screen space so it does not introduce a second source of hard
+edge shimmer. Band count and ink strength are sliders, everything is live, and toggling
+it off returns the original smooth-lit look.
 
 ## Imported environment
 
@@ -439,9 +447,10 @@ rules:
   anisotropic filtering, reducing texture shimmer on panels viewed at shallow angles
   or from the match camera.
 
-The window requests four-sample MSAA and vertical synchronization. Its frame ceiling
-matches the active monitor refresh rate, falling back to 60 Hz when that rate is
-unavailable, which avoids uneven 60 Hz pacing on 100/120 Hz displays.
+The window requests four-sample MSAA and vertical synchronization. MSAA covers direct
+rendering while post effects are off, during target recreation, and after a target
+allocation failure; the scaled scene target provides the normal post path's additional
+edge stability. Vsync owns frame pacing without a competing CPU frame limiter.
 
 The source pack is CC0. `LICENSE.txt` and `SOURCE.md` beside the assets preserve its
 license, origin, included formats, and texture-layout requirements. Missing station
