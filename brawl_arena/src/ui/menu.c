@@ -238,7 +238,6 @@ static void DrawHome(App *w)
 
 static void DrawRosterRow(App *w, BrawlerClass cls, Rectangle bounds)
 {
-    (void)w;
     const UiTheme *t = g_ui->theme;
     const CharacterDefinition *character = ContentCharacter(&w->content, cls);
     bool candidate = g_candidate == cls;

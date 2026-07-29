@@ -107,8 +107,15 @@ typedef struct Brawler {
     float aiNavAge;
     unsigned int aiNavVersion;
     float strafeDir;
+    // Strafe flips own their cadence; sharing aiTimer with the wander re-pick made
+    // state transitions inherit stale durations.
+    float aiStrafeTimer;
     bool deliberateAim;
 } Brawler;
+
+// dashHitMask/hitMask pack brawler indices into bit positions of an int; this trips
+// at compile time if the roster capacity ever outgrows that representation.
+typedef char BrawlerHitMaskCapacityCheck[(MAX_BRAWLERS <= 32) ? 1 : -1];
 
 typedef enum {
     PROJECTILE_MOTION_STRAIGHT = 0,

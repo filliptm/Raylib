@@ -275,6 +275,7 @@ void AIUpdate(GameContext w, float dt)
 
         b->aiTimer -= dt;
         b->aiReactTimer -= dt;
+        b->aiStrafeTimer -= dt;
         b->aiNavAge += dt;
 
         bool shieldThreat = BrawlerProjectileThreat(w, i, 0.48f);
@@ -501,10 +502,10 @@ void AIUpdate(GameContext w, float dt)
             Vector3 move = Vector3Add(Vector3Scale(forward, adjust * 0.8f), Vector3Scale(strafe, 0.85f));
             b->moveIntent = AvoidSteer(w, b->position, move, b->strafeDir);
 
-            if (b->aiTimer <= 0.0f)
+            if (b->aiStrafeTimer <= 0.0f)
             {
                 b->strafeDir = -b->strafeDir;
-                b->aiTimer = 1.2f + GameRandomInt(&w.session->random, 0, 150) / 100.0f;
+                b->aiStrafeTimer = 1.2f + GameRandomInt(&w.session->random, 0, 150) / 100.0f;
             }
 
             // Supers go off when they will actually connect.

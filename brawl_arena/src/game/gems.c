@@ -71,6 +71,9 @@ int GemsNearestLoose(GameContext w, Vector3 from, float maxDistance)
     {
         Gem *g = &w.session->gems[i];
         if (!g->active) continue;
+        // A gem still in its pickup delay cannot be collected; chasing it just
+        // parks the bot on top of an inert target.
+        if (g->pickupDelay > 0.0f) continue;
 
         float d = Vector3Distance((Vector3){ from.x, 0, from.z },
                                   (Vector3){ g->position.x, 0, g->position.z });

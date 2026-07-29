@@ -219,7 +219,23 @@ bool CommandUiSliderI(CommandUi *ui, const char *label, int *value,
     snprintf(valueText, sizeof(valueText), "%d", *value);
     bool changed = SliderTrack(ui, value, label, &normalized, valueText);
     if (changed)
-        *value = minimum + (int)(normalized*(maximum - minimum) + 0.5f);
+    {
+        int updated = minimum + (int)(normalized*(maximum - minimum) + 0.5f);
+        // A keyboard/gamepad nudge smaller than one integer step used to round back
+        // to the same value, leaving short-range sliders stuck for non-pointer input.
+        if (updated == *value)
+        {
+            float previous = maximum > minimum
+                           ? (float)(*value - minimum)/(float)(maximum - minimum)
+                           : 0.0f;
+            if (normalized > previous) updated = *value + 1;
+            else if (normalized < previous) updated = *value - 1;
+        }
+        if (updated < minimum) updated = minimum;
+        if (updated > maximum) updated = maximum;
+        changed = updated != *value;
+        *value = updated;
+    }
     return changed;
 }
 

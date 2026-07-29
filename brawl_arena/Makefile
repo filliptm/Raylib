@@ -31,41 +31,53 @@ endif
 
 SRC_DIR = src
 BUILD_DIR = build
-OBJ_DIR = $(BUILD_DIR)/obj
+# Build flavors (plain/debug/sanitize) keep separate object dirs and binary names.
+# A shared object dir let sanitizer-instrumented objects leak into the next plain
+# link, which failed with missing UBSan runtime symbols.
+OBJ_FLAVOR ?=
+OBJ_DIR = $(BUILD_DIR)/obj$(OBJ_FLAVOR)
 
 SOURCES = $(shell find $(SRC_DIR) -name '*.c' -print)
 OBJECTS = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(SOURCES))
 
-TARGET = $(BUILD_DIR)/brawl_arena
-TEST_TARGET = $(BUILD_DIR)/test_config
-HEALER_TEST_TARGET = $(BUILD_DIR)/test_healer
-NO_SHAKE_TEST_TARGET = $(BUILD_DIR)/test_no_attack_shake
-ARENA_TEST_TARGET = $(BUILD_DIR)/test_arena
-GAMEPLAY_TEST_TARGET = $(BUILD_DIR)/test_gameplay
-REGEN_TEST_TARGET = $(BUILD_DIR)/test_regeneration
-TANK_TEST_TARGET = $(BUILD_DIR)/test_tank
-SCRAPPER_TEST_TARGET = $(BUILD_DIR)/test_scrapper
-SECONDARIES_TEST_TARGET = $(BUILD_DIR)/test_secondaries
-UI_TEST_TARGET = $(BUILD_DIR)/test_ui
-CHARACTER_ANIMATION_TEST_TARGET = $(BUILD_DIR)/test_character_animation
-VFX_TEST_TARGET = $(BUILD_DIR)/test_vfx
-VFX_EVENTS_TEST_TARGET = $(BUILD_DIR)/test_vfx_events
+TARGET = $(BUILD_DIR)/brawl_arena$(OBJ_FLAVOR)
+TEST_TARGET = $(BUILD_DIR)/test_config$(OBJ_FLAVOR)
+HEALER_TEST_TARGET = $(BUILD_DIR)/test_healer$(OBJ_FLAVOR)
+NO_SHAKE_TEST_TARGET = $(BUILD_DIR)/test_no_attack_shake$(OBJ_FLAVOR)
+ARENA_TEST_TARGET = $(BUILD_DIR)/test_arena$(OBJ_FLAVOR)
+GAMEPLAY_TEST_TARGET = $(BUILD_DIR)/test_gameplay$(OBJ_FLAVOR)
+REGEN_TEST_TARGET = $(BUILD_DIR)/test_regeneration$(OBJ_FLAVOR)
+TANK_TEST_TARGET = $(BUILD_DIR)/test_tank$(OBJ_FLAVOR)
+SCRAPPER_TEST_TARGET = $(BUILD_DIR)/test_scrapper$(OBJ_FLAVOR)
+SECONDARIES_TEST_TARGET = $(BUILD_DIR)/test_secondaries$(OBJ_FLAVOR)
+UI_TEST_TARGET = $(BUILD_DIR)/test_ui$(OBJ_FLAVOR)
+CHARACTER_ANIMATION_TEST_TARGET = $(BUILD_DIR)/test_character_animation$(OBJ_FLAVOR)
+VFX_TEST_TARGET = $(BUILD_DIR)/test_vfx$(OBJ_FLAVOR)
+VFX_EVENTS_TEST_TARGET = $(BUILD_DIR)/test_vfx_events$(OBJ_FLAVOR)
 CHARACTER_MANIFEST = data/characters/asset_manifest.json
 CHARACTER_ASSET_STAMP = $(BUILD_DIR)/assets/characters/.built
 CHARACTER_PIPELINE_SOURCES = \
 	tools/build_character_assets.py \
 	tools/check_character_assets.py \
 	$(shell find tools/character_pipeline -name '*.py' -print)
+CHARACTER_ASSET_INPUT_LIST := $(shell python3 tools/build_character_assets.py \
+		--manifest $(CHARACTER_MANIFEST) --print-inputs)
+ifeq ($(strip $(CHARACTER_ASSET_INPUT_LIST)),)
+$(error character asset inputs could not be resolved; run \
+	'python3 tools/build_character_assets.py --manifest $(CHARACTER_MANIFEST) --print-inputs')
+endif
 CHARACTER_ASSET_INPUTS = \
 	$(CHARACTER_MANIFEST) \
-	$(shell python3 tools/build_character_assets.py \
-		--manifest $(CHARACTER_MANIFEST) --print-inputs)
+	$(CHARACTER_ASSET_INPUT_LIST)
 VFX_MANIFEST = data/vfx/asset_manifest.json
 VFX_ASSET_STAMP = $(BUILD_DIR)/assets/vfx/.built
 VFX_PIPELINE_SOURCES = tools/build_vfx_assets.py tools/check_vfx_assets.py
-VFX_ASSET_INPUTS = \
-	$(shell python3 tools/build_vfx_assets.py \
+VFX_ASSET_INPUTS := $(shell python3 tools/build_vfx_assets.py \
 		--manifest $(VFX_MANIFEST) --print-inputs)
+ifeq ($(strip $(VFX_ASSET_INPUTS)),)
+$(error VFX asset inputs could not be resolved; run \
+	'python3 tools/build_vfx_assets.py --manifest $(VFX_MANIFEST) --print-inputs')
+endif
 VFX_TEST_OBJECTS = \
 	$(OBJ_DIR)/presentation/vfx.o \
 	$(OBJ_DIR)/presentation/vfx_catalog.o
@@ -175,11 +187,15 @@ vfx-assets: $(VFX_ASSET_STAMP)
 run: check-character-assets check-vfx-assets $(TARGET)
 	./$(TARGET)
 
-debug: CFLAGS = -Wall -Wextra -std=c99 $(DEBUG_FLAGS)
-debug: clean check-ui check-character-assets check-vfx-assets $(TARGET)
+debug:
+	$(MAKE) OBJ_FLAVOR=-debug CFLAGS="-Wall -Wextra -std=c99 $(DEBUG_FLAGS)" \
+		check-ui check-character-assets check-vfx-assets $(BUILD_DIR)/brawl_arena-debug
 
-sanitize: CFLAGS = -Wall -Wextra -std=c99 $(SANITIZE_FLAGS)
-sanitize: clean check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
+sanitize:
+	$(MAKE) OBJ_FLAVOR=-sanitize CFLAGS="-Wall -Wextra -std=c99 $(SANITIZE_FLAGS)" \
+		sanitize-run
+
+sanitize-run: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
 	$(SANITIZER_ENV) ./$(TEST_TARGET)
@@ -253,4 +269,4 @@ help:
 	@echo "  make validate-config - validate tracked project defaults"
 	@echo "  make clean  - remove build artifacts"
 
-.PHONY: all run debug sanitize clean rebuild test validate-config check-architecture check-ui ui-assets character-assets check-character-assets vfx-assets check-vfx-assets help
+.PHONY: all run debug sanitize sanitize-run clean rebuild test validate-config check-architecture check-ui ui-assets character-assets check-character-assets vfx-assets check-vfx-assets help
