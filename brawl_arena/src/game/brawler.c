@@ -235,7 +235,8 @@ int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 
 }
 
 void BrawlerApplyPulseStatus(GameContext w, int idx, Team sourceTeam, int source,
-                             int damage, int healing, float duration, float tickRate)
+                             int damage, int healing, float duration, float tickRate,
+                             int abilityIndex)
 {
     if (idx < 0 || idx >= w.session->brawlerCount || duration <= 0.0f || tickRate <= 0.0f) return;
 
@@ -271,8 +272,18 @@ void BrawlerApplyPulseStatus(GameContext w, int idx, Team sourceTeam, int source
         .healing = healing,
         .source = source,
         .sourceTeam = sourceTeam,
+        .abilityIndex = abilityIndex,
         .active = true
     };
+
+    if (AttackAuthored(w.content, abilityIndex))
+        GameEmitAttackMark(w.session, GAME_EVENT_ATTACK_MARK_APPLIED,
+                           abilityIndex, idx,
+                           (Vector3){ b->position.x, 0.9f, b->position.z },
+                           duration,
+                           b->team == sourceTeam
+                               ? (Color){ 96, 255, 196, 255 }
+                               : (Color){ 255, 96, 170, 255 });
 }
 
 static void UpdateStatuses(GameContext w, int idx, float dt)
@@ -291,17 +302,26 @@ static void UpdateStatuses(GameContext w, int idx, float dt)
         while (status->tickTimer <= 0.0001f && b->alive)
         {
             Vector3 hit = { b->position.x, 0.75f, b->position.z };
+            bool authored = AttackAuthored(w.content, status->abilityIndex);
             if (b->team == status->sourceTeam)
             {
                 int restored =
                     BrawlerApplyHealing(w, idx, status->healing,
                                         status->source, hit);
                 if (restored > 0)
-                    GameEmitVfxAttached(
-                        w.session, VFX_GUARDIAN_RESONANCE_HEAL,
-                        hit, hit, 0.0f, 1.05f,
-                        (Color){ 70, 244, 166, 255 },
-                        idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                {
+                    if (authored)
+                        GameEmitAttackMark(w.session, GAME_EVENT_ATTACK_MARK_TICK,
+                                           status->abilityIndex, idx, hit,
+                                           status->remaining,
+                                           (Color){ 96, 255, 196, 255 });
+                    else
+                        GameEmitVfxAttached(
+                            w.session, VFX_GUARDIAN_RESONANCE_HEAL,
+                            hit, hit, 0.0f, 1.05f,
+                            (Color){ 70, 244, 166, 255 },
+                            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                }
             }
             else
             {
@@ -309,11 +329,19 @@ static void UpdateStatuses(GameContext w, int idx, float dt)
                     BrawlerApplyDamage(w, idx, status->damage,
                                        status->source, hit);
                 if (removed > 0)
-                    GameEmitVfxAttached(
-                        w.session, VFX_GUARDIAN_RESONANCE_DAMAGE,
-                        hit, hit, 0.0f, 1.10f,
-                        (Color){ 255, 92, 158, 255 },
-                        idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                {
+                    if (authored)
+                        GameEmitAttackMark(w.session, GAME_EVENT_ATTACK_MARK_TICK,
+                                           status->abilityIndex, idx, hit,
+                                           status->remaining,
+                                           (Color){ 255, 96, 170, 255 });
+                    else
+                        GameEmitVfxAttached(
+                            w.session, VFX_GUARDIAN_RESONANCE_DAMAGE,
+                            hit, hit, 0.0f, 1.10f,
+                            (Color){ 255, 92, 158, 255 },
+                            idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                }
             }
             status->tickTimer += status->tickRate;
         }

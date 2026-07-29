@@ -152,6 +152,90 @@ int main(void)
     CHECK(authoredImpacts > 0, "authored ability emitted no impact events");
     CHECK(legacyMuzzle == 0, "authored ability still emitted the legacy muzzle");
 
-    puts("attack templates, validation, round trip, and authored gating passed");
+    //--- Field and mark anchors: authored rain replaces legacy pulse visuals ----
+    int rainAbility = app.content.characters[CLASS_HEALER].mainAbility;
+    int waveAbility = app.content.characters[CLASS_HEALER].superAbility;
+    CHECK(rainAbility >= 0 && waveAbility >= 0, "guardian abilities missing");
+
+    studio.cls = CLASS_HEALER;
+    studio.slot = STUDIO_SLOT_MAIN;
+    studio.dummyEnabled = true;
+    studio.allyEnabled = true;
+    StudioSessionEnter(&app, &studio);
+    CHECK(app.session.brawlerCount == 3, "ally dummy did not join the stage");
+
+    int fieldStarts = 0, fieldPulses = 0, fieldEnds = 0, markTicks = 0;
+    int legacyShockwaves = 0;
+    for (int frame = 0; frame < 600; frame++)
+    {
+        StudioSessionTick(&app, &studio, 1.0f/60.0f);
+        fieldStarts += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_START);
+        fieldPulses += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_PULSE);
+        fieldEnds += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_END);
+        markTicks += CountEvents(&app, GAME_EVENT_ATTACK_MARK_TICK);
+        legacyShockwaves += CountEvents(&app, GAME_EVENT_SHOCKWAVE);
+        GameEventsClear(&app.session);
+    }
+    CHECK(fieldStarts == 0 && fieldPulses == 0,
+          "unauthored rain emitted authored field events");
+    CHECK(legacyShockwaves > 0, "unauthored rain lost its legacy pulse ring");
+
+    AttackPresentationTemplate(&app.content, rainAbility,
+                               &app.content.attacks[rainAbility]);
+    StudioSessionEnter(&app, &studio);
+    fieldStarts = fieldPulses = fieldEnds = markTicks = legacyShockwaves = 0;
+    for (int frame = 0; frame < 900; frame++)
+    {
+        StudioSessionTick(&app, &studio, 1.0f/60.0f);
+        fieldStarts += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_START);
+        fieldPulses += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_PULSE);
+        fieldEnds += CountEvents(&app, GAME_EVENT_ATTACK_FIELD_END);
+        markTicks += CountEvents(&app, GAME_EVENT_ATTACK_MARK_TICK);
+        legacyShockwaves += CountEvents(&app, GAME_EVENT_SHOCKWAVE);
+        GameEventsClear(&app.session);
+    }
+    CHECK(fieldStarts > 0, "authored rain emitted no field-start events");
+    CHECK(fieldPulses > 0, "authored rain emitted no field-pulse events");
+    CHECK(fieldEnds > 0, "authored rain emitted no field-end events");
+    CHECK(markTicks > 0, "authored rain delivered no per-target mark ticks");
+    CHECK(legacyShockwaves == 0, "authored rain still emitted legacy pulse rings");
+
+    //--- Resonance marks bind to targets ----------------------------------------
+    AttackPresentationTemplate(&app.content, waveAbility,
+                               &app.content.attacks[waveAbility]);
+    studio.slot = STUDIO_SLOT_SUPER;
+    StudioSessionEnter(&app, &studio);
+    int marksApplied = 0;
+    bool markHadTarget = false;
+    for (int frame = 0; frame < 600; frame++)
+    {
+        StudioSessionTick(&app, &studio, 1.0f/60.0f);
+        for (int i = 0; i < app.session.events.count; i++)
+        {
+            const GameEvent *event = &app.session.events.items[i];
+            if (event->type != GAME_EVENT_ATTACK_MARK_APPLIED) continue;
+            marksApplied++;
+            if (event->targetBrawler >= 1 &&
+                event->targetBrawler < app.session.brawlerCount)
+                markHadTarget = true;
+        }
+        GameEventsClear(&app.session);
+    }
+    CHECK(marksApplied > 0, "authored resonance applied no marks");
+    CHECK(markHadTarget, "mark events did not carry their target");
+
+    //--- The shipped guardian documents parse and validate ----------------------
+    App shipped;
+    Initialize(&shipped);
+    CHECK(AttackContentLoadFile(&shipped.content, "data/attacks/presentation.cfg",
+                                message, sizeof(message)), message);
+    CHECK(AttackAuthored(&shipped.content,
+                         shipped.content.characters[CLASS_HEALER].mainAbility),
+          "shipped guardian rain document missing");
+    CHECK(AttackAuthored(&shipped.content,
+                         shipped.content.characters[CLASS_HEALER].superAbility),
+          "shipped guardian resonance document missing");
+
+    puts("attack templates, validation, round trip, gating, and field/mark anchors passed");
     return 0;
 }

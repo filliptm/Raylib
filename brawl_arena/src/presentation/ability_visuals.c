@@ -1,5 +1,7 @@
 #include "ability_visuals.h"
 
+#include "attack_content.h"
+
 #include "arena.h"
 #include "brawler.h"
 #include "content_catalog.h"
@@ -234,6 +236,8 @@ static void DrawActiveFields(App *world, Assets *assets)
     {
         AbilityField *field = &world->session.abilityFields[i];
         if (!field->active) continue;
+        // Authored documents own this field's look entirely.
+        if (AttackAuthored(&world->content, field->abilityIndex)) continue;
 
         if (field->type == ABILITY_FIELD_MINE)
         {
@@ -353,6 +357,7 @@ static void DrawActiveFields(App *world, Assets *assets)
             }
         }
         if (!brawler->alive || !brawler->visible || !status) continue;
+        if (AttackAuthored(&world->content, status->abilityIndex)) continue;
 
         bool healing = brawler->team == status->sourceTeam;
         Color aura = healing ? (Color){ 74, 255, 176, 105 }

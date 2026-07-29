@@ -182,3 +182,28 @@ void GameEmitAttackImpact(GameSession *session, int abilityIndex,
     event->color = color;
     event->abilityIndex = abilityIndex;
 }
+
+void GameEmitAttackField(GameSession *session, GameEventType type,
+                         int abilityIndex, Vector3 position, float radius,
+                         float life)
+{
+    GameEvent *event = Push(session, type);
+    if (!event) return;
+    event->position = position;
+    event->radius = radius;
+    event->life = life;
+    event->abilityIndex = abilityIndex;
+}
+
+void GameEmitAttackMark(GameSession *session, GameEventType type,
+                        int abilityIndex, int targetBrawler, Vector3 position,
+                        float life, Color color)
+{
+    GameEvent *event = Push(session, type);
+    if (!event) return;
+    event->position = position;
+    event->targetBrawler = targetBrawler;
+    event->life = life;
+    event->color = color;
+    event->abilityIndex = abilityIndex;
+}

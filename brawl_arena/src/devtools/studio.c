@@ -24,7 +24,8 @@ static float g_statusTimer;
 
 static const char *SLOT_NAMES[STUDIO_SLOT_COUNT] = { "MAIN", "SUPER", "SECONDARY" };
 static const char *ANCHOR_LABELS[ATTACK_ANCHOR_COUNT] = {
-    "Cast", "Self", "Projectile", "Impact"
+    "Cast", "Self", "Projectile", "Impact",
+    "Field start", "Field pulse", "Field end", "Mark applied", "Mark tick"
 };
 static const char *PATTERN_LABELS[ATTACK_PATTERN_COUNT] = {
     "Single", "Burst", "Ring", "Cone"
@@ -147,6 +148,13 @@ static void DrawStagePanel(App *w)
     }
     CommandUiSliderF(&ui, "Dummy range", &g_studio.dummyDistance, 3.0f, 20.0f, "%.1f");
 
+    bool ally = g_studio.allyEnabled;
+    if (CommandUiToggle(&ui, "Ally dummy (for heals)", &ally))
+    {
+        g_studio.allyEnabled = ally;
+        StudioSessionEnter(w, &g_studio);
+    }
+
     CommandUiSection(&ui, "TIME");
     CommandUiSliderF(&ui, "Speed", &g_studio.timeScale, 0.05f, 1.0f, "%.2f");
     CommandUiToggle(&ui, "Pause", &g_studio.paused);
@@ -234,7 +242,7 @@ static void AtlasBrowser(CommandUi *ui, Assets *assets, AttackEffectLayer *layer
 }
 
 static const char *SHAPE_LABELS[ATTACK_SHAPE_COUNT] = {
-    "Sprite", "Shield arc", "Orb", "Disc"
+    "Sprite", "Shield arc", "Orb", "Disc", "Dome", "Column"
 };
 
 static void LayerEditor(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
@@ -275,6 +283,9 @@ static void LayerEditor(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
     changed |= CommandUiSliderF(ui, "Rotate deg/s", &layer->rotateSpeed,
                                 -720.0f, 720.0f, "%.0f");
     changed |= CommandUiToggle(ui, "Ground quad", &layer->ground);
+    changed |= CommandUiToggle(ui, "Loop for field/mark life", &layer->loop);
+    changed |= CommandUiToggle(ui, "Fit field radius", &layer->fitField);
+    changed |= CommandUiToggle(ui, "Use event color", &layer->useEventColor);
     if (changed) MarkDraftDirty();
 
     ColorEditor(ui, "COLOR START", &layer->colorStart);
@@ -423,7 +434,7 @@ static void DrawEditorPanel(App *w, Assets *assets)
     CommandUiSection(&ui, "MOTIONS");
     static const char *MOTION_LABELS[ATTACK_MOTION_COUNT] = {
         "None", "Recoil", "Raise right", "Raise left", "Swing right",
-        "Twist", "Slam", "Lean"
+        "Twist", "Slam", "Lean", "Raise both", "Conduct"
     };
     for (int i = 0; i < MAX_ATTACK_MOTIONS; i++)
     {

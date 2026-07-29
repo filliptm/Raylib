@@ -188,6 +188,7 @@ void TuningSetDefaults(Tuning *tuning)
         .backdropBrightness = 1.0f,
         .matchCameraDistance = DEFAULT_MATCH_CAMERA_DISTANCE,
         .postFx = true,
+        .renderScale = 1.5f,
         .bloom = 0.85f,
         .selectedKit = CLASS_SHOTGUNNER,
         .gemGrab = true,

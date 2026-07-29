@@ -211,6 +211,7 @@ static int BuildFields(Tuning *t, UiPreferences *preferences,
     ADD_FLOAT("presentation.toon_bands", SCOPE_PROJECT, t->toonBands, 2.0, 5.0);
     ADD_FLOAT("presentation.toon_outline", SCOPE_PROJECT, t->toonOutline, 0.0, 1.0);
     ADD_BOOL("presentation.post_effects", SCOPE_PROJECT, t->postFx);
+    ADD_FLOAT("presentation.render_scale", SCOPE_PROJECT, t->renderScale, 1.0, 2.0);
     ADD_FLOAT("presentation.bloom", SCOPE_PROJECT, t->bloom, 0.0, 3.0);
     ADD_FLOAT("presentation.pixelate", SCOPE_PROJECT, t->stylePixelate, 0.0, 1.0);
     ADD_FLOAT("presentation.painterly", SCOPE_PROJECT, t->stylePainterly, 0.0, 1.0);

@@ -9,9 +9,12 @@
 // world effects passes.
 
 // Spawns every layer bound to `anchor`. `followBrawler` is the caster index for
-// self-anchored layers (-1 otherwise). Yaw orients patterns and offsets.
+// self-anchored layers and the target index for mark anchors (-1 otherwise).
+// `fieldRadius` scales fitField layers; `lifeOverride` (>0) replaces the duration
+// of looping layers so they live exactly as long as their field or mark.
 void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
-                   Vector3 origin, float yaw, int followBrawler);
+                   Vector3 origin, float yaw, int followBrawler,
+                   float fieldRadius, float lifeOverride, Color eventColor);
 
 void AttackFxUpdate(App *w, float dt);
 void AttackFxDraw(App *w, Assets *a);

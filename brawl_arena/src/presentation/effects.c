@@ -261,9 +261,11 @@ void FxConsumeGameEvents(App *w)
                     const AttackPresentation *doc =
                         &w->content.attacks[event->abilityIndex];
                     AttackFxSpawn(w, doc, ATTACK_ANCHOR_CAST, event->position,
-                                  event->angle, event->sourceBrawler);
+                                  event->angle, event->sourceBrawler, 0.0f, 0.0f,
+                                  event->color);
                     AttackFxSpawn(w, doc, ATTACK_ANCHOR_SELF, event->position,
-                                  event->angle, event->sourceBrawler);
+                                  event->angle, event->sourceBrawler, 0.0f, 0.0f,
+                                  event->color);
                 }
                 break;
             case GAME_EVENT_ATTACK_IMPACT:
@@ -271,7 +273,37 @@ void FxConsumeGameEvents(App *w)
                     event->abilityIndex < w->content.abilityCount)
                     AttackFxSpawn(w, &w->content.attacks[event->abilityIndex],
                                   ATTACK_ANCHOR_IMPACT, event->position,
-                                  event->angle, -1);
+                                  event->angle, -1, 0.0f, 0.0f, event->color);
+                break;
+            case GAME_EVENT_ATTACK_FIELD_START:
+            case GAME_EVENT_ATTACK_FIELD_PULSE:
+            case GAME_EVENT_ATTACK_FIELD_END:
+                if (event->abilityIndex >= 0 &&
+                    event->abilityIndex < w->content.abilityCount)
+                {
+                    int anchor = event->type == GAME_EVENT_ATTACK_FIELD_START
+                               ? ATTACK_ANCHOR_FIELD_START
+                               : event->type == GAME_EVENT_ATTACK_FIELD_PULSE
+                               ? ATTACK_ANCHOR_FIELD_PULSE
+                               : ATTACK_ANCHOR_FIELD_END;
+                    AttackFxSpawn(w, &w->content.attacks[event->abilityIndex],
+                                  anchor, event->position, event->angle, -1,
+                                  event->radius, event->life, event->color);
+                }
+                break;
+            case GAME_EVENT_ATTACK_MARK_APPLIED:
+            case GAME_EVENT_ATTACK_MARK_TICK:
+                if (event->abilityIndex >= 0 &&
+                    event->abilityIndex < w->content.abilityCount)
+                {
+                    int anchor = event->type == GAME_EVENT_ATTACK_MARK_APPLIED
+                               ? ATTACK_ANCHOR_MARK_APPLIED
+                               : ATTACK_ANCHOR_MARK_TICK;
+                    AttackFxSpawn(w, &w->content.attacks[event->abilityIndex],
+                                  anchor, event->position, event->angle,
+                                  event->targetBrawler, 0.0f, event->life,
+                                  event->color);
+                }
                 break;
         }
     }

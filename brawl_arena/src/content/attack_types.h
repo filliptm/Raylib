@@ -17,6 +17,11 @@ typedef enum {
     ATTACK_ANCHOR_SELF,         // follows the caster
     ATTACK_ANCHOR_PROJECTILE,   // emitted along a live projectile (Phase D)
     ATTACK_ANCHOR_IMPACT,       // spawned where the projectile lands
+    ATTACK_ANCHOR_FIELD_START,  // a field ability lands / a cone spawns
+    ATTACK_ANCHOR_FIELD_PULSE,  // every field tick, at the field's current radius
+    ATTACK_ANCHOR_FIELD_END,    // the field expires
+    ATTACK_ANCHOR_MARK_APPLIED, // a status mark lands on a target (follows it)
+    ATTACK_ANCHOR_MARK_TICK,    // every status pulse on that target (follows it)
     ATTACK_ANCHOR_COUNT
 } AttackAnchor;
 
@@ -42,6 +47,8 @@ typedef enum {
     ATTACK_SHAPE_SHIELD,
     ATTACK_SHAPE_ORB,
     ATTACK_SHAPE_DISC,
+    ATTACK_SHAPE_DOME,          // hemisphere bubble, for sanctuaries and fields
+    ATTACK_SHAPE_COLUMN,        // tall open shell, for light shafts and beams
     ATTACK_SHAPE_COUNT
 } AttackShape;
 
@@ -54,6 +61,8 @@ typedef enum {
     ATTACK_MOTION_TWIST,
     ATTACK_MOTION_SLAM,
     ATTACK_MOTION_LEAN,
+    ATTACK_MOTION_RAISE_BOTH,   // both arms lifted together
+    ATTACK_MOTION_CONDUCT,      // both arms raised with a slow sway
     ATTACK_MOTION_COUNT
 } AttackMotionKind;
 
@@ -80,6 +89,12 @@ typedef struct AttackEffectLayer {
     bool ground;                // lie flat on the ground instead of billboarding
     int shape;                  // AttackShape; non-sprite shapes ignore the atlas
     float emissive;             // solid shapes: 0 fully lit .. 1 self-lit
+    // Field/mark binding: a looping layer lives exactly as long as its field or
+    // mark instead of its own duration; fitField multiplies scale by the field's
+    // live radius so rings and domes track growth precisely.
+    bool loop;
+    bool fitField;
+    bool useEventColor;         // tint start/end RGB from the emitting event
 } AttackEffectLayer;
 
 typedef struct AttackMotion {

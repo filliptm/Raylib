@@ -67,6 +67,7 @@ bool WeaponsPlaceMine(GameContext w, int owner,
         .team = b->team,
         .owner = owner,
         .type = ABILITY_FIELD_MINE,
+        .abilityIndex = (int)(ability - w.content->abilities),
         .active = true
     };
 
@@ -269,10 +270,25 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
             field->team = b->team;
             field->owner = idx;
             field->type = ABILITY_FIELD_RAIN;
+            field->abilityIndex = (int)(ability - w.content->abilities);
             field->active = true;
         }
 
         b->revealTimer = w.tuning->fireReveal;
+        int rainAbility = (int)(ability - w.content->abilities);
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_CAST);
+        if (AttackAuthored(w.content, rainAbility))
+        {
+            // The authored document owns cast and field visuals wholesale.
+            GameEmitAttackCast(w.session, rainAbility, idx,
+                               (Vector3){ b->position.x, 0.85f, b->position.z },
+                               b->aimAngle, healColor);
+            if (field)
+                GameEmitAttackField(w.session, GAME_EVENT_ATTACK_FIELD_START,
+                                    rainAbility, field->position, field->radius,
+                                    field->maxLife);
+            return;
+        }
         GameEmitMuzzle(w.session, (Vector3){ b->position.x, 0.8f, b->position.z },
                       b->aimAngle, healColor);
         GameEmitLight(w.session, (Vector3){ b->position.x, 1.0f, b->position.z },
@@ -283,7 +299,6 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
                             b->aimAngle, 1.65f, healColor,
                             idx, VFX_SOCKET_RIGHT_HAND,
                             -1, VFX_SOCKET_NONE);
-        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_CAST);
         return;
     }
 
@@ -305,9 +320,12 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
             field->team = b->team;
             field->owner = idx;
             field->type = ABILITY_FIELD_SOUND_WAVE;
+            field->abilityIndex = (int)(ability - w.content->abilities);
             field->active = true;
         }
 
+        int waveAbility = (int)(ability - w.content->abilities);
+        bool waveAuthored = AttackAuthored(w.content, waveAbility);
         for (int i = 0; i < w.session->brawlerCount; i++)
         {
             Brawler *t = &w.session->brawlers[i];
@@ -317,10 +335,13 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
                                   t->position)) continue;
             if (!ArenaLineOfSight(&w.session->arena, b->position, t->position)) continue;
 
+            // The status emits its own authored mark-applied event.
             BrawlerApplyPulseStatus(w, i, b->team, idx,
                                     ability->damage, ability->healing,
                                     ability->data.area.duration,
-                                    ability->data.area.tickRate);
+                                    ability->data.area.tickRate,
+                                    waveAbility);
+            if (waveAuthored) continue;
             Color markColor = (t->team == b->team)
                             ? healColor : (Color){ 255, 116, 154, 255 };
             GameEmitImpact(w.session, (Vector3){ t->position.x, 0.8f, t->position.z }, markColor, 9);
@@ -334,6 +355,17 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         }
 
         b->revealTimer = w.tuning->fireReveal;
+        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_SUPER);
+        if (waveAuthored)
+        {
+            GameEmitAttackCast(w.session, waveAbility, idx,
+                               (Vector3){ b->position.x, 0.9f, b->position.z },
+                               b->aimAngle, (Color){ 134, 244, 255, 255 });
+            GameEmitAttackField(w.session, GAME_EVENT_ATTACK_FIELD_START,
+                                waveAbility, b->position, ability->range,
+                                ability->data.area.visualDuration);
+            return;
+        }
         GameEmitMuzzle(w.session, (Vector3){ b->position.x, 0.9f, b->position.z },
                       b->aimAngle, (Color){ 134, 244, 255, 255 });
         GameEmitLight(w.session, (Vector3){ b->position.x, 1.1f, b->position.z },
@@ -344,7 +376,6 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
             castStart, AimEndpoint(castStart, b->aimAngle, ability->range),
             b->aimAngle, 1.85f, (Color){ 122, 239, 255, 255 },
             idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
-        GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_SUPER);
         return;
     }
 
@@ -550,6 +581,7 @@ static void UpdateRainField(GameContext w, AbilityField *field, float dt)
     field->tickTimer -= dt;
     while (field->tickTimer <= 0.0f && field->life > 0.0f)
     {
+        bool authored = AttackAuthored(w.content, field->abilityIndex);
         bool affected = false;
         for (int i = 0; i < w.session->brawlerCount; i++)
         {
@@ -567,32 +599,51 @@ static void UpdateRainField(GameContext w, AbilityField *field, float dt)
                 if (restored > 0)
                 {
                     affected = true;
-                    GameEmitVfxAttached(
-                        w.session, VFX_GUARDIAN_RAIN_HEAL,
-                        t->position, t->position, 0.0f, 1.08f,
-                        (Color){ 70, 244, 166, 255 },
-                        i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                    if (authored)
+                        GameEmitAttackMark(w.session, GAME_EVENT_ATTACK_MARK_TICK,
+                                           field->abilityIndex, i, t->position,
+                                           field->life,
+                                           (Color){ 96, 255, 196, 255 });
+                    else
+                        GameEmitVfxAttached(
+                            w.session, VFX_GUARDIAN_RAIN_HEAL,
+                            t->position, t->position, 0.0f, 1.08f,
+                            (Color){ 70, 244, 166, 255 },
+                            i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
                     BrawlerAwardSuper(w, field->owner, SuperGainFor(w, field->owner));
                 }
             }
             else
             {
                 BrawlerApplyDamage(w, i, field->damage, field->owner, t->position);
-                GameEmitVfxAttached(
-                    w.session, VFX_GUARDIAN_RAIN_DAMAGE,
-                    t->position, t->position, 0.0f, 1.12f,
-                    (Color){ 255, 100, 164, 255 },
-                    i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
+                if (authored)
+                    GameEmitAttackMark(w.session, GAME_EVENT_ATTACK_MARK_TICK,
+                                       field->abilityIndex, i, t->position,
+                                       field->life,
+                                       (Color){ 255, 96, 170, 255 });
+                else
+                    GameEmitVfxAttached(
+                        w.session, VFX_GUARDIAN_RAIN_DAMAGE,
+                        t->position, t->position, 0.0f, 1.12f,
+                        (Color){ 255, 100, 164, 255 },
+                        i, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
                 affected = true;
                 BrawlerAwardSuper(w, field->owner, SuperGainFor(w, field->owner));
             }
         }
 
-        Color pulse = affected ? (Color){ 104, 255, 190, 255 }
-                               : (Color){ 89, 207, 217, 220 };
-        GameEmitShockwave(w.session, field->position, radius, 0.19f, pulse);
-        GameEmitVfx(w.session, VFX_GUARDIAN_RAIN_PULSE,
-                    field->position, field->position, 0.0f, radius, pulse);
+        if (authored)
+            GameEmitAttackField(w.session, GAME_EVENT_ATTACK_FIELD_PULSE,
+                                field->abilityIndex, field->position, radius,
+                                field->life);
+        else
+        {
+            Color pulse = affected ? (Color){ 104, 255, 190, 255 }
+                                   : (Color){ 89, 207, 217, 220 };
+            GameEmitShockwave(w.session, field->position, radius, 0.19f, pulse);
+            GameEmitVfx(w.session, VFX_GUARDIAN_RAIN_PULSE,
+                        field->position, field->position, 0.0f, radius, pulse);
+        }
         field->tickTimer += field->tickRate;
     }
 }
@@ -692,7 +743,14 @@ static void AbilityFieldsUpdate(GameContext w, float dt)
 
         field->life -= dt;
         if (field->type == ABILITY_FIELD_RAIN) UpdateRainField(w, field, dt);
-        if (field->life <= 0.0f) field->active = false;
+        if (field->life <= 0.0f)
+        {
+            if (AttackAuthored(w.content, field->abilityIndex))
+                GameEmitAttackField(w.session, GAME_EVENT_ATTACK_FIELD_END,
+                                    field->abilityIndex, field->position,
+                                    field->radius, 0.0f);
+            field->active = false;
+        }
     }
 }
 

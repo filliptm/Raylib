@@ -519,6 +519,119 @@ static Mesh MakeShieldArcMesh(void)
     return mesh;
 }
 
+// Hemisphere for sanctuary domes: lat/long shell, base ring at y=0, apex at y=1.
+static Mesh MakeDomeMesh(void)
+{
+    const int slices = 20;
+    const int stacks = 7;
+    int vertexCount = (slices + 1)*(stacks + 1);
+    int triangleCount = slices*stacks*2;
+
+    Mesh mesh = { 0 };
+    mesh.vertexCount = vertexCount;
+    mesh.triangleCount = triangleCount;
+    mesh.vertices = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.normals = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.texcoords = malloc((size_t)vertexCount*2*sizeof(float));
+    mesh.indices = malloc((size_t)triangleCount*3*sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices)
+        return (Mesh){ 0 };
+
+    for (int stack = 0; stack <= stacks; stack++)
+    {
+        float v = stack/(float)stacks;
+        float pitch = v*(PI*0.5f);
+        for (int slice = 0; slice <= slices; slice++)
+        {
+            float u = slice/(float)slices;
+            float a = u*PI*2.0f;
+            int index = stack*(slices + 1) + slice;
+            float nx = sinf(a)*cosf(pitch);
+            float ny = sinf(pitch);
+            float nz = cosf(a)*cosf(pitch);
+            mesh.vertices[index*3 + 0] = nx;
+            mesh.vertices[index*3 + 1] = ny;
+            mesh.vertices[index*3 + 2] = nz;
+            mesh.normals[index*3 + 0] = nx;
+            mesh.normals[index*3 + 1] = ny;
+            mesh.normals[index*3 + 2] = nz;
+            mesh.texcoords[index*2 + 0] = u;
+            mesh.texcoords[index*2 + 1] = v;
+        }
+    }
+    int triangle = 0;
+    for (int stack = 0; stack < stacks; stack++)
+        for (int slice = 0; slice < slices; slice++)
+        {
+            unsigned short a = (unsigned short)(stack*(slices + 1) + slice);
+            unsigned short b = (unsigned short)(a + 1);
+            unsigned short c = (unsigned short)(a + slices + 1);
+            unsigned short d = (unsigned short)(c + 1);
+            mesh.indices[triangle*3 + 0] = a;
+            mesh.indices[triangle*3 + 1] = b;
+            mesh.indices[triangle*3 + 2] = c;
+            triangle++;
+            mesh.indices[triangle*3 + 0] = b;
+            mesh.indices[triangle*3 + 1] = d;
+            mesh.indices[triangle*3 + 2] = c;
+            triangle++;
+        }
+    UploadMesh(&mesh, false);
+    return mesh;
+}
+
+// Open cylinder shell for light shafts: radius 1, y 0..1, no caps.
+static Mesh MakeColumnMesh(void)
+{
+    const int slices = 16;
+    int vertexCount = (slices + 1)*2;
+    int triangleCount = slices*2;
+
+    Mesh mesh = { 0 };
+    mesh.vertexCount = vertexCount;
+    mesh.triangleCount = triangleCount;
+    mesh.vertices = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.normals = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.texcoords = malloc((size_t)vertexCount*2*sizeof(float));
+    mesh.indices = malloc((size_t)triangleCount*3*sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices)
+        return (Mesh){ 0 };
+
+    for (int ring = 0; ring <= 1; ring++)
+        for (int slice = 0; slice <= slices; slice++)
+        {
+            float u = slice/(float)slices;
+            float a = u*PI*2.0f;
+            int index = ring*(slices + 1) + slice;
+            mesh.vertices[index*3 + 0] = sinf(a);
+            mesh.vertices[index*3 + 1] = (float)ring;
+            mesh.vertices[index*3 + 2] = cosf(a);
+            mesh.normals[index*3 + 0] = sinf(a);
+            mesh.normals[index*3 + 1] = 0.0f;
+            mesh.normals[index*3 + 2] = cosf(a);
+            mesh.texcoords[index*2 + 0] = u;
+            mesh.texcoords[index*2 + 1] = (float)ring;
+        }
+    int triangle = 0;
+    for (int slice = 0; slice < slices; slice++)
+    {
+        unsigned short a = (unsigned short)slice;
+        unsigned short b = (unsigned short)(slice + 1);
+        unsigned short c = (unsigned short)(slice + slices + 1);
+        unsigned short d = (unsigned short)(c + 1);
+        mesh.indices[triangle*3 + 0] = a;
+        mesh.indices[triangle*3 + 1] = b;
+        mesh.indices[triangle*3 + 2] = c;
+        triangle++;
+        mesh.indices[triangle*3 + 0] = b;
+        mesh.indices[triangle*3 + 1] = d;
+        mesh.indices[triangle*3 + 2] = c;
+        triangle++;
+    }
+    UploadMesh(&mesh, false);
+    return mesh;
+}
+
 void GeneratedAssetsLoad(Assets *assets)
 {
     assets->grassBlade = MakeGrassBlade();
@@ -534,4 +647,6 @@ void GeneratedAssetsLoad(Assets *assets)
     assets->texStarfield = MakeTexture(512, StarfieldPixel, true);
     assets->texPlanet = MakeTexture(512, PlanetPixel, true);
     assets->shieldArc = MakeShieldArcMesh();
+    assets->dome = MakeDomeMesh();
+    assets->column = MakeColumnMesh();
 }

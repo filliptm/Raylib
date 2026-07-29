@@ -29,5 +29,13 @@ void GameEmitAttackCast(GameSession *session, int abilityIndex, int brawlerIndex
                         Vector3 position, float angle, Color color);
 void GameEmitAttackImpact(GameSession *session, int abilityIndex,
                           Vector3 position, float angle, Color color);
+// `type` selects among the field/mark attack events; radius is the field's
+// current radius and life the remaining/total lifetime for loop layers.
+void GameEmitAttackField(GameSession *session, GameEventType type,
+                         int abilityIndex, Vector3 position, float radius,
+                         float life);
+void GameEmitAttackMark(GameSession *session, GameEventType type,
+                        int abilityIndex, int targetBrawler, Vector3 position,
+                        float life, Color color);
 
 #endif

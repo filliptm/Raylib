@@ -178,13 +178,11 @@ static void BankResult(App *w)
 
 int main(void)
 {
-    // Configuration loads before the window exists so presentation flags can follow
-    // it: with post-processing on, the scene renders into a non-multisampled FBO,
-    // where an MSAA backbuffer only taxes the fullscreen blit.
+    // The supersampled post target stabilizes the normal world path. Backbuffer MSAA
+    // remains enabled for post-off rendering, resize settling, and target failures.
     ConfigInitialize(&world);
 
-    unsigned int flags = FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE;
-    if (!world.tune.postFx) flags |= FLAG_MSAA_4X_HINT;
+    unsigned int flags = FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
     SetConfigFlags(flags);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
     SetWindowMinSize(960, 600);
@@ -219,13 +217,15 @@ int main(void)
                                attackStatus, (int)sizeof(attackStatus)))
         TraceLog(LOG_WARNING, "Attack draft: %s", attackStatus);
 
-    AssetsLoad(&assets, GetScreenWidth(), GetScreenHeight());
+    AssetsLoad(&assets, GetScreenWidth(), GetScreenHeight(), world.tune.renderScale);
     RenderSetAssets(&assets);
     MenuInit(&assets, &ui);
 
     ResetMatch(&world, (BrawlerClass)world.tune.selectedKit);
     world.flow.screen = SCREEN_MENU;
 
+    float resizeSettle = -1.0f;
+    float requestedRenderScale = world.tune.renderScale;
     while (!WindowShouldClose() && !world.flow.quitRequested)
     {
         float realDt = GetFrameTime();
@@ -236,13 +236,18 @@ int main(void)
         // A live drag-resize reports a new size every frame; rebuilding the scene
         // framebuffer each time hitched the whole drag. The target is recreated once
         // the size has settled, with direct rendering (no post) covering the gap.
-        static float resizeSettle = -1.0f;
         if (IsWindowResized()) resizeSettle = 0.15f;
+        if (fabsf(world.tune.renderScale - requestedRenderScale) > 0.0005f)
+        {
+            requestedRenderScale = world.tune.renderScale;
+            resizeSettle = 0.15f;
+        }
         if (resizeSettle >= 0.0f)
         {
             resizeSettle -= realDt;
             if (resizeSettle < 0.0f)
-                AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight());
+                AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight(),
+                                     requestedRenderScale);
         }
 
         ShellUpdate(&world, realDt);
@@ -345,6 +350,8 @@ int main(void)
         {
             bool usePost = world.tune.postFx && assets.postOk &&
                            assets.sceneTarget.texture.id > 0 &&
+                           assets.sceneOutputWidth == GetScreenWidth() &&
+                           assets.sceneOutputHeight == GetScreenHeight() &&
                            resizeSettle < 0.0f;
 
             if (usePost)
@@ -362,10 +369,14 @@ int main(void)
                     BeginShaderMode(assets.post);
                         if (assets.depthOk)
                             SetShaderValueTexture(assets.post, assets.locDepthTex, assets.sceneTarget.depth);
-                        DrawTextureRec(assets.sceneTarget.texture,
-                                       (Rectangle){ 0, 0, (float)assets.sceneTarget.texture.width,
+                        DrawTexturePro(assets.sceneTarget.texture,
+                                       (Rectangle){ 0, 0,
+                                                    (float)assets.sceneTarget.texture.width,
                                                     -(float)assets.sceneTarget.texture.height },
-                                       (Vector2){ 0, 0 }, WHITE);
+                                       (Rectangle){ 0, 0,
+                                                    (float)GetScreenWidth(),
+                                                    (float)GetScreenHeight() },
+                                       (Vector2){ 0, 0 }, 0.0f, WHITE);
                     EndShaderMode();
                     DrawOverlays(&world);
                     ShellDrawFade(&world);

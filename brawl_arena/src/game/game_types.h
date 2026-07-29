@@ -46,6 +46,7 @@ typedef struct StatusEffect {
     int healing;
     int source;
     Team sourceTeam;
+    int abilityIndex;       // ability that applied this mark, -1 if untracked
     bool active;
 } StatusEffect;
 
@@ -182,6 +183,7 @@ typedef struct AbilityField {
     Team team;
     int owner;
     AbilityFieldType type;
+    int abilityIndex;       // ability that spawned this field, -1 if untracked
     bool armed;
     bool active;
 } AbilityField;
@@ -227,7 +229,12 @@ typedef enum {
     GAME_EVENT_MATCH_SHAKE,
     // Authored-attack anchors: presentation resolves the ability's document.
     GAME_EVENT_ATTACK_CAST,
-    GAME_EVENT_ATTACK_IMPACT
+    GAME_EVENT_ATTACK_IMPACT,
+    GAME_EVENT_ATTACK_FIELD_START,
+    GAME_EVENT_ATTACK_FIELD_PULSE,
+    GAME_EVENT_ATTACK_FIELD_END,
+    GAME_EVENT_ATTACK_MARK_APPLIED,
+    GAME_EVENT_ATTACK_MARK_TICK
 } GameEventType;
 
 typedef struct GameEvent {

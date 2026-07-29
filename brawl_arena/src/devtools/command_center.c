@@ -414,6 +414,7 @@ static void TabStyle(CommandUi *ui)
 
     CommandUiSection(ui, "MASTER");
     CommandUiToggle(ui, "Post effects", &t->postFx);
+    CommandUiSliderF(ui, "World render scale", &t->renderScale, 1.0f, 2.0f, "%.2fx");
     if (!t->postFx)
     {
         CommandUiText(ui, "Everything below needs the post pass on.", COMMAND_TEXT_DIM);
@@ -451,6 +452,7 @@ static void TabStyle(CommandUi *ui)
     {
         const Tuning *p = &w->config.projectTuning;
         t->postFx = p->postFx;
+        t->renderScale = p->renderScale;
         t->toon = p->toon;
         t->toonBands = p->toonBands;
         t->toonOutline = p->toonOutline;

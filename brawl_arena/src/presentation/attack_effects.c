@@ -25,8 +25,25 @@ static AttackParticle *AllocParticle(PresentationState *p)
 }
 
 static void SpawnFromLayer(PresentationState *p, const AttackEffectLayer *layer,
-                           Vector3 origin, float yaw, int followBrawler)
+                           Vector3 origin, float yaw, int followBrawler,
+                           float fieldRadius, float lifeOverride,
+                           Color eventColor)
 {
+    Color colorStart = layer->colorStart;
+    Color colorEnd = layer->colorEnd;
+    if (layer->useEventColor)
+    {
+        // The event supplies the RGB identity; the layer keeps its alpha ramp.
+        colorStart = (Color){ eventColor.r, eventColor.g, eventColor.b,
+                              layer->colorStart.a };
+        colorEnd = (Color){ eventColor.r, eventColor.g, eventColor.b,
+                            layer->colorEnd.a };
+    }
+
+    float duration = layer->duration;
+    if (layer->loop && lifeOverride > 0.0f) duration = lifeOverride;
+    float scaleMul = (layer->fitField && fieldRadius > 0.0f) ? fieldRadius : 1.0f;
+
     Vector3 forward = { sinf(yaw), 0.0f, cosf(yaw) };
     Vector3 side = { cosf(yaw), 0.0f, -sinf(yaw) };
     Vector3 base = Vector3Add(origin,
@@ -74,11 +91,11 @@ static void SpawnFromLayer(PresentationState *p, const AttackEffectLayer *layer,
             .drag = layer->drag,
             .delay = layer->delay,
             .age = 0.0f,
-            .duration = layer->duration,
-            .scaleStart = layer->scaleStart,
-            .scaleEnd = layer->scaleEnd,
-            .colorStart = layer->colorStart,
-            .colorEnd = layer->colorEnd,
+            .duration = duration,
+            .scaleStart = layer->scaleStart*scaleMul,
+            .scaleEnd = layer->scaleEnd*scaleMul,
+            .colorStart = colorStart,
+            .colorEnd = colorEnd,
             .blend = layer->blend,
             .rotation = layer->rotateSpeed != 0.0f ? Rand01()*360.0f : 0.0f,
             .rotateSpeed = layer->rotateSpeed,
@@ -95,15 +112,20 @@ static void SpawnFromLayer(PresentationState *p, const AttackEffectLayer *layer,
 }
 
 void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
-                   Vector3 origin, float yaw, int followBrawler)
+                   Vector3 origin, float yaw, int followBrawler,
+                   float fieldRadius, float lifeOverride, Color eventColor)
 {
     if (!doc || !doc->authored) return;
+    bool follows = anchor == ATTACK_ANCHOR_SELF ||
+                   anchor == ATTACK_ANCHOR_MARK_APPLIED ||
+                   anchor == ATTACK_ANCHOR_MARK_TICK;
     for (int i = 0; i < MAX_ATTACK_LAYERS; i++)
     {
         const AttackEffectLayer *layer = &doc->layers[i];
         if (!layer->used || layer->anchor != anchor) continue;
         SpawnFromLayer(&w->presentation, layer, origin, yaw,
-                       layer->anchor == ATTACK_ANCHOR_SELF ? followBrawler : -1);
+                       follows ? followBrawler : -1, fieldRadius, lifeOverride,
+                       eventColor);
     }
 }
 
@@ -172,7 +194,8 @@ static void UpdateProjectileVisuals(App *w, float dt)
                     const AttackEffectLayer *def = &doc->layers[layer];
                     if (!def->used || def->anchor != ATTACK_ANCHOR_PROJECTILE)
                         continue;
-                    SpawnFromLayer(&w->presentation, def, p->position, yaw, -1);
+                    SpawnFromLayer(&w->presentation, def, p->position, yaw, -1,
+                                   0.0f, 0.0f, p->color);
                 }
                 trail->emitTimer = 0.045f;
             }
@@ -390,6 +413,16 @@ void AttackFxDrawSolid(App *w, Assets *a)
             case ATTACK_SHAPE_ORB:
                 mesh = a->sphere;
                 m = MatrixMultiply(MatrixScale(size*0.5f, size*0.5f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_DOME:
+                mesh = a->dome;
+                m = MatrixMultiply(MatrixScale(size*0.5f, size*0.42f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_COLUMN:
+                mesh = a->column;
+                m = MatrixMultiply(MatrixScale(size*0.35f, size*2.2f, size*0.35f),
                                    MatrixRotateY(yaw));
                 break;
             default:    // ATTACK_SHAPE_DISC

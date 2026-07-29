@@ -252,7 +252,8 @@ static const char *FS_POST =
 "in vec4 fragColor;\n"
 "uniform sampler2D texture0;\n"
 "uniform sampler2D depthTex;\n"
-"uniform vec2 resolution;\n"
+"uniform vec2 sourceResolution;\n"
+"uniform vec2 outputResolution;\n"
 "uniform float bloomStrength;\n"
 "uniform float vignetteStrength;\n"
 "uniform float outlineStrength;\n"
@@ -280,7 +281,7 @@ static const char *FS_POST =
 "}\n"
 "vec3 sampleSceneAA(vec2 uv)\n"
 "{\n"
-"    vec2 px = 1.0/resolution;\n"
+"    vec2 px = 1.0/sourceResolution;\n"
 "    vec3 rgbNW = texture(texture0, uv + vec2(-1.0, -1.0)*px).rgb;\n"
 "    vec3 rgbNE = texture(texture0, uv + vec2( 1.0, -1.0)*px).rgb;\n"
 "    vec3 rgbSW = texture(texture0, uv + vec2(-1.0,  1.0)*px).rgb;\n"
@@ -313,7 +314,7 @@ static const char *FS_POST =
 "}\n"
 "vec3 kuwahara(vec2 uv)\n"                                 // painterly: pick the flattest quadrant
 "{\n"
-"    vec2 px = 1.0/resolution;\n"
+"    vec2 px = 1.0/outputResolution;\n"
 "    vec3 bestMean = vec3(0.0);\n"
 "    float bestVar = 1e9;\n"
 "    for (int q = 0; q < 4; q++)\n"
@@ -340,7 +341,7 @@ static const char *FS_POST =
 "    if (stylePixelate > 0.003)\n"                          // chunky retro blocks
 "    {\n"
 "        float block = 1.0 + stylePixelate*11.0;\n"
-"        uv = (floor(uv*resolution/block) + 0.5)*block/resolution;\n"
+"        uv = (floor(uv*outputResolution/block) + 0.5)*block/outputResolution;\n"
 "    }\n"
 "\n"
 "    vec3 base;\n"
@@ -359,7 +360,7 @@ static const char *FS_POST =
 "\n"
 "    if (bloomStrength > 0.001)\n"
 "    {\n"
-"        vec2 px = 1.0/resolution;\n"
+"        vec2 px = 1.0/outputResolution;\n"
 "        vec3 bloom = vec3(0.0);\n"
 "        for (int i = 0; i < 12; i++)\n"
 "        {\n"
@@ -382,7 +383,7 @@ static const char *FS_POST =
 "    if (styleHalftone > 0.003)\n"                          // comic shading dots in the darks
 "    {\n"
 "        float lum = dot(color, vec3(0.299, 0.587, 0.114));\n"
-"        vec2 p = mat2(0.707, -0.707, 0.707, 0.707)*(fragTexCoord*resolution/7.0);\n"
+"        vec2 p = mat2(0.707, -0.707, 0.707, 0.707)*(fragTexCoord*outputResolution/7.0);\n"
 "        float d = length(fract(p) - 0.5);\n"
 "        float radius = sqrt(clamp(1.0 - lum, 0.0, 1.0))*0.55;\n"
 "        float dot_ = smoothstep(radius, radius - 0.14, d);\n"
@@ -395,7 +396,7 @@ static const char *FS_POST =
 "\n"
 "    if (outlineStrength > 0.001)\n"                        // ink lines from depth edges
 "    {\n"
-"        vec2 px = 2.2/resolution;\n"
+"        vec2 px = 2.2/outputResolution;\n"
 "        float dc = linDepth(fragTexCoord);\n"
 "        float d = 0.0;\n"
 "        d = max(d, abs(linDepth(fragTexCoord + vec2(px.x, 0.0)) - dc));\n"
@@ -414,7 +415,7 @@ static const char *FS_POST =
 "\n"
 "    if (styleGrain > 0.003)\n"                             // temporally stable film grain
 "    {\n"
-"        float n = fract(sin(dot(floor(fragTexCoord*resolution),\n"
+"        float n = fract(sin(dot(floor(fragTexCoord*outputResolution),\n"
 "                                vec2(12.9898, 78.233)))*43758.5453);\n"
 "        color += (n - 0.5)*0.16*styleGrain;\n"
 "    }\n"
@@ -803,25 +804,56 @@ static void LoadStationAssets(Assets *a)
 }
 
 //------------------------------------------------------------------------------------
+static int ScaledSceneDimension(int outputSize, float renderScale)
+{
+    if (renderScale < 1.0f) renderScale = 1.0f;
+    if (renderScale > 2.0f) renderScale = 2.0f;
+    int scaled = (int)ceilf((float)outputSize*renderScale);
+    return scaled > outputSize ? scaled : outputSize;
+}
+
+static void UpdateSceneResolutionUniforms(Assets *a)
+{
+    if (!a->postOk || a->sceneTarget.texture.id == 0) return;
+
+    Vector2 source = {
+        (float)a->sceneTarget.texture.width,
+        (float)a->sceneTarget.texture.height
+    };
+    Vector2 output = {
+        (float)a->sceneOutputWidth,
+        (float)a->sceneOutputHeight
+    };
+    SetShaderValue(a->post, a->locSourceResolution, &source, SHADER_UNIFORM_VEC2);
+    SetShaderValue(a->post, a->locOutputResolution, &output, SHADER_UNIFORM_VEC2);
+}
+
 static void ReleaseSceneTarget(Assets *a)
 {
-    if (a->sceneTarget.id == 0) return;
-    if (a->depthOk)
+    if (a->sceneTarget.id != 0 && a->depthOk)
     {
         rlUnloadFramebuffer(a->sceneTarget.id);
         rlUnloadTexture(a->sceneTarget.texture.id);
         rlUnloadTexture(a->sceneTarget.depth.id);
     }
-    else UnloadRenderTexture(a->sceneTarget);
+    else if (a->sceneTarget.id != 0) UnloadRenderTexture(a->sceneTarget);
     a->sceneTarget = (RenderTexture2D){ 0 };
     a->depthOk = false;
+    a->sceneOutputWidth = 0;
+    a->sceneOutputHeight = 0;
+    a->sceneRenderScale = 0.0f;
 }
 
-static bool CreateSceneTarget(Assets *a, int screenW, int screenH)
+static bool CreateSceneTarget(Assets *a, int outputW, int outputH, float renderScale)
 {
     a->sceneTarget = (RenderTexture2D){ 0 };
     a->depthOk = false;
-    if (screenW < 1 || screenH < 1) return false;
+    if (outputW < 1 || outputH < 1) return false;
+
+    if (renderScale < 1.0f) renderScale = 1.0f;
+    if (renderScale > 2.0f) renderScale = 2.0f;
+    int targetW = ScaledSceneDimension(outputW, renderScale);
+    int targetH = ScaledSceneDimension(outputH, renderScale);
 
     // LoadRenderTexture uses a depth renderbuffer. The outline pass samples depth, so
     // prefer a hand-built target with a depth texture and keep a direct fallback.
@@ -829,15 +861,15 @@ static bool CreateSceneTarget(Assets *a, int screenW, int screenH)
     if (a->sceneTarget.id > 0)
     {
         rlEnableFramebuffer(a->sceneTarget.id);
-        a->sceneTarget.texture.id = rlLoadTexture(NULL, screenW, screenH,
+        a->sceneTarget.texture.id = rlLoadTexture(NULL, targetW, targetH,
                                                   PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-        a->sceneTarget.texture.width = screenW;
-        a->sceneTarget.texture.height = screenH;
+        a->sceneTarget.texture.width = targetW;
+        a->sceneTarget.texture.height = targetH;
         a->sceneTarget.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
         a->sceneTarget.texture.mipmaps = 1;
-        a->sceneTarget.depth.id = rlLoadTextureDepth(screenW, screenH, false);
-        a->sceneTarget.depth.width = screenW;
-        a->sceneTarget.depth.height = screenH;
+        a->sceneTarget.depth.id = rlLoadTextureDepth(targetW, targetH, false);
+        a->sceneTarget.depth.width = targetW;
+        a->sceneTarget.depth.height = targetH;
         a->sceneTarget.depth.mipmaps = 1;
         rlFramebufferAttach(a->sceneTarget.id, a->sceneTarget.texture.id,
                             RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
@@ -852,17 +884,25 @@ static bool CreateSceneTarget(Assets *a, int screenW, int screenH)
         if (a->sceneTarget.id > 0) rlUnloadFramebuffer(a->sceneTarget.id);
         if (a->sceneTarget.texture.id > 0) rlUnloadTexture(a->sceneTarget.texture.id);
         if (a->sceneTarget.depth.id > 0) rlUnloadTexture(a->sceneTarget.depth.id);
-        a->sceneTarget = LoadRenderTexture(screenW, screenH);
+        a->sceneTarget = LoadRenderTexture(targetW, targetH);
         TraceLog(LOG_WARNING, "TOON: depth texture unavailable, ink outlines disabled");
     }
     if (a->sceneTarget.texture.id == 0) return false;
+
+    a->sceneOutputWidth = outputW;
+    a->sceneOutputHeight = outputH;
+    a->sceneRenderScale = renderScale;
     SetTextureFilter(a->sceneTarget.texture, TEXTURE_FILTER_BILINEAR);
     SetTextureWrap(a->sceneTarget.texture, TEXTURE_WRAP_CLAMP);
     if (a->depthOk) SetTextureWrap(a->sceneTarget.depth, TEXTURE_WRAP_CLAMP);
+    UpdateSceneResolutionUniforms(a);
+    TraceLog(LOG_INFO, "POST: %dx%d output -> %dx%d scene target (%.2fx%s)",
+             outputW, outputH, targetW, targetH, renderScale,
+             a->depthOk ? ", sampleable depth" : "");
     return true;
 }
 
-bool AssetsLoad(Assets *a, int screenW, int screenH)
+bool AssetsLoad(Assets *a, int screenW, int screenH, float renderScale)
 {
     *a = (Assets){ 0 };
 
@@ -911,7 +951,8 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->postOk = (a->post.id > 0) && (a->post.locs != NULL);
     if (a->postOk)
     {
-        a->locResolution = GetShaderLocation(a->post, "resolution");
+        a->locSourceResolution = GetShaderLocation(a->post, "sourceResolution");
+        a->locOutputResolution = GetShaderLocation(a->post, "outputResolution");
         a->locBloom      = GetShaderLocation(a->post, "bloomStrength");
         a->locVignette   = GetShaderLocation(a->post, "vignetteStrength");
         a->locDepthTex   = GetShaderLocation(a->post, "depthTex");
@@ -929,8 +970,6 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->locExposure   = GetShaderLocation(a->post, "styleExposure");
         a->locTonemap    = GetShaderLocation(a->post, "styleTonemap");
 
-        Vector2 res = { (float)screenW, (float)screenH };
-        SetShaderValue(a->post, a->locResolution, &res, SHADER_UNIFORM_VEC2);
         SetShaderValue(a->post, a->locClipNear, &SCENE_CLIP_NEAR, SHADER_UNIFORM_FLOAT);
         SetShaderValue(a->post, a->locClipFar, &SCENE_CLIP_FAR, SHADER_UNIFORM_FLOAT);
     }
@@ -1062,7 +1101,7 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 
-    CreateSceneTarget(a, screenW, screenH);
+    AssetsResizeViewport(a, screenW, screenH, renderScale);
 
     return a->lightingOk;
 }
@@ -1083,6 +1122,8 @@ void AssetsUnload(Assets *a)
     UnloadMesh(a->cylinder);
     UnloadMesh(a->plane);
     UnloadMesh(a->shieldArc);
+    UnloadMesh(a->dome);
+    UnloadMesh(a->column);
     UnloadMesh(a->grassBlade);
 
     UnloadTexture(a->texFloor);
@@ -1126,13 +1167,33 @@ void AssetsUnload(Assets *a)
     if (a->skinnedOk) UnloadShader(a->skinned);
 }
 
-bool AssetsResizeViewport(Assets *a, int screenW, int screenH)
+bool AssetsResizeViewport(Assets *a, int screenW, int screenH, float renderScale)
 {
     if (!a || screenW < 1 || screenH < 1) return false;
-    if (a->sceneTarget.texture.width == screenW &&
-        a->sceneTarget.texture.height == screenH) return true;
+    if (renderScale < 1.0f) renderScale = 1.0f;
+    if (renderScale > 2.0f) renderScale = 2.0f;
+
+    int targetW = ScaledSceneDimension(screenW, renderScale);
+    int targetH = ScaledSceneDimension(screenH, renderScale);
+    if (a->sceneOutputWidth == screenW &&
+        a->sceneOutputHeight == screenH &&
+        a->sceneTarget.texture.width == targetW &&
+        a->sceneTarget.texture.height == targetH)
+    {
+        UpdateSceneResolutionUniforms(a);
+        return true;
+    }
+
     ReleaseSceneTarget(a);
-    bool ok = CreateSceneTarget(a, screenW, screenH);
+    bool ok = CreateSceneTarget(a, screenW, screenH, renderScale);
+    if (!ok && renderScale > 1.001f)
+    {
+        TraceLog(LOG_WARNING,
+                 "POST: %.2fx scene target failed; retrying at native resolution",
+                 renderScale);
+        ReleaseSceneTarget(a);
+        ok = CreateSceneTarget(a, screenW, screenH, 1.0f);
+    }
     if (!ok)
         TraceLog(LOG_WARNING, "POST: viewport target recreation failed; using direct render");
     return ok;
@@ -1397,6 +1458,30 @@ static void ApplyAuthoredMotions(const RiggedCharacter *character, Transform *po
                 RotatePoseSubtree(character, pose, character->boneSpine,
                                   QuaternionFromEuler(0.40f*a, 0.0f, 0.0f), weight);
                 break;
+            case ATTACK_MOTION_RAISE_BOTH:
+                AimPoseArm(character, pose, character->boneLeftShoulder,
+                           character->boneLeftHand,
+                           (Vector3){ -0.22f, 0.40f + 0.45f*a, 0.72f }, weight);
+                AimPoseArm(character, pose, character->boneRightShoulder,
+                           character->boneRightHand,
+                           (Vector3){ 0.22f, 0.40f + 0.45f*a, 0.72f }, weight);
+                break;
+            case ATTACK_MOTION_CONDUCT:
+            {
+                // Both arms high with a slow opposing sway, plus a gentle
+                // lean-back: the conductor pose.
+                float sway = sinf(t*PI*2.0f)*0.28f*a;
+                AimPoseArm(character, pose, character->boneLeftShoulder,
+                           character->boneLeftHand,
+                           (Vector3){ -0.30f + sway, 0.85f*a, 0.55f }, weight);
+                AimPoseArm(character, pose, character->boneRightShoulder,
+                           character->boneRightHand,
+                           (Vector3){ 0.30f + sway, 0.85f*a, 0.55f }, weight);
+                RotatePoseSubtree(character, pose, character->boneSpine,
+                                  QuaternionFromEuler(-0.14f*a, 0.0f, 0.0f),
+                                  weight);
+                break;
+            }
             default: break;
         }
     }

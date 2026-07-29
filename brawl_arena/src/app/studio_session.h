@@ -22,6 +22,7 @@ typedef struct StudioSession {
     float castTimer;
     float dummyDistance;
     bool dummyEnabled;
+    bool allyEnabled;       // a friendly dummy held at low health, for heal work
     bool paused;
     float timeScale;
     float pendingStep;      // one queued simulated step while paused

@@ -28,7 +28,8 @@ void BrawlerAwardSuper(GameContext game, int idx, float amount);
 // allies and damage-over-time on enemies; future abilities reuse it without new actor
 // fields.
 void BrawlerApplyPulseStatus(GameContext game, int idx, Team sourceTeam, int source,
-                             int damage, int healing, float duration, float tickRate);
+                             int damage, int healing, float duration, float tickRate,
+                             int abilityIndex);
 
 // True when the attack actually went off (ammo and cooldown allowing).
 bool BrawlerTryAttack(GameContext game, int idx, float aimDist);

@@ -278,6 +278,7 @@ typedef struct Tuning {
     float backdropBrightness;
     float matchCameraDistance;
     bool postFx;
+    float renderScale;
     float bloom;
     int selectedKit;
     int statWins;

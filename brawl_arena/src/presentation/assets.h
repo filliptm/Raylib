@@ -103,7 +103,8 @@ typedef struct Assets {
     bool litStateValid;
 
     // post uniforms
-    int locResolution, locBloom, locVignette, locDepthTex, locOutline;
+    int locSourceResolution, locOutputResolution;
+    int locBloom, locVignette, locDepthTex, locOutline;
     int locClipNear, locClipFar;
     int locStyleTime, locPixelate, locPainterly, locHalftone, locPosterize;
     int locGrain, locCA, locSaturation, locBrightness;
@@ -152,6 +153,8 @@ typedef struct Assets {
     Mesh cylinder;  // radius 1, height 1, base at y=0
     Mesh plane;     // 1x1 on the XZ plane
     Mesh shieldArc; // curved double-sided plate facing +Z, for shield effects
+    Mesh dome;      // hemisphere shell, base at y=0, for sanctuary fields
+    Mesh column;    // open cylinder shell, y 0..1, for light shafts
 
     Material mat;   // shared material bound to the lighting shader
 
@@ -173,11 +176,14 @@ typedef struct Assets {
     bool vfxAtlasesOk[VFX_ATLAS_COUNT];
 
     RenderTexture2D sceneTarget;
+    int sceneOutputWidth;
+    int sceneOutputHeight;
+    float sceneRenderScale;
 } Assets;
 
-bool AssetsLoad(Assets *a, int screenW, int screenH);
+bool AssetsLoad(Assets *a, int screenW, int screenH, float renderScale);
 void AssetsUnload(Assets *a);
-bool AssetsResizeViewport(Assets *a, int screenW, int screenH);
+bool AssetsResizeViewport(Assets *a, int screenW, int screenH, float renderScale);
 
 // Drops and reloads the VFX flipbook atlases from disk, for the studio's
 // rebuild-and-reload flow. Safe when some atlases are missing.

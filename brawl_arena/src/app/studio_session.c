@@ -74,9 +74,17 @@ void StudioSessionEnter(App *app, StudioSession *studio)
 
     if (studio->dummyEnabled)
     {
-        BrawlerSpawn(game, 1, TEAM_ENEMY, STUDIO_DUMMY_CLASS,
-                     StudioDummySpot(studio), false);
-        app->session.brawlerCount = 2;
+        BrawlerSpawn(game, app->session.brawlerCount, TEAM_ENEMY,
+                     STUDIO_DUMMY_CLASS, StudioDummySpot(studio), false);
+        app->session.brawlerCount++;
+    }
+    if (studio->allyEnabled)
+    {
+        // Beside the enemy dummy so fields and cones catch both teams at once.
+        Vector3 spot = { 2.4f, 0.0f, studio->dummyDistance*0.85f };
+        BrawlerSpawn(game, app->session.brawlerCount, TEAM_PLAYER,
+                     STUDIO_DUMMY_CLASS, spot, false);
+        app->session.brawlerCount++;
     }
 
     studio->castTimer = 0.6f;
@@ -165,13 +173,29 @@ float StudioSessionTick(App *app, StudioSession *studio, float realDt)
     ProjectilesUpdate(game, dt);
     ArenaUpdate(&app->session.arena, dt);
 
+    // The friendly dummy is held at low health so every heal pulse has something
+    // to restore; the spring-back keeps knockback readable without drift.
+    for (int i = 1; i < app->session.brawlerCount; i++)
+    {
+        Brawler *ally = &app->session.brawlers[i];
+        if (ally->team != TEAM_PLAYER) continue;
+        if (!ally->alive)
+            BrawlerSpawn(game, i, TEAM_PLAYER, STUDIO_DUMMY_CLASS,
+                         (Vector3){ 2.4f, 0.0f, studio->dummyDistance*0.85f },
+                         false);
+        int floor = (int)(ally->maxHealth*0.45f);
+        if (ally->health > floor) ally->health = floor;
+        ally->moveIntent = (Vector3){ 0 };
+    }
+
     // The dummy soaks hits forever: stand it back up if a burst finished it and
     // top it up after the damage numbers have already been emitted.
-    if (studio->dummyEnabled && app->session.brawlerCount > 1)
+    for (int i = 1; studio->dummyEnabled && i < app->session.brawlerCount; i++)
     {
-        Brawler *dummy = &app->session.brawlers[1];
+        Brawler *dummy = &app->session.brawlers[i];
+        if (dummy->team != TEAM_ENEMY) continue;
         if (!dummy->alive)
-            BrawlerSpawn(game, 1, TEAM_ENEMY, STUDIO_DUMMY_CLASS,
+            BrawlerSpawn(game, i, TEAM_ENEMY, STUDIO_DUMMY_CLASS,
                          StudioDummySpot(studio), false);
         else dummy->health = dummy->maxHealth;
         dummy->moveIntent = (Vector3){ 0 };

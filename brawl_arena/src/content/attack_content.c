@@ -6,18 +6,19 @@
 #include <string.h>
 
 static const char *ANCHOR_NAMES[ATTACK_ANCHOR_COUNT] = {
-    "cast", "self", "projectile", "impact"
+    "cast", "self", "projectile", "impact",
+    "field_start", "field_pulse", "field_end", "mark_applied", "mark_tick"
 };
 static const char *PATTERN_NAMES[ATTACK_PATTERN_COUNT] = {
     "single", "burst", "ring", "cone"
 };
 static const char *BLEND_NAMES[ATTACK_BLEND_COUNT] = { "alpha", "additive" };
 static const char *SHAPE_NAMES[ATTACK_SHAPE_COUNT] = {
-    "sprite", "shield", "orb", "disc"
+    "sprite", "shield", "orb", "disc", "dome", "column"
 };
 static const char *MOTION_NAMES[ATTACK_MOTION_COUNT] = {
     "none", "recoil", "raise_right", "raise_left", "swing_right",
-    "twist", "slam", "lean"
+    "twist", "slam", "lean", "raise_both", "conduct"
 };
 
 static int NameIndex(const char *value, const char **names, int count)
@@ -66,7 +67,10 @@ static AttackEffectLayer DefaultLayer(void)
         .rotateSpeed = 0.0f,
         .ground = false,
         .shape = ATTACK_SHAPE_SPRITE,
-        .emissive = 0.55f
+        .emissive = 0.55f,
+        .loop = false,
+        .fitField = false,
+        .useEventColor = false
     };
 }
 
@@ -297,6 +301,9 @@ static void AssignLayerField(AttackEffectLayer *layer, const char *key, const ch
              (named = NameIndex(value, SHAPE_NAMES, ATTACK_SHAPE_COUNT)) >= 0)
         layer->shape = named;
     else if (strcmp(key, "emissive") == 0) layer->emissive = (float)atof(value);
+    else if (strcmp(key, "loop") == 0) layer->loop = atoi(value) != 0;
+    else if (strcmp(key, "fit") == 0) layer->fitField = atoi(value) != 0;
+    else if (strcmp(key, "usecolor") == 0) layer->useEventColor = atoi(value) != 0;
     else if (ParseColorField(key, value, "c0", &layer->colorStart)) { }
     else if (ParseColorField(key, value, "c1", &layer->colorEnd)) { }
 }
@@ -443,7 +450,7 @@ static void WriteLayer(FILE *file, int index, const AttackEffectLayer *layer)
             "count=%d delay=%g duration=%g forward=%g up=%g side=%g spread=%g "
             "speed=%g gravity=%g drag=%g scale0=%g scale1=%g "
             "c0r=%d c0g=%d c0b=%d c0a=%d c1r=%d c1g=%d c1b=%d c1a=%d "
-            "blend=%s rotate=%g ground=%d shape=%s emissive=%g\n",
+            "blend=%s rotate=%g ground=%d shape=%s emissive=%g loop=%d fit=%d usecolor=%d\n",
             index, ANCHOR_NAMES[layer->anchor], layer->atlas, layer->frame,
             layer->frameCount, layer->fps, PATTERN_NAMES[layer->pattern],
             layer->count, layer->delay, layer->duration, layer->forward,
@@ -453,7 +460,9 @@ static void WriteLayer(FILE *file, int index, const AttackEffectLayer *layer)
             layer->colorStart.a, layer->colorEnd.r, layer->colorEnd.g,
             layer->colorEnd.b, layer->colorEnd.a, BLEND_NAMES[layer->blend],
             layer->rotateSpeed, layer->ground ? 1 : 0,
-            SHAPE_NAMES[layer->shape], layer->emissive);
+            SHAPE_NAMES[layer->shape], layer->emissive,
+            layer->loop ? 1 : 0, layer->fitField ? 1 : 0,
+            layer->useEventColor ? 1 : 0);
 }
 
 bool AttackContentSaveFile(const ContentCatalog *catalog, const char *path,
