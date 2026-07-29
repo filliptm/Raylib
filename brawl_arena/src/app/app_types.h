@@ -9,6 +9,7 @@ typedef enum {
     SCREEN_MENU = 0,
     SCREEN_BRAWLERS,
     SCREEN_MATCH,
+    SCREEN_STUDIO,
     SCREEN_COUNT
 } AppScreen;
 

@@ -211,6 +211,10 @@ static void DrawHome(App *w)
     UiDrawSignalRail(launch, t->safety, false);
 
     UiDrawText(UI_TEXT_CAPTION, "ACTIVE BRAWLER // CHANGE", UiRefPoint(48, 658), accent);
+    UiResponse studio = UiButton(UiHash("home.studio"), UiRefRect(346, 678, 158, 72),
+                                 "VFX Studio", UI_BUTTON_UTILITY, (UiIcon)-1);
+    if (studio.activated) ShellRequestScreen(w, SCREEN_STUDIO);
+
     UiResponse roster = UiButton(UiHash("home.roster"), UiRefRect(46, 678, 276, 72),
                                  character->displayName, UI_BUTTON_STANDARD, UI_ICON_NEXT);
     if (roster.activated) ShellRequestScreen(w, SCREEN_BRAWLERS);

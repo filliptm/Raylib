@@ -20,6 +20,7 @@
 #include "effects.h"
 #include "hud.h"
 #include "command_center.h"
+#include "studio.h"
 #include "assets.h"
 #include "character_animation.h"
 #include "config.h"
@@ -147,6 +148,14 @@ static void ResetMatch(App *w, BrawlerClass playerClass)
 
 static void DrawOverlays(App *w)
 {
+    if (w->flow.screen == SCREEN_STUDIO)
+    {
+        // The studio keeps damage numbers (they read impact timing) but replaces
+        // the match HUD and command center with its own panels.
+        FxDrawScreen(w);
+        StudioDraw(w);
+        return;
+    }
     HudDrawBars(w);
     FxDrawScreen(w);
     HudDrawPanel(w);
@@ -235,6 +244,7 @@ int main(void)
                      CommandCenterConsumeEscape()) { }
             else if (world.flow.screen == SCREEN_BRAWLERS) ShellRequestScreen(&world, SCREEN_MENU);
             else if (world.flow.screen == SCREEN_MATCH) ShellRequestScreen(&world, SCREEN_MENU);
+            else if (world.flow.screen == SCREEN_STUDIO) ShellRequestScreen(&world, SCREEN_MENU);
             else world.flow.quitRequested = true;
         }
 
@@ -295,6 +305,19 @@ int main(void)
                     ShellRequestScreen(&world, SCREEN_MENU);
             }
         }
+        else if (world.flow.screen == SCREEN_STUDIO)
+        {
+            // The studio owns its own clock (slow motion, pause, stepping); the
+            // presentation consumers follow the same simulated dt so effects and
+            // animation scrub with the stage instead of wall time.
+            float studioDt = StudioFrame(&world, locked ? 0.0f : realDt);
+            FxConsumeGameEvents(&world);
+            FxUpdate(&world, studioDt);
+            CharacterAnimationsUpdate(&world.presentation, &assets,
+                                      world.session.brawlers,
+                                      world.session.brawlerCount,
+                                      world.tune.moveSpeed, studioDt);
+        }
         else
         {
             world.session.time += realDt;
@@ -305,7 +328,7 @@ int main(void)
         ConfigAutoSave(&world, realDt);
 
         //--- Present -------------------------------------------------------------
-        if (world.flow.screen == SCREEN_MATCH)
+        if (world.flow.screen == SCREEN_MATCH || world.flow.screen == SCREEN_STUDIO)
         {
             bool usePost = world.tune.postFx && assets.postOk &&
                            assets.sceneTarget.texture.id > 0 &&
