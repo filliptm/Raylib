@@ -6,6 +6,7 @@
 #include "raymath.h"
 #include "game_random.h"
 #include "content_catalog.h"
+#include "attack_content.h"
 #include <stdio.h>
 #include <math.h>
 
@@ -409,6 +410,20 @@ Vector3 BrawlerGrappleEndpoint(const Arena *arena, Vector3 start,
     return endpoint;
 }
 
+
+// Authored secondary abilities get a cast anchor on top of their legacy VFX, so
+// the studio can layer additional effects onto shields, dashes, grapples, and
+// mines without the game losing its built-in presentation.
+static void EmitSecondaryCast(GameContext w, int idx,
+                              const CharacterDefinition *character)
+{
+    Brawler *b = &w.session->brawlers[idx];
+    if (!AttackAuthored(w.content, character->mobilityAbility)) return;
+    GameEmitAttackCast(w.session, character->mobilityAbility, idx,
+                       (Vector3){ b->position.x, 0.85f, b->position.z },
+                       b->aimAngle, (Color){ 255, 255, 255, 255 });
+}
+
 bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
 {
     if (idx < 0 || idx >= w.session->brawlerCount) return false;
@@ -439,6 +454,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
             b->aimAngle, 1.35f, (Color){ 104, 226, 255, 255 },
             idx, VFX_SOCKET_CHEST, -1, VFX_SOCKET_NONE);
         GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_GUARD);
+        EmitSecondaryCast(w, idx, character);
         return true;
     }
 
@@ -474,6 +490,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
             w.session, idx, CHARACTER_ACTION_GRAPPLE,
             ability->data.grapple.launchDelay +
             ability->data.grapple.pullDuration + 0.18f);
+        EmitSecondaryCast(w, idx, character);
         return true;
     }
 
@@ -486,6 +503,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
         GameEmitCharacterActionTimed(
             w.session, idx, CHARACTER_ACTION_MINE_DEPLOY,
             ability->data.mine.armTime + 0.27f);
+        EmitSecondaryCast(w, idx, character);
         return true;
     }
 
@@ -520,6 +538,7 @@ bool BrawlerTrySecondary(GameContext w, int idx, Vector3 direction)
         (Color){ 92, 220, 255, 255 },
         idx, VFX_SOCKET_RIGHT_SHOULDER, -1, VFX_SOCKET_NONE);
     GameEmitCharacterAction(w.session, idx, CHARACTER_ACTION_MOBILITY);
+    EmitSecondaryCast(w, idx, character);
     return true;
 }
 
