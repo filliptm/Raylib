@@ -196,6 +196,12 @@ static void DrawHome(App *w)
     UiDrawText(UI_TEXT_CAPTION, "HELIOS-9 // LIVE DEPLOYMENT",
                UiRefPoint(48, 96), t->ion);
 
+    // Sits in the free strip between the title block and the utility cluster; the
+    // bottom row is fully occupied by the roster/mode/deploy panels.
+    UiResponse studio = UiButton(UiHash("home.studio"), UiRefRect(660, 34, 148, 52),
+                                 "VFX Studio", UI_BUTTON_UTILITY, UI_ICON_PRACTICE);
+    if (studio.activated) ShellRequestScreen(w, SCREEN_STUDIO);
+
     UiResponse controls = UiButton(UiHash("home.controls"), UiRefRect(824, 34, 132, 52),
                                    "Controls", UI_BUTTON_UTILITY, UI_ICON_CONTROLS);
     if (controls.activated) OpenOverlay(MENU_OVERLAY_CONTROLS, UiHash("home.controls"));
@@ -211,9 +217,6 @@ static void DrawHome(App *w)
     UiDrawSignalRail(launch, t->safety, false);
 
     UiDrawText(UI_TEXT_CAPTION, "ACTIVE BRAWLER // CHANGE", UiRefPoint(48, 658), accent);
-    UiResponse studio = UiButton(UiHash("home.studio"), UiRefRect(346, 678, 158, 72),
-                                 "VFX Studio", UI_BUTTON_UTILITY, (UiIcon)-1);
-    if (studio.activated) ShellRequestScreen(w, SCREEN_STUDIO);
 
     UiResponse roster = UiButton(UiHash("home.roster"), UiRefRect(46, 678, 276, 72),
                                  character->displayName, UI_BUTTON_STANDARD, UI_ICON_NEXT);
