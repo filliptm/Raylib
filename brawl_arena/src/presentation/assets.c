@@ -92,6 +92,18 @@ static void LoadVfxAtlases(Assets *assets)
     TraceLog(LOG_INFO, "VFX: loaded %d/%d runtime atlases", loaded, VFX_ATLAS_COUNT);
 }
 
+void AssetsReloadVfxAtlases(Assets *assets)
+{
+    for (int atlas = 0; atlas < VFX_ATLAS_COUNT; atlas++)
+    {
+        if (assets->vfxAtlasesOk[atlas] && assets->vfxAtlases[atlas].id > 0)
+            UnloadTexture(assets->vfxAtlases[atlas]);
+        assets->vfxAtlases[atlas] = (Texture2D){ 0 };
+        assets->vfxAtlasesOk[atlas] = false;
+    }
+    LoadVfxAtlases(assets);
+}
+
 //------------------------------------------------------------------------------------
 // Scene shader. Half-Lambert key light, cheap Blinn specular, a rim term to lift
 // silhouettes off the background, N point lights, and distance fog for depth.

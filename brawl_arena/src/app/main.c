@@ -154,7 +154,7 @@ static void DrawOverlays(App *w)
         // The studio keeps damage numbers (they read impact timing) but replaces
         // the match HUD and command center with its own panels.
         FxDrawScreen(w);
-        StudioDraw(w);
+        StudioDraw(w, &assets);
         return;
     }
     HudDrawBars(w);

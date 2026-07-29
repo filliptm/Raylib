@@ -4,10 +4,12 @@
 #include "attack_content.h"
 #include "command_widgets.h"
 #include "content_catalog.h"
+#include "vfx_catalog.h"
 #include "raylib.h"
 #include "raymath.h"
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 
 static StudioSession g_studio;      // loop configuration persists across visits
 static float g_orbitYaw = PI;
@@ -174,13 +176,67 @@ static void ColorEditor(CommandUi *ui, const char *label, Color *color)
     }
 }
 
-static void LayerEditor(CommandUi *ui, AttackEffectLayer *layer)
+// Clickable atlas grid: pick a layer's first frame visually.
+static void AtlasBrowser(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
+{
+    if (layer->atlas < 0 || layer->atlas >= VFX_ATLAS_COUNT) return;
+    Texture2D texture = assets->vfxAtlases[layer->atlas];
+    if (texture.id == 0)
+    {
+        CommandUiText(ui, "Atlas not loaded.", COMMAND_TEXT_DIM);
+        return;
+    }
+
+    int columns = 1, rows = 1, frames = 1;
+    VfxAtlasGrid((VfxAtlasId)layer->atlas, &columns, &rows, &frames);
+
+    float scale = fminf((float)ui->width/texture.width, 200.0f/texture.height);
+    Rectangle dest = { (float)ui->x, (float)ui->y,
+                       texture.width*scale, texture.height*scale };
+    DrawTexturePro(texture,
+                   (Rectangle){ 0, 0, (float)texture.width, (float)texture.height },
+                   dest, (Vector2){ 0, 0 }, 0.0f, WHITE);
+    DrawRectangleLinesEx(dest, 1.0f, COMMAND_PANEL_EDGE);
+
+    float cellW = dest.width/columns;
+    float cellH = dest.height/rows;
+    for (int c = 1; c < columns; c++)
+        DrawLineV((Vector2){ dest.x + c*cellW, dest.y },
+                  (Vector2){ dest.x + c*cellW, dest.y + dest.height },
+                  (Color){ 255, 255, 255, 40 });
+    for (int r = 1; r < rows; r++)
+        DrawLineV((Vector2){ dest.x, dest.y + r*cellH },
+                  (Vector2){ dest.x + dest.width, dest.y + r*cellH },
+                  (Color){ 255, 255, 255, 40 });
+
+    Rectangle current = { dest.x + (layer->frame%columns)*cellW,
+                          dest.y + (layer->frame/columns)*cellH, cellW, cellH };
+    DrawRectangleLinesEx(current, 2.0f, COMMAND_ACCENT);
+
+    Vector2 mouse = GetMousePosition();
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+        CheckCollisionPointRec(mouse, dest))
+    {
+        int cx = (int)((mouse.x - dest.x)/cellW);
+        int cz = (int)((mouse.y - dest.y)/cellH);
+        int frame = cz*columns + cx;
+        if (frame >= 0 && frame < frames)
+        {
+            layer->frame = frame;
+            MarkDraftDirty();
+        }
+    }
+    ui->y += (int)dest.height + 10;
+}
+
+static void LayerEditor(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
 {
     bool changed = false;
     changed |= CommandUiCycler(ui, "Anchor", &layer->anchor,
                                ATTACK_ANCHOR_COUNT, ANCHOR_LABELS);
     changed |= CommandUiCycler(ui, "Atlas", &layer->atlas,
                                MAX_ATTACK_ATLASES, ATLAS_LABELS);
+    AtlasBrowser(ui, assets, layer);
     changed |= CommandUiSliderI(ui, "First frame", &layer->frame, 0, 63);
     changed |= CommandUiSliderI(ui, "Frame count", &layer->frameCount, 1, 64);
     changed |= CommandUiSliderF(ui, "Flipbook fps", &layer->fps, 0.0f, 60.0f, "%.0f");
@@ -209,7 +265,7 @@ static void LayerEditor(CommandUi *ui, AttackEffectLayer *layer)
     ColorEditor(ui, "COLOR END", &layer->colorEnd);
 }
 
-static void DrawEditorPanel(App *w)
+static void DrawEditorPanel(App *w, Assets *assets)
 {
     float panelWidth = 372.0f;
     Rectangle panel = { GetScreenWidth() - panelWidth - 16.0f, 74.0f,
@@ -319,7 +375,7 @@ static void DrawEditorPanel(App *w)
                 if (doc->layers[i].used) { g_selectedLayer = i; break; }
         }
         if (doc->layers[g_selectedLayer].used)
-            LayerEditor(&ui, &doc->layers[g_selectedLayer]);
+            LayerEditor(&ui, assets, &doc->layers[g_selectedLayer]);
     }
 
     //--- Motions ------------------------------------------------------------------
@@ -379,6 +435,16 @@ static void DrawEditorPanel(App *w)
             SetStatus("Attack presentation saved to project.");
         else SetStatus(message);
     }
+    if (CommandUiButton(&ui, "Rebuild + reload atlases"))
+    {
+        // Runs the curated CC0 pipeline, then re-imports the textures without a
+        // restart, so new source art shows up in the browser immediately.
+        int result = system("python3 tools/build_vfx_assets.py "
+                            "--manifest data/vfx/asset_manifest.json");
+        AssetsReloadVfxAtlases(assets);
+        SetStatus(result == 0 ? "Atlases rebuilt and reloaded."
+                              : "Atlas rebuild failed; see console.");
+    }
     if (CommandUiButton(&ui, "Revert to project file"))
     {
         char message[160];
@@ -393,8 +459,106 @@ static void DrawEditorPanel(App *w)
     EndScissorMode();
 }
 
-void StudioDraw(App *w)
+// Bottom timeline: one row per used layer, block position = delay, width =
+// lifetime. Dragging a block slides its delay; the playhead tracks the loop.
+static void DrawTimeline(App *w)
+{
+    int abilityIndex = SelectedAbilityIndex(w);
+    if (abilityIndex < 0 || abilityIndex >= w->content.abilityCount) return;
+    AttackPresentation *doc = &w->content.attacks[abilityIndex];
+    if (!doc->authored) return;
+
+    float screenW = (float)GetScreenWidth();
+    float screenH = (float)GetScreenHeight();
+    Rectangle panel = { 404.0f, screenH - 150.0f, screenW - 808.0f, 134.0f };
+    if (panel.width < 320.0f) return;
+
+    DrawRectangleRec(panel, COMMAND_PANEL_BG);
+    DrawRectangleLinesEx(panel, 1.0f, COMMAND_PANEL_EDGE);
+    DrawText("TIMELINE  (drag a block to move its delay)",
+             (int)panel.x + 10, (int)panel.y + 6, 10, COMMAND_TEXT_DIM);
+
+    const float window = 2.0f;
+    float originX = panel.x + 10.0f;
+    float pxPerSec = (panel.width - 20.0f)/window;
+    for (int tick = 0; tick <= 4; tick++)
+    {
+        float x = originX + tick*0.5f*pxPerSec;
+        DrawLineV((Vector2){ x, panel.y + 20.0f },
+                  (Vector2){ x, panel.y + panel.height - 6.0f },
+                  (Color){ 255, 255, 255, 26 });
+        DrawText(TextFormat("%.1fs", tick*0.5f), (int)x + 2,
+                 (int)panel.y + 20, 10, COMMAND_TEXT_DIM);
+    }
+
+    static const Color ANCHOR_COLORS[ATTACK_ANCHOR_COUNT] = {
+        { 255, 196, 92, 255 },   // cast
+        { 120, 200, 255, 255 },  // self
+        { 190, 140, 255, 255 },  // projectile
+        { 255, 120, 140, 255 }   // impact
+    };
+
+    static int dragLayer = -1;
+    static float dragGrab = 0.0f;
+    Vector2 mouse = GetMousePosition();
+
+    int row = 0;
+    for (int i = 0; i < MAX_ATTACK_LAYERS; i++)
+    {
+        AttackEffectLayer *layer = &doc->layers[i];
+        if (!layer->used) continue;
+        float y = panel.y + 36.0f + row*11.0f;
+        Rectangle block = { originX + layer->delay*pxPerSec, y,
+                            fmaxf(layer->duration*pxPerSec, 6.0f), 9.0f };
+        if (block.x + block.width > panel.x + panel.width - 8.0f)
+            block.width = panel.x + panel.width - 8.0f - block.x;
+
+        Color color = ANCHOR_COLORS[layer->anchor];
+        if (i != g_selectedLayer) color.a = 150;
+        DrawRectangleRec(block, color);
+        if (i == g_selectedLayer)
+            DrawRectangleLinesEx((Rectangle){ block.x - 1, block.y - 1,
+                                              block.width + 2, block.height + 2 },
+                                 1.0f, COMMAND_ACCENT);
+
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
+            CheckCollisionPointRec(mouse, block))
+        {
+            g_selectedLayer = i;
+            dragLayer = i;
+            dragGrab = (mouse.x - originX)/pxPerSec - layer->delay;
+        }
+        row++;
+    }
+
+    if (dragLayer >= 0)
+    {
+        if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON))
+        {
+            dragLayer = -1;
+            MarkDraftDirty();
+        }
+        else if (doc->layers[dragLayer].used)
+        {
+            float delay = (mouse.x - originX)/pxPerSec - dragGrab;
+            doc->layers[dragLayer].delay = Clamp(delay, 0.0f, window);
+        }
+    }
+
+    // Playhead: seconds since the last cast, wrapped by the loop interval.
+    float age = g_studio.interval - g_studio.castTimer;
+    if (age >= 0.0f && age <= window)
+    {
+        float x = originX + age*pxPerSec;
+        DrawLineV((Vector2){ x, panel.y + 20.0f },
+                  (Vector2){ x, panel.y + panel.height - 6.0f },
+                  (Color){ 255, 255, 255, 170 });
+    }
+}
+
+void StudioDraw(App *w, Assets *assets)
 {
     DrawStagePanel(w);
-    DrawEditorPanel(w);
+    DrawEditorPanel(w, assets);
+    DrawTimeline(w);
 }
