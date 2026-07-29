@@ -551,7 +551,7 @@ The current roster contains five kits:
 | Kit | Role | Main attack | Ultimate |
 |---|---|---|---|
 | Scrapper | damage | returning Ripsaw that can hit once on each leg, plus renewable Magnetic Scrap Shell | returning crate-breaking Wrecking Disc with outbound pull and return knockback |
-| Longshot | marksman | range-scaled single projectile plus Shift Mag-Line Grapple | piercing Railgun |
+| Longshot | marksman | tightly paired range-scaled projectiles plus Shift Mag-Line Grapple | piercing Railgun |
 | Mortar | artillery | arcing splash shell plus Shift Concussion Mine | three-shell Barrage |
 | Tank | tank | short six-pellet burst that self-heals from actual damage, plus Shift Shoulder Jets | damaging crate-breaking Charge |
 | Guardian | support | growing rain field that repeatedly damages enemies and heals allies | wide Resonance cone that applies enemy damage-over-time or ally healing-over-time |
@@ -610,6 +610,8 @@ The headless suite covers:
 - Scrapper Ripsaw/Wrecking Disc outbound and return hits, cover policy, ownership,
   Magnetic Scrap Shell absorption/healing/recharge/break/rearm, and Fight-bot
   threat prediction/release.
+- Longshot twin-shot projectile count, combined damage and super gain, tight parallel
+  spacing, centered trajectory, and both-bolt hit behavior.
 - Longshot Mag-Line Grapple launch/pull timing, attack lock, cooldown, cover endpoint,
   and external-displacement cancellation.
 - Mortar Concussion Mine arming, ally filtering, line-of-sight, blast
@@ -873,6 +875,13 @@ overkill, blocked damage, crates, Charge, and overheal do not create extra susta
 Shoulder Jets is a non-damaging roughly four-unit boost on a 2.5-second cooldown. It
 stops on solid cover; Fight bots use it while closing meaningful gaps or retreating.
 Charge remains a separate super that damages, knocks back, and destroys crates.
+
+Longshot's tracked main attack spends one ammo cell to launch two zero-spread bolts on
+parallel lanes 0.22 world units apart. Each carries 625 base damage and 0.15 super
+charge, preserving the prior 1,250 combined damage and 0.30 combined charge when both
+connect; the existing 50%-to-100% travel-distance scaling applies per bolt. Its compiled
+recovery baseline follows the same split at 800 per bolt and 1,600 combined. The pair
+retains the single-beam aim preview rather than presenting itself as a spread weapon.
 
 Longshot's Mag-Line Grapple is a hold-and-release skill shot. Holding Shift/left bumper
 shows the exact cover-aware path and endpoint, a 10-world-unit maximum-range ring, and

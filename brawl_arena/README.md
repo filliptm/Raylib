@@ -78,7 +78,8 @@ is disabled so this navigation remains explicit.
 as a solid shape, matched to how the weapon behaves:
 
 - **A filled cone** for spread weapons, opening to the real spread angle.
-- **A thick beam** for single-shot weapons, returning saws, and the dash charge.
+- **A thick beam** for single-line weapons, Longshot's tight parallel pair, returning
+  saws, and the dash charge.
 - **A filled disc** for lobbed shots, one per shell, sitting where the splash will land —
   plus a dotted arc showing the flight path over any wall in between.
 - **A green target disc** for Guardian's growing rain field.
@@ -143,6 +144,13 @@ travels for 0.18 seconds at 22 world units per second (about four world units), 
 movement input first and current aim when stationary. It deals no damage, grants no
 invulnerability, stops on walls or crates, and cannot destroy cover. The charged Charge
 super remains the longer damaging dash that knocks enemies back and smashes crates.
+
+**Longshot twin shot.** One ammo cast launches two zero-spread bolts on parallel lanes
+only 0.22 world units apart, so the attack keeps the silhouette and aiming language of
+one precision round. In the tracked project tuning each bolt carries 625 base damage
+and 0.15 super charge, preserving the previous 1,250 combined damage and 0.30 combined
+charge when both connect; range scaling still applies independently to each bolt. The
+compiled recovery baseline uses the same split with 800 per bolt and 1,600 combined.
 
 **Longshot grapple.** Hold Shift/left bumper to aim Mag-Line Grapple, then release to
 launch it along the current aim direction. The ground preview draws the exact body-safe
@@ -490,7 +498,7 @@ is sufficient; repeated animation exports are not required):
 | Kit | HP | Attack | Super |
 |-----|----|--------|-------|
 | **SCRAPPER** | 3800 | `RIPSAW` — 700 out + 700 back; Shift Shell absorbs 1,200 damage from 360° and heals 30% absorbed | `WRECKING DISC` — 1,100 per leg, breaks crates, outbound pull, return knockback |
-| **LONGSHOT** | 2800 | Single shot, scales from 50% to 100% damage with travel distance; Shift Grapple pulls up to 10 units | `RAILGUN` — piercing, hits everyone in a line |
+| **LONGSHOT** | 2800 | Tight twin shot: two parallel 625-damage bolts, 1,250 combined, scaling from 50% to 100% with travel distance; Shift Grapple pulls up to 10 units | `RAILGUN` — piercing, hits everyone in a line |
 | **MORTAR** | 3200 | Arcing lob that clears walls; Shift plants a 400-damage Concussion Mine | `BARRAGE` — three shells in a fan |
 | **TANK** | 8009 | 6-pellet burst; heals about 49.9% of actual damage; Shift jets every 2.5s | `CHARGE` — dash that damages, knocks back and smashes crates |
 | **GUARDIAN** | 3400 | Growing 3.4-radius rain field; nine 255-damage/263-healing pulses over 1.35s | `RESONANCE` — 14-range, 90° sound-wave cone; six 220-heal or 180-damage ticks over 2.1s |
@@ -593,7 +601,8 @@ sandbox it started as, with the static training bots.
 - Mortar still uses the primitive fallback character.
 - Headless tests cover version-3 configuration plus v1/v2 migration, Guardian behavior,
   Tank sustain/mobility/Charge, Scrapper returning discs/Shell lifecycle/AI/cover/ownership,
-  Longshot Grapple timing/cover/cancellation, Mortar Mine
+  Longshot twin-shot damage/spacing/trajectory/charge and Grapple
+  timing/cover/cancellation, Mortar Mine
   arming/team/LOS/replacement/cleanup,
   out-of-combat regeneration timing and interruption, all-kit camera isolation, external
   maps, deterministic replay, events, presentation isolation, and deterministic

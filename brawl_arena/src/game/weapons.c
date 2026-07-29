@@ -428,11 +428,21 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
 
     for (int i = 0; i < pellets; i++)
     {
-        // Fan the pellets evenly, then add a touch of scatter so it feels organic.
+        // Non-zero spread fans pellets evenly and adds a touch of organic scatter.
+        // Zero-spread pairs use parallel lanes instead of occupying the same pixels:
+        // a 1.1-radius center gap keeps Longshot's two bolts visibly distinct while
+        // their silhouettes still overlap enough to read as one precision shot.
         float t = (pellets == 1) ? 0.5f : (i / (float)(pellets - 1));
         float offset = (t - 0.5f) * spread;
         offset += (GameRandomInt(&w.session->random, -100, 100) / 100.0f) * spread * 0.06f;
         float angle = b->aimAngle + offset;
+        float laneOffset = 0.0f;
+        if (!returning && ability->behavior == ABILITY_BEHAVIOR_PROJECTILE &&
+            pellets > 1 && fabsf(spread) < 0.0001f)
+        {
+            laneOffset =
+                (i - (pellets - 1)*0.5f)*radius*1.10f;
+        }
 
         // A full pool drops the remaining pellets but must still run the post-loop
         // reveal and muzzle feedback: ammo and cooldown were already paid.
@@ -440,8 +450,13 @@ void WeaponsFire(GameContext w, int idx, bool super, float aimDist)
         if (!p) break;
 
         *p = (Projectile){ 0 };
-        p->position = origin;
-        p->origin = origin;
+        Vector3 projectileOrigin = {
+            origin.x + cosf(b->aimAngle)*laneOffset,
+            origin.y,
+            origin.z - sinf(b->aimAngle)*laneOffset
+        };
+        p->position = projectileOrigin;
+        p->origin = projectileOrigin;
         p->team = b->team;
         p->owner = idx;
         p->damage = damage;

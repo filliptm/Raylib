@@ -149,6 +149,7 @@ test exist to keep simulation usable without a window.
 | `test_gameplay` | identical input replay, simulation event/presentation isolation, slow-frame velocity clamping, ally/enemy actor pass-through, and an integrated Helios-9 bot route |
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
+| `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
 | `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and the shared showcase |

@@ -128,9 +128,15 @@ static void AbilitySummary(const AbilityDefinition *ability, char *buffer, int s
                  ability->damage, ability->healing);
     else if (ability->behavior == ABILITY_BEHAVIOR_PROJECTILE &&
              ability->data.projectile.pellets > 1)
-        snprintf(buffer, size, "%d projectiles // %.0f degree spread",
-                 ability->data.projectile.pellets,
-                 ability->data.projectile.spreadDegrees);
+    {
+        if (ability->data.projectile.spreadDegrees < 0.1f)
+            snprintf(buffer, size, "Tight twin bolts // %d combined damage",
+                     ability->damage*ability->data.projectile.pellets);
+        else
+            snprintf(buffer, size, "%d projectiles // %.0f degree spread",
+                     ability->data.projectile.pellets,
+                     ability->data.projectile.spreadDegrees);
+    }
     else snprintf(buffer, size, "Precision projectile // %.0f range", ability->range);
 }
 

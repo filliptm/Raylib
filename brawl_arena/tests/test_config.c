@@ -127,11 +127,15 @@ int main(int argc, char **argv)
           "Scrapper rework did not load from canonical config");
     CHECK(first.content.weapons[CLASS_SNIPER].secondaryKind ==
               SECONDARY_GRAPPLE &&
+          first.content.weapons[CLASS_SNIPER].pellets == 2 &&
+          first.content.weapons[CLASS_SNIPER].damage == 625 &&
+          first.content.weapons[CLASS_SNIPER].spreadDeg == 0.0f &&
+          first.content.weapons[CLASS_SNIPER].superPerHit == 0.15f &&
           first.content.weapons[CLASS_SNIPER].mobilityCooldown == 7.5f &&
           first.content.weapons[CLASS_SNIPER].mobilityDuration == 0.45f &&
           first.content.weapons[CLASS_SNIPER].secondaryRange == 10.0f &&
           first.content.weapons[CLASS_SNIPER].secondaryDelay == 0.25f,
-          "Longshot Grapple did not load from canonical config");
+          "Longshot twin shot/Grapple did not load from canonical config");
     CHECK(first.content.weapons[CLASS_LOBBER].secondaryKind ==
               SECONDARY_MINE &&
           first.content.weapons[CLASS_LOBBER].mobilityCooldown == 8.0f &&
