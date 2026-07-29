@@ -224,17 +224,15 @@ int main(void)
     CHECK(marksApplied > 0, "authored resonance applied no marks");
     CHECK(markHadTarget, "mark events did not carry their target");
 
-    //--- The shipped guardian documents parse and validate ----------------------
+    //--- The shipped project documents parse; the Guardian deliberately keeps
+    //--- its legacy visuals (documents removed by request).
     App shipped;
     Initialize(&shipped);
     CHECK(AttackContentLoadFile(&shipped.content, "data/attacks/presentation.cfg",
                                 message, sizeof(message)), message);
-    CHECK(AttackAuthored(&shipped.content,
-                         shipped.content.characters[CLASS_HEALER].mainAbility),
-          "shipped guardian rain document missing");
-    CHECK(AttackAuthored(&shipped.content,
-                         shipped.content.characters[CLASS_HEALER].superAbility),
-          "shipped guardian resonance document missing");
+    CHECK(!AttackAuthored(&shipped.content,
+                          shipped.content.characters[CLASS_HEALER].mainAbility),
+          "guardian rain should be back on legacy visuals");
 
     puts("attack templates, validation, round trip, gating, and field/mark anchors passed");
     return 0;
