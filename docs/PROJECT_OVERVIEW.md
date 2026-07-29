@@ -746,9 +746,9 @@ returns to the menu after the configured hold or the explicit Continue action.
 
 - WASD/arrows or left stick: camera-relative movement.
 - Left Shift or left bumper: use the current kit's secondary. Scrapper holds its
-  360-degree Magnetic Scrap Shell until released or broken; Longshot grapples toward
-  current aim; Mortar places a mine at its feet; Tank fires Shoulder Jets along
-  movement input, or current aim while stationary.
+  360-degree Magnetic Scrap Shell until released or broken; Longshot holds to preview
+  its cover-aware grapple path and releases to launch; Mortar places a mine at its
+  feet; Tank fires Shoulder Jets along movement input, or current aim while stationary.
 - Hold/release left mouse or right trigger: preview and fire the main attack.
 - Tap left mouse or press Space: auto-aim. Guardian first considers a wounded ally in
   range; gamepad A is the same quick action.
@@ -874,11 +874,14 @@ Shoulder Jets is a non-damaging roughly four-unit boost on a 2.5-second cooldown
 stops on solid cover; Fight bots use it while closing meaningful gaps or retreating.
 Charge remains a separate super that damages, knocks back, and destroys crates.
 
-Longshot's Mag-Line Grapple aims up to 10 world units, waits 0.15 seconds for its hook,
-then pulls to a body-safe endpoint over 0.45 seconds on a 7.5-second cooldown. Walls and
-crates shorten the endpoint without taking damage, actors do not block travel, and
-main/super actions are locked during traversal. External displacement cancels the
-grapple without refunding cooldown. Fight bots use it while retreating.
+Longshot's Mag-Line Grapple is a hold-and-release skill shot. Holding Shift/left bumper
+shows the exact cover-aware path and endpoint, a 10-world-unit maximum-range ring, and
+amber or red feedback for shortened or invalid paths; releasing a valid aim starts the
+7.5-second cooldown. The hook tip travels visibly for 0.25 seconds before Longshot is
+pulled to that body-safe endpoint over 0.45 seconds. Walls and crates shorten the
+endpoint without taking damage, actors do not block travel, and competing actions are
+locked while aiming and during traversal. External displacement cancels the grapple
+without refunding cooldown. Fight bots retain direct retreat activation.
 
 Mortar's Concussion Mine is a persistent one-per-owner field placed at Mortar's feet on
 an 8-second cooldown. It arms after 0.55 seconds, ignores allies, and requires line of

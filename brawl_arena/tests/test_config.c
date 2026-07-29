@@ -130,7 +130,7 @@ int main(int argc, char **argv)
           first.content.weapons[CLASS_SNIPER].mobilityCooldown == 7.5f &&
           first.content.weapons[CLASS_SNIPER].mobilityDuration == 0.45f &&
           first.content.weapons[CLASS_SNIPER].secondaryRange == 10.0f &&
-          first.content.weapons[CLASS_SNIPER].secondaryDelay == 0.15f,
+          first.content.weapons[CLASS_SNIPER].secondaryDelay == 0.25f,
           "Longshot Grapple did not load from canonical config");
     CHECK(first.content.weapons[CLASS_LOBBER].secondaryKind ==
               SECONDARY_MINE &&

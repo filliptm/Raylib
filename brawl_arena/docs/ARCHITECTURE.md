@@ -190,8 +190,9 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   state restoration.
 - `render_state.h`: batch-safe depth-write transitions shared by transparent,
   additive, billboard, decal, field, and preview passes.
-- `ability_visuals.c`: active rain/sound fields, Scrapper Shell, persistent grapple
-  cables, mine trigger/blast telegraphs, and all aim previews.
+- `ability_visuals.c`: active rain/sound fields, Scrapper Shell, traveling/persistent
+  grapple cables, mine trigger/blast telegraphs, and all aim previews. The grapple
+  preview resolves its destination through the gameplay-owned body-safe endpoint query.
 - `character_animation.c`: pure match clip selection from life, dash/grapple, velocity, and
   facing, plus presentation-only action-state timing/blend envelopes. Concealment reveal
   and attack cooldown timers never double as animation state.

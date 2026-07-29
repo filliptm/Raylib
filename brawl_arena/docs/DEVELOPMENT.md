@@ -172,8 +172,9 @@ matrix. At minimum, after changes to runtime/presentation:
 - Scrapper Ripsaw/Wrecking Disc two-leg hits, cover interaction, held Shell,
   absorb healing/recharge/break recovery, and Fight-bot raise/lower timing.
 - Tank Reclamation healing, Shift Shoulder Jets cooldown/cover stop, and Charge.
-- Longshot Mag-Line Grapple aim direction, cover stop, cable/pose phases, cooldown, and
-  external-displacement cancellation.
+- Longshot Mag-Line Grapple hold/release input, exact range/path/endpoint preview,
+  invalid and cover-limited colors, traveling hook tip, cover stop, cable/pose phases,
+  cooldown, and external-displacement cancellation.
 - Mortar Concussion Mine placement, arm cue, trigger/blast rings, team/cover rules,
   replacement, detonation, and Fight-bot use.
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.

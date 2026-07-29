@@ -250,7 +250,7 @@ int main(void)
     CHECK(HasVfx(&session, VFX_LONGSHOT_GRAPPLE_FIRE) &&
           HasAction(&session, CHARACTER_ACTION_GRAPPLE),
           "Mag-Line Grapple did not emit its launch recipe/action");
-    BrawlersUpdate(game, 0.16f);
+    BrawlersUpdate(game, 0.26f);
     CHECK(HasVfx(&session, VFX_LONGSHOT_GRAPPLE_HOOK) &&
           HasVfx(&session, VFX_LONGSHOT_GRAPPLE_PULL),
           "Mag-Line Grapple did not emit its hook/pull phases");

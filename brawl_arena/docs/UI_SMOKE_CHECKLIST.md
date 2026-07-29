@@ -110,7 +110,10 @@ screens:
   low-charge instability, start/hit/collapse/restore recipes, numeric world charge bar,
   and braced pose are visible without rectangular outline artifacts.
 - Longshot's cable terminates at cover, stays attached to the animated right hand, and
-  its fire/hook/pull/land phases do not show rectangular atlas edges.
+  its fire/hook/pull/land phases do not show rectangular atlas edges. Holding
+  Shift/left bumper shows a stable maximum-range ring and exact endpoint while moving
+  and aiming; cover-limited paths turn amber, invalid short paths turn red, release
+  launches toward that same endpoint, and the hook tip visibly travels before pulling.
 - Mortar's Mine rises/arms clearly, shows distinct trigger and blast rings without
   floor fighting, remains hidden behind solid cover where appropriate, and detonates
   with readable knockback.

@@ -196,6 +196,77 @@ static int CheckClassSwap(void)
     return 0;
 }
 
+static int CheckGrappleSkillShot(void)
+{
+    App app;
+    CHECK(Initialize(&app), "could not initialize grapple-input session");
+    GameContext game = AppGameContext(&app);
+    const AbilityDefinition *grapple =
+        ContentSecondaryAbility(&app.content, CLASS_SNIPER);
+    CHECK(grapple && grapple->behavior == ABILITY_BEHAVIOR_GRAPPLE,
+          "Longshot grapple content was unavailable");
+
+    app.session.brawlerCount = 1;
+    app.session.playerIdx = 0;
+    BrawlerSpawn(game, 0, TEAM_PLAYER, CLASS_SNIPER,
+                 app.session.arena.gemVent, true);
+    Brawler *longshot = &app.session.brawlers[0];
+
+    Vector3 directions[] = {
+        { 1.0f, 0.0f, 0.0f }, { -1.0f, 0.0f, 0.0f },
+        { 0.0f, 0.0f, 1.0f }, { 0.0f, 0.0f, -1.0f },
+        { 0.7071f, 0.0f, 0.7071f },
+        { -0.7071f, 0.0f, 0.7071f },
+        { 0.7071f, 0.0f, -0.7071f },
+        { -0.7071f, 0.0f, -0.7071f }
+    };
+    Vector3 direction = { 0 };
+    Vector3 expected = longshot->position;
+    float longest = 0.0f;
+    for (int i = 0; i < (int)(sizeof(directions)/sizeof(directions[0])); i++)
+    {
+        Vector3 endpoint = BrawlerGrappleEndpoint(
+            &app.session.arena, longshot->position,
+            directions[i], grapple->range);
+        float distance = Vector3Distance(longshot->position, endpoint);
+        if (distance > longest)
+        {
+            longest = distance;
+            direction = directions[i];
+            expected = endpoint;
+        }
+    }
+    CHECK(longest >= 1.5f, "test map has no usable grapple direction");
+
+    PlayerInput held = {
+        .aimPoint = Vector3Add(
+            longshot->position, Vector3Scale(direction, grapple->range)),
+        .selectedClass = -1,
+        .secondaryPressed = true,
+        .secondaryHeld = true
+    };
+    PlayerUpdate(&app, &held, 1.0f/60.0f);
+    CHECK(app.controller.aimingSecondary &&
+          !BrawlerIsGrappling(longshot) &&
+          longshot->mobilityCooldown <= 0.0f,
+          "holding grapple committed it before release");
+    CHECK(longshot->deliberateAim,
+          "held grapple did not enter deliberate aiming");
+
+    PlayerInput released = held;
+    released.secondaryPressed = false;
+    released.secondaryHeld = false;
+    released.secondaryReleased = true;
+    PlayerUpdate(&app, &released, 1.0f/60.0f);
+    CHECK(!app.controller.aimingSecondary &&
+          BrawlerIsGrappling(longshot) &&
+          longshot->mobilityCooldown > grapple->cooldown - 0.01f,
+          "releasing grapple did not launch and spend cooldown");
+    CHECK(Vector3Distance(longshot->grappleAnchor, expected) < 0.01f,
+          "release did not use the same body-safe endpoint as the preview");
+    return 0;
+}
+
 int main(void)
 {
     App first, replay;
@@ -250,7 +321,9 @@ int main(void)
           "navigation regression checks failed");
     CHECK(CheckClassSwap() == 0,
           "class swap checks failed");
+    CHECK(CheckGrappleSkillShot() == 0,
+          "grapple skill-shot input checks failed");
 
-    puts("deterministic replay, sliding movement, actor pass-through, and bot routing passed");
+    puts("deterministic replay, movement, bot routing, class swap, and grapple input passed");
     return 0;
 }

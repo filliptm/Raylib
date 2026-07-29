@@ -61,7 +61,7 @@ is disabled so this navigation remains explicit.
 | Input | Action |
 |-------|--------|
 | `WASD` / arrows or left stick | Move |
-| `Left Shift` | Use the active secondary: Scrapper holds its Shell, Longshot grapples toward aim, Mortar plants a mine, and Tank fires Shoulder Jets |
+| `Left Shift` | Use the active secondary: Scrapper holds its Shell; Longshot holds to preview and releases to grapple; Mortar plants a mine; Tank fires Shoulder Jets |
 | Mouse or right stick | Aim |
 | Hold/release `LMB` or right trigger | Preview/fire the main attack |
 | Tap `LMB`, `SPACE`, or gamepad A | Quick shot; Guardian prioritizes a badly hurt ally, otherwise targets the nearest visible enemy |
@@ -144,12 +144,16 @@ movement input first and current aim when stationary. It deals no damage, grants
 invulnerability, stops on walls or crates, and cannot destroy cover. The charged Charge
 super remains the longer damaging dash that knocks enemies back and smashes crates.
 
-**Longshot grapple.** Mag-Line Grapple fires along the current aim direction up to 10
-world units on a 7.5-second cooldown. After a 0.15-second launch beat it pulls Longshot
-to a body-safe point over 0.45 seconds. Permanent walls and crates shorten the endpoint
-without taking damage; actors do not block the cable. Longshot cannot fire during the
-launch or pull, and an external pull/knockback cancels traversal without refunding the
-cooldown. Fight bots reserve it for retreating.
+**Longshot grapple.** Hold Shift/left bumper to aim Mag-Line Grapple, then release to
+launch it along the current aim direction. The ground preview draws the exact body-safe
+path and endpoint plus a 10-world-unit maximum-range ring; cover-shortened endpoints
+turn amber and unusably short paths turn red. A valid release starts the 7.5-second
+cooldown and visibly sends the hook tip down the cable over 0.25 seconds before pulling
+Longshot to the previewed point over 0.45 seconds. Permanent walls and crates shorten
+the endpoint without taking damage; actors do not block the cable. Longshot can move
+while aiming but cannot fire a competing ability, cannot fire during launch or pull,
+and an external pull/knockback cancels traversal without refunding the cooldown. Fight
+bots reserve the direct activation path for retreating.
 
 **Mortar mine control.** Concussion Mine places one persistent charge at Mortar's feet
 on an 8-second cooldown. It arms after 0.55 seconds, ignores its owner and allies, then

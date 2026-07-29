@@ -108,7 +108,7 @@ int main(void)
     CHECK(grapple && grapple->behavior == ABILITY_BEHAVIOR_GRAPPLE &&
           fabsf(grapple->cooldown - 7.5f) < 0.0001f &&
           fabsf(grapple->range - 10.0f) < 0.0001f &&
-          fabsf(grapple->data.grapple.launchDelay - 0.15f) < 0.0001f &&
+          fabsf(grapple->data.grapple.launchDelay - 0.25f) < 0.0001f &&
           fabsf(grapple->data.grapple.pullDuration - 0.45f) < 0.0001f,
           "Longshot Mag-Line Grapple typed content is incomplete");
 
@@ -137,7 +137,7 @@ int main(void)
     CHECK(!BrawlerTryAttack(game, 0, 5.0f) &&
           !BrawlerTrySuper(game, 0, 5.0f),
           "grapple did not lock attacks during traversal");
-    AdvanceBrawlers(game, 0.10f);
+    AdvanceBrawlers(game, 0.20f);
     CHECK(fabsf(longshot->position.z) < 0.01f,
           "grapple moved before its launch delay elapsed");
     AdvanceBrawlers(game, 0.55f);
