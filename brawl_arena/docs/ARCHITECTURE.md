@@ -180,9 +180,11 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 
 ## Presentation decomposition
 
-- `assets.c`: shader/model/material/render-target lifetime.
+- `assets.c`: shader/model/material/render-target lifetime, including mipmapped,
+  trilinear, 8× anisotropic station-atlas sampling and temporally stable post grain.
 - `generated_assets.c`: procedural textures and the grass cross-quad mesh.
-- `environment.c`: map-cell and prop presentation.
+- `environment.c`: map-cell and prop presentation. Wall collision keeps its full tile,
+  while visible per-cell plinths remain inset to prevent adjacent coplanar geometry.
 - `camera.c`: camera initialization, project-tuned distance, lead, follow, and permitted
   shake. Distance scales the fixed-pitch offset and never enters deterministic
   simulation state.

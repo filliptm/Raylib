@@ -387,6 +387,8 @@ See [the VFX pipeline](docs/VFX_PIPELINE.md).
 FXAA-style edge smoothing. Toggle the pass and dial bloom strength on the WORLD tab.
 The depth-based effects use the same 0.5-to-120 clip range as the 3D cameras rather than
 raylib's much wider default range, concentrating depth precision around the arena.
+Optional grain uses a stable screen-space pattern rather than generating new noise every
+frame, so flat station panels retain texture without temporal flicker.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
 follow offset—so changing it moves the camera along the established pitch without
@@ -422,6 +424,8 @@ rules:
 
 - Permanent wall tiles keep full-tile collision while their visible metal core is
   recessed behind modular wall faces, windows, blast doors, banners, and top panels.
+  Per-tile base plinths remain inside their owning tiles, so adjacent wall blocks do
+  not create overlapping coplanar surfaces.
 - Destructible tiles render as cargo containers on one side and computer/power banks on
   the other. Damage tint and removal still follow the tile's health.
 - Bushes are ruptured hydroponic beds. Their low station panels sit beneath the existing
@@ -431,8 +435,9 @@ rules:
 - Floor rendering uses explicit deck (-0.08), inset-top (0.02), passive-decal (0.065),
   and targeting/effect (0.12) heights. The separation keeps imported panels, shadows,
   glows, and aim previews from competing for the same depth-buffer values.
-- Both station texture atlases use generated mipmaps with trilinear filtering, reducing
-  texture shimmer on panels viewed at shallow angles or from the match camera.
+- Both station texture atlases use generated mipmaps, trilinear filtering, and 8×
+  anisotropic filtering, reducing texture shimmer on panels viewed at shallow angles
+  or from the match camera.
 
 The window requests four-sample MSAA and vertical synchronization. Its frame ceiling
 matches the active monitor refresh rate, falling back to 60 Hz when that rate is

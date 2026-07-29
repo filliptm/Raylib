@@ -103,6 +103,10 @@ screens:
 - Orbital/radar motifs remain restrained behind characters/data and never obscure text
   or silhouettes.
 - Helios-9 and Training Court render with and without post effects.
+- Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
+  shallow-angle side textures remain stable without flashing, crawling, or coplanar
+  flicker. Leave grain enabled and confirm flat wall colors do not pulse while standing
+  still.
 - Resize repeatedly during a match and menu transition; render targets recreate cleanly.
 - Temporarily missing station/character assets use coherent procedural fallbacks.
 - Temporarily missing individual UI skin textures fall back independently to the

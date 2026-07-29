@@ -958,7 +958,10 @@ The presentation layer owns:
   stays green and opponents stay red at every health level, reinforced by distinct
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
   bar, and the redundant bottom-left vitals panel is not drawn.
-- External station-map rendering aligned with runtime collision.
+- External station-map rendering aligned with runtime collision. Wall collision keeps
+  its full-tile footprint, while visible per-cell plinths stay inset so adjoining wall
+  tiles do not overlap at coplanar top surfaces. Station atlases use mipmapped trilinear
+  sampling with 8× anisotropy to stabilize oblique wall faces.
 - Generated fallback floor, wall, crate, bush, metal, cloth, grass, flat, and glow
   textures.
 - Instanced wind/brawler-reactive grass.
@@ -975,7 +978,8 @@ The presentation layer owns:
   shared `4.0×` presentation scale for match-camera readability without changing
   gameplay dimensions or authoritative telegraphs.
 - Optional toon/post-processing controls, including outline, bloom, painterly,
-  pixelation, halftone, posterization, grade, vignette, grain, and chromatic fringe.
+  pixelation, halftone, posterization, grade, vignette, temporally stable screen-space
+  grain, and chromatic fringe.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
