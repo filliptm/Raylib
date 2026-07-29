@@ -34,8 +34,10 @@ At every size verify:
 - Every action remains visible and pointer targets are at least 44 reference pixels.
 - Pointer hit testing follows the visual control after resize.
 - The world/post-process target fills the viewport without stretching or stale edges.
-- At the default 1.5× world render scale, 1280×800 creates a 1920×1200 scene target
-  and 960×600 creates a 1440×900 target while the HUD remains native-resolution.
+- At the default 1.5× world render scale, a 1280×800 drawable creates a 1920×1200 scene
+  target and a 960×600 drawable creates a 1440×900 target while the HUD remains
+  native-resolution. On HiDPI, verify these calculations use drawable pixels rather
+  than logical UI coordinates.
 - Modal dimming, command-center scrolling, footer actions, and result actions remain
   reachable.
 
@@ -109,8 +111,10 @@ screens:
 - Helios-9 and Training Court render with and without post effects.
 - Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
   shallow-angle side textures remain stable without flashing, crawling, or coplanar
-  flicker at the default 1.5× render scale. Leave grain enabled and confirm flat wall
-  colors do not pulse while standing still.
+  flicker at the default 1.5× render scale. Inspect the complete floor-to-cap vertical
+  edge where perpendicular textured wall faces meet; no dark/light atlas strip may
+  alternate there. Leave grain enabled and confirm flat wall colors do not pulse while
+  standing still.
 - Resize repeatedly during a match and menu transition; scaled color/depth targets
   recreate cleanly and post effects do not retain the previous source or output
   resolution.

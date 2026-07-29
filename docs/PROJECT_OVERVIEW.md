@@ -959,9 +959,11 @@ The presentation layer owns:
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
   bar, and the redundant bottom-left vitals panel is not drawn.
 - External station-map rendering aligned with runtime collision. Wall collision keeps
-  its full-tile footprint, while visible per-cell plinths stay inset so adjoining wall
-  tiles do not overlap at coplanar top surfaces. Station atlases use mipmapped trilinear
-  sampling with 8× anisotropy to stabilize oblique wall faces.
+  its full-tile footprint. Imported straight-wall variants discard their unused
+  longitudinal end-cap triangles after loading, so perpendicular textured faces meet
+  without competing for the same corner pixels; visible per-cell plinths remain inset
+  so adjoining wall tiles also avoid coplanar top surfaces. Station atlases use
+  mipmapped trilinear sampling with 8× anisotropy to stabilize oblique wall faces.
 - Generated fallback floor, wall, crate, bush, metal, cloth, grass, flat, and glow
   textures.
 - Instanced wind/brawler-reactive grass.
@@ -980,8 +982,9 @@ The presentation layer owns:
 - Optional toon/post-processing controls, including outline, bloom, painterly,
   pixelation, halftone, posterization, grade, vignette, temporally stable screen-space
   grain, and chromatic fringe. The project-scoped `presentation.render_scale` ranges
-  from 1.0× to 2.0× and defaults to 1.5×, supersampling world geometry before the
-  native-resolution HUD to stabilize thin wall bevels and shallow seams during motion.
+  from 1.0× to 2.0× and defaults to 1.5×, scaling from drawable framebuffer pixels
+  rather than logical UI coordinates before the native-resolution HUD. This preserves
+  the intended world sampling ratio when those dimensions differ on a HiDPI platform.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
@@ -997,10 +1000,10 @@ tab reports atlas load state, active/pool/dropped counts, event/layer totals, an
 last recipe, and exposes direct recipe and character action previews for graphical
 checks. The window is resizable down to 960×600; the scene/depth target is
 recreated after framebuffer-size or render-scale changes settle. The post shader tracks
-separate scene-source and native-output resolutions so resize and supersampling do not
-distort screen-space effects. A failed scaled allocation retries at native resolution
-before the direct-render fallback, and the window requests 4× MSAA for post-disabled,
-resize, and failure-fallback frames.
+separate scene-source and drawable-output resolutions so resize, HiDPI scaling, and
+supersampling do not distort screen-space effects. A failed scaled allocation retries
+at native resolution before the direct-render fallback, and the window requests 4×
+MSAA for post-disabled, resize, and failure-fallback frames.
 
 Sentinel, Longshot, Ironclad Guardian, and Gaia Guardian share a compatible 24-joint
 hierarchy, so

@@ -217,7 +217,10 @@ int main(void)
                                attackStatus, (int)sizeof(attackStatus)))
         TraceLog(LOG_WARNING, "Attack draft: %s", attackStatus);
 
-    AssetsLoad(&assets, GetScreenWidth(), GetScreenHeight(), world.tune.renderScale);
+    // World targets use drawable pixels. UI and input intentionally continue using
+    // logical screen coordinates; keeping the two domains separate also remains
+    // correct when a platform exposes a HiDPI framebuffer.
+    AssetsLoad(&assets, GetRenderWidth(), GetRenderHeight(), world.tune.renderScale);
     RenderSetAssets(&assets);
     MenuInit(&assets, &ui);
 
@@ -246,7 +249,7 @@ int main(void)
         {
             resizeSettle -= realDt;
             if (resizeSettle < 0.0f)
-                AssetsResizeViewport(&assets, GetScreenWidth(), GetScreenHeight(),
+                AssetsResizeViewport(&assets, GetRenderWidth(), GetRenderHeight(),
                                      requestedRenderScale);
         }
 
@@ -350,8 +353,8 @@ int main(void)
         {
             bool usePost = world.tune.postFx && assets.postOk &&
                            assets.sceneTarget.texture.id > 0 &&
-                           assets.sceneOutputWidth == GetScreenWidth() &&
-                           assets.sceneOutputHeight == GetScreenHeight() &&
+                           assets.sceneOutputWidth == GetRenderWidth() &&
+                           assets.sceneOutputHeight == GetRenderHeight() &&
                            resizeSettle < 0.0f;
 
             if (usePost)

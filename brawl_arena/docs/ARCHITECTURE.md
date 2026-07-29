@@ -181,11 +181,14 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 ## Presentation decomposition
 
 - `assets.c`: shader/model/material/render-target lifetime, including project-scaled
-  color/sampleable-depth targets, separate source/output post resolutions, mipmapped
-  trilinear 8× anisotropic station-atlas sampling, and temporally stable post grain.
+  color/sampleable-depth targets sized from drawable framebuffer pixels, separate
+  source/output post resolutions, mipmapped trilinear 8× anisotropic station-atlas
+  sampling, removal of unused tiled-wall longitudinal caps, and temporally stable post
+  grain.
 - `generated_assets.c`: procedural textures and the grass cross-quad mesh.
-- `environment.c`: map-cell and prop presentation. Wall collision keeps its full tile,
-  while visible per-cell plinths remain inset to prevent adjacent coplanar geometry.
+- `environment.c`: map-cell and prop presentation. Wall collision keeps its full tile;
+  open-ended imported wall skins meet at single-owner edges, while visible per-cell
+  plinths remain inset to prevent adjacent coplanar geometry.
 - `camera.c`: camera initialization, project-tuned distance, lead, follow, and permitted
   shake. Distance scales the fixed-pitch offset and never enters deterministic
   simulation state.
@@ -238,12 +241,14 @@ The player-facing shell is split by responsibility:
 The resizable window has a 960×600 minimum. Layout scales from the reference canvas.
 When post-processing is active, the world renders into a color/sampleable-depth target
 at `presentation.render_scale` (1.0×–2.0×, tracked default 1.5×) and downsamples before
-native-resolution UI. Window-size and render-scale changes are debounced together, then
-recreate the target and refresh separate source/output resolution uniforms. Failed
-scaled allocation retries at native resolution before direct world rendering. The
-backbuffer requests 4× MSAA for direct, post-disabled, resize, and failure-fallback
-frames. UI preference state is profile-scoped; presentation framing and render scale are
-project-scoped content and participate in transactional validation/promotion.
+native-resolution UI. Scene-target sizing and post output resolution use drawable
+framebuffer pixels; UI layout and input retain logical screen coordinates. Window-size
+and render-scale changes are debounced together, then recreate the target and refresh
+separate source/output resolution uniforms. Failed scaled allocation retries at native
+resolution before direct world rendering. The backbuffer requests 4× MSAA for direct,
+post-disabled, resize, and failure-fallback frames. UI preference state is
+profile-scoped; presentation framing and render scale are project-scoped content and
+participate in transactional validation/promotion.
 
 ## Dependency-safe feature placement
 

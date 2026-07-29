@@ -41,9 +41,9 @@ original `{0, 31, -22}` offset.
 
 The VISUAL tab's `presentation.render_scale` is also project-scoped and applies after a
 short target-recreation debounce. Its 1.0×–2.0× range scales the world color/depth
-target independently of the window and native-resolution UI. The tracked 1.5× default
-reduces temporal aliasing on thin station geometry while leaving authored screen-space
-post-effect sizes unchanged.
+target from the drawable framebuffer independently of logical UI coordinates. The
+tracked 1.5× default leaves authored screen-space post-effect sizes unchanged and keeps
+the intended sampling ratio on platforms where drawable and logical dimensions differ.
 
 After 0.6 seconds of inactivity:
 

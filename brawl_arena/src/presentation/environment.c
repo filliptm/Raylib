@@ -198,9 +198,9 @@ static void DrawWallTile(const Arena *arena, Assets *assets, int tx, int tz)
     StationPalette palette = TilePalette(arena, tx, tz);
     float tileSize = arena->tileSize;
 
-    // Collision still occupies the full tile, but the visible structural core is recessed
-    // behind the imported wall skins. Leaving a real gap prevents two nearly parallel
-    // surfaces from competing as the camera moves.
+    // Collision still occupies the full tile, while the visible structural core is
+    // recessed behind the imported wall skins. Their shallow volumetric intersection
+    // closes bevel gaps without placing broad surfaces at nearly equal depths.
     Matrix core = EnvTRS((Vector3){ tileSize*0.86f, WALL_HEIGHT*0.94f, tileSize*0.86f },
                          0.0f, (Vector3){ c.x, WALL_HEIGHT*0.47f, c.z });
     DrawLit(assets, assets->cube, core, assets->texMetal, WALL_CORE,

@@ -181,9 +181,12 @@ typedef struct Assets {
     float sceneRenderScale;
 } Assets;
 
-bool AssetsLoad(Assets *a, int screenW, int screenH, float renderScale);
+// `outputW`/`outputH` are drawable framebuffer pixels, not logical UI coordinates.
+// This distinction matters on Retina/HiDPI displays, where one logical point covers
+// multiple output pixels.
+bool AssetsLoad(Assets *a, int outputW, int outputH, float renderScale);
 void AssetsUnload(Assets *a);
-bool AssetsResizeViewport(Assets *a, int screenW, int screenH, float renderScale);
+bool AssetsResizeViewport(Assets *a, int outputW, int outputH, float renderScale);
 
 // Drops and reloads the VFX flipbook atlases from disk, for the studio's
 // rebuild-and-reload flow. Safe when some atlases are missing.

@@ -774,6 +774,103 @@ static void ApplyStationTextureFiltering(Texture2D *texture)
     SetTextureFilter(*texture, TEXTURE_FILTER_ANISOTROPIC_8X);
 }
 
+static bool StationModelUsesTiledWallEnds(StationModelId id)
+{
+    switch (id)
+    {
+        case STATION_WALL:
+        case STATION_WALL_PILLAR:
+        case STATION_WALL_WINDOW:
+        case STATION_WALL_BANNER:
+        case STATION_DOOR_DOUBLE_CLOSED:
+        case STATION_DISPLAY_WALL:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Wall faces are tiled along each model's local X axis. The source GLBs are closed
+// standalone props, so their longitudinal caps become coplanar with the broad face of
+// a perpendicular wall at every exposed map corner. Those surfaces use different atlas
+// UVs, making the depth winner flash between dark and light as the camera moves.
+//
+// End caps are unnecessary in the grid assembly: another face closes an exposed corner,
+// while neighbouring wall tiles close straight runs. Compacting only the index buffer
+// preserves the authored broad faces, bevels, UVs, and procedural fallback behavior.
+static int OpenTiledWallEnds(Model *model)
+{
+    if (!model || model->meshCount <= 0) return 0;
+
+    int totalRemoved = 0;
+    for (int meshIndex = 0; meshIndex < model->meshCount; meshIndex++)
+    {
+        Mesh *mesh = &model->meshes[meshIndex];
+        if (!mesh->vertices || !mesh->indices ||
+            mesh->vertexCount <= 0 || mesh->triangleCount <= 0)
+            continue;
+
+        float minX = mesh->vertices[0];
+        float maxX = mesh->vertices[0];
+        for (int vertex = 1; vertex < mesh->vertexCount; vertex++)
+        {
+            float x = mesh->vertices[vertex*3];
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+        }
+
+        float span = maxX - minX;
+        if (span <= 0.00001f) continue;
+        float epsilon = fmaxf(span*0.0001f, 0.00001f);
+
+        int writeIndex = 0;
+        int originalTriangles = mesh->triangleCount;
+        for (int triangle = 0; triangle < originalTriangles; triangle++)
+        {
+            unsigned short i0 = mesh->indices[triangle*3];
+            unsigned short i1 = mesh->indices[triangle*3 + 1];
+            unsigned short i2 = mesh->indices[triangle*3 + 2];
+            if (i0 >= mesh->vertexCount || i1 >= mesh->vertexCount ||
+                i2 >= mesh->vertexCount)
+            {
+                mesh->indices[writeIndex++] = i0;
+                mesh->indices[writeIndex++] = i1;
+                mesh->indices[writeIndex++] = i2;
+                continue;
+            }
+
+            float x0 = mesh->vertices[i0*3];
+            float x1 = mesh->vertices[i1*3];
+            float x2 = mesh->vertices[i2*3];
+            bool onMinEnd = fabsf(x0 - minX) <= epsilon &&
+                            fabsf(x1 - minX) <= epsilon &&
+                            fabsf(x2 - minX) <= epsilon;
+            bool onMaxEnd = fabsf(x0 - maxX) <= epsilon &&
+                            fabsf(x1 - maxX) <= epsilon &&
+                            fabsf(x2 - maxX) <= epsilon;
+            if (onMinEnd || onMaxEnd)
+            {
+                totalRemoved++;
+                continue;
+            }
+
+            mesh->indices[writeIndex++] = i0;
+            mesh->indices[writeIndex++] = i1;
+            mesh->indices[writeIndex++] = i2;
+        }
+
+        int retainedTriangles = writeIndex/3;
+        if (retainedTriangles == originalTriangles) continue;
+
+        if (mesh->vboId && mesh->vboId[6] > 0)
+            UpdateMeshBuffer(*mesh, 6, mesh->indices,
+                             writeIndex*(int)sizeof(unsigned short), 0);
+        mesh->triangleCount = retainedTriangles;
+    }
+
+    return totalRemoved;
+}
+
 static void LoadStationAssets(Assets *a)
 {
     a->texStationOrange = LoadTexture(STATION_ROOT "Textures/colormap.png");
@@ -792,7 +889,17 @@ static void LoadStationAssets(Assets *a)
 
         station->model = LoadModel(path);
         station->ok = IsModelValid(station->model) && station->model.meshCount > 0;
-        if (station->ok) loaded++;
+        if (station->ok)
+        {
+            loaded++;
+            if (StationModelUsesTiledWallEnds((StationModelId)id))
+            {
+                int removed = OpenTiledWallEnds(&station->model);
+                TraceLog(LOG_INFO,
+                         "STATION: opened tiled wall ends for %s (%d triangles removed)",
+                         path, removed);
+            }
+        }
         else
             TraceLog(LOG_WARNING, "STATION: %s not loaded; using procedural fallback", path);
     }
@@ -902,7 +1009,7 @@ static bool CreateSceneTarget(Assets *a, int outputW, int outputH, float renderS
     return true;
 }
 
-bool AssetsLoad(Assets *a, int screenW, int screenH, float renderScale)
+bool AssetsLoad(Assets *a, int outputW, int outputH, float renderScale)
 {
     *a = (Assets){ 0 };
 
@@ -1101,7 +1208,7 @@ bool AssetsLoad(Assets *a, int screenW, int screenH, float renderScale)
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].texture = a->texGrass;
     a->grassMat.maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
 
-    AssetsResizeViewport(a, screenW, screenH, renderScale);
+    AssetsResizeViewport(a, outputW, outputH, renderScale);
 
     return a->lightingOk;
 }
@@ -1167,32 +1274,33 @@ void AssetsUnload(Assets *a)
     if (a->skinnedOk) UnloadShader(a->skinned);
 }
 
-bool AssetsResizeViewport(Assets *a, int screenW, int screenH, float renderScale)
+bool AssetsResizeViewport(Assets *a, int outputW, int outputH, float renderScale)
 {
-    if (!a || screenW < 1 || screenH < 1) return false;
+    if (!a || outputW < 1 || outputH < 1) return false;
     if (renderScale < 1.0f) renderScale = 1.0f;
     if (renderScale > 2.0f) renderScale = 2.0f;
 
-    int targetW = ScaledSceneDimension(screenW, renderScale);
-    int targetH = ScaledSceneDimension(screenH, renderScale);
-    if (a->sceneOutputWidth == screenW &&
-        a->sceneOutputHeight == screenH &&
+    int targetW = ScaledSceneDimension(outputW, renderScale);
+    int targetH = ScaledSceneDimension(outputH, renderScale);
+    if (a->sceneOutputWidth == outputW &&
+        a->sceneOutputHeight == outputH &&
         a->sceneTarget.texture.width == targetW &&
-        a->sceneTarget.texture.height == targetH)
+        a->sceneTarget.texture.height == targetH &&
+        fabsf(a->sceneRenderScale - renderScale) < 0.0005f)
     {
         UpdateSceneResolutionUniforms(a);
         return true;
     }
 
     ReleaseSceneTarget(a);
-    bool ok = CreateSceneTarget(a, screenW, screenH, renderScale);
+    bool ok = CreateSceneTarget(a, outputW, outputH, renderScale);
     if (!ok && renderScale > 1.001f)
     {
         TraceLog(LOG_WARNING,
                  "POST: %.2fx scene target failed; retrying at native resolution",
                  renderScale);
         ReleaseSceneTarget(a);
-        ok = CreateSceneTarget(a, screenW, screenH, 1.0f);
+        ok = CreateSceneTarget(a, outputW, outputH, 1.0f);
     }
     if (!ok)
         TraceLog(LOG_WARNING, "POST: viewport target recreation failed; using direct render");

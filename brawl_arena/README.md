@@ -391,10 +391,11 @@ Optional grain uses a stable screen-space pattern rather than generating new noi
 frame, so flat station panels retain texture without temporal flicker.
 With post-processing enabled, the world renders into a project-scaled color/depth target
 and is downsampled before the native-resolution HUD. `presentation.render_scale` ranges
-from 1.0× to 2.0× on the VISUAL tab and defaults to 1.5×, stabilizing thin station
-bevels and shallow wall seams during camera movement. The shader receives separate
-source- and output-resolution uniforms, so resize and scale changes preserve both scene
-sampling and authored screen-space effect sizes.
+from 1.0× to 2.0× on the VISUAL tab and defaults to 1.5×. Target dimensions derive from
+the drawable framebuffer rather than logical UI coordinates, preserving that ratio when
+the two differ on a HiDPI platform. The shader receives separate source- and
+output-resolution uniforms, so resize and scale changes preserve both scene sampling
+and authored screen-space effect sizes.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
 follow offset—so changing it moves the camera along the established pitch without
@@ -432,8 +433,10 @@ rules:
 
 - Permanent wall tiles keep full-tile collision while their visible metal core is
   recessed behind modular wall faces, windows, blast doors, banners, and top panels.
-  Per-tile base plinths remain inside their owning tiles, so adjacent wall blocks do
-  not create overlapping coplanar surfaces.
+  The tiled wall variants drop only their unused longitudinal end-cap triangles after
+  loading, so perpendicular faces share an edge instead of overlaying differently
+  coloured atlas regions down the corner. Per-tile base plinths remain inside their
+  owning tiles, so adjacent wall blocks also avoid overlapping coplanar top surfaces.
 - Destructible tiles render as cargo containers on one side and computer/power banks on
   the other. Damage tint and removal still follow the tile's health.
 - Bushes are ruptured hydroponic beds. Their low station panels sit beneath the existing
