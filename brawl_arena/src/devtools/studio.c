@@ -71,6 +71,10 @@ float StudioFrame(App *w, float realDt)
         g_orbitYaw -= drag.x*0.008f;
         g_orbitPitch = Clamp(g_orbitPitch - drag.y*0.006f, 0.12f, 1.45f);
     }
+    // A slider whose widget stopped being drawn mid-drag can never clear its
+    // own latch; release it globally whenever the button is up.
+    if (!IsMouseButtonDown(MOUSE_LEFT_BUTTON)) CommandUiResetInteraction();
+
     Vector2 mouse = GetMousePosition();
     bool inLeftPanel = mouse.x < 396.0f;
     bool inRightPanel = mouse.x > GetScreenWidth() - 396.0f;
@@ -277,6 +281,12 @@ static void LayerEditor(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
     ColorEditor(ui, "COLOR END", &layer->colorEnd);
 }
 
+// Scroll state for the editor panel. The offset resets whenever the edited
+// ability changes and is always clamped to the measured content height, so a
+// deep scroll on one document can never leave the next one drawn off-screen.
+static float g_editorScroll = 0.0f;
+static float g_editorContent = 0.0f;   // measured last frame
+
 static void DrawEditorPanel(App *w, Assets *assets)
 {
     float panelWidth = 372.0f;
@@ -285,10 +295,29 @@ static void DrawEditorPanel(App *w, Assets *assets)
     DrawRectangleRec(panel, COMMAND_PANEL_BG);
     DrawRectangleLinesEx(panel, 1.0f, COMMAND_PANEL_EDGE);
 
-    // Simple wheel scrolling while the pointer is over the editor.
-    static float scroll = 0.0f;
+    int abilityIndex = SelectedAbilityIndex(w);
+    static int lastAbility = -2;
+    if (abilityIndex != lastAbility)
+    {
+        lastAbility = abilityIndex;
+        g_editorScroll = 0.0f;
+    }
+
+    float maxScroll = fmaxf(0.0f, g_editorContent - panel.height + 30.0f);
     if (CommandUiMouseIn(panel))
-        scroll = Clamp(scroll - GetMouseWheelMove()*36.0f, 0.0f, 1400.0f);
+        g_editorScroll -= GetMouseWheelMove()*36.0f;
+    g_editorScroll = Clamp(g_editorScroll, 0.0f, maxScroll);
+    float scroll = g_editorScroll;
+
+    // Scrollbar so off-screen content is visible state, not a mystery.
+    if (maxScroll > 0.5f)
+    {
+        float barHeight = fmaxf(30.0f, panel.height*panel.height/
+                                       (g_editorContent + 30.0f));
+        float barY = panel.y + (panel.height - barHeight)*(scroll/maxScroll);
+        DrawRectangle((int)(panel.x + panel.width - 5.0f), (int)barY, 3,
+                      (int)barHeight, COMMAND_ACCENT_DIM);
+    }
 
     BeginScissorMode((int)panel.x, (int)panel.y, (int)panel.width,
                      (int)panel.height);
@@ -296,13 +325,12 @@ static void DrawEditorPanel(App *w, Assets *assets)
     CommandUi ui = { .world = w, .x = (int)panel.x + 14,
                      .y = (int)(panel.y + 12 - scroll),
                      .width = (int)panel.width - 28, .clip = panel };
-
-    int abilityIndex = SelectedAbilityIndex(w);
     if (abilityIndex < 0 || abilityIndex >= w->content.abilityCount)
     {
         CommandUiSection(&ui, "ATTACK EDITOR");
         CommandUiText(&ui, "This kit has no ability in that slot.",
                       COMMAND_TEXT_DIM);
+        g_editorContent = ui.y - (panel.y + 12 - scroll);
         EndScissorMode();
         return;
     }
@@ -335,6 +363,7 @@ static void DrawEditorPanel(App *w, Assets *assets)
     {
         CommandUiText(&ui, "Legacy recipes drive this ability.", COMMAND_TEXT_DIM);
         CommandUiText(&ui, "Toggle authoring to start editing.", COMMAND_TEXT_DIM);
+        g_editorContent = ui.y - (panel.y + 12 - scroll);
         EndScissorMode();
         return;
     }
@@ -469,6 +498,7 @@ static void DrawEditorPanel(App *w, Assets *assets)
         MarkDraftDirty();
     }
 
+    g_editorContent = ui.y - (panel.y + 12 - scroll);
     EndScissorMode();
 }
 
