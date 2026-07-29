@@ -159,6 +159,8 @@ static void SubmitLights(App *w, Assets *a)
         if (!p->active) continue;
 
         float intensity = p->isSuper ? 0.75f : 0.25f;   // halved: the glow was lighting the whole lane
+        const AttackProjectileVisual *authoredVisual = AttackProjectileVisualFor(w, p);
+        if (authoredVisual) intensity *= authoredVisual->glow;
         Vector3 color = {
             p->color.r/255.0f*intensity,
             p->color.g/255.0f*intensity,
@@ -636,11 +638,21 @@ static void DrawProjectiles(App *w, Assets *a)
         if (!p->active) continue;
 
         Color glow = p->color;
+        // Authored documents may override the tint, size, and glow, and replace
+        // the built-in trail with their own history trail.
+        const AttackProjectileVisual *authored = AttackProjectileVisualFor(w, p);
+        float glowStrength = 1.0f;
+        if (authored)
+        {
+            if (authored->tintOverride) glow = authored->tint;
+            glowStrength = authored->glow;
+        }
         // Visual size only: p->radius stays the gameplay hitbox. The solid body is
         // drawn in the lit pass; this pass only adds a restrained halo and trail.
         float coreSize = p->arcing ? 0.55f : fmaxf(p->radius, 0.16f)*2.6f;
+        if (authored) coreSize *= authored->visualScale;
 
-        if (!p->arcing)
+        if (!p->arcing && !(authored && authored->trailLength > 0.001f))
         {
             // Trail: a few fading billboards strung out behind the shot.
             Vector3 dir = Vector3Normalize(p->velocity);
@@ -697,7 +709,9 @@ static void DrawProjectiles(App *w, Assets *a)
         }
 
         // One colored halo; the white-hot centre is gone - the solid body is the core.
-        DrawBillboard(w->presentation.camera, a->texGlow, p->position, coreSize*1.5f, (Color){ glow.r, glow.g, glow.b, 70 });
+        DrawBillboard(w->presentation.camera, a->texGlow, p->position, coreSize*1.5f,
+                      (Color){ glow.r, glow.g, glow.b,
+                               (unsigned char)Clamp(70.0f*glowStrength, 0.0f, 255.0f) });
     }
 
     if (w->tune.gemGrab)

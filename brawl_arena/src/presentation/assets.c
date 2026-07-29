@@ -246,7 +246,6 @@ static const char *FS_POST =
 "uniform float outlineStrength;\n"
 "uniform float clipNear;\n"
 "uniform float clipFar;\n"
-"uniform float styleTime;\n"
 "uniform float stylePixelate;\n"
 "uniform float stylePainterly;\n"
 "uniform float styleHalftone;\n"
@@ -401,9 +400,9 @@ static const char *FS_POST =
 "    color *= styleBrightness;\n"
 "    color = mix(color, color*color*(3.0 - 2.0*color), 0.18);\n"   // soft S-curve contrast
 "\n"
-"    if (styleGrain > 0.003)\n"                             // animated film grain
+"    if (styleGrain > 0.003)\n"                             // temporally stable film grain
 "    {\n"
-"        float n = fract(sin(dot(fragTexCoord*resolution + styleTime*137.0,\n"
+"        float n = fract(sin(dot(floor(fragTexCoord*resolution),\n"
 "                                vec2(12.9898, 78.233)))*43758.5453);\n"
 "        color += (n - 0.5)*0.16*styleGrain;\n"
 "    }\n"
@@ -749,22 +748,27 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
              character->animCount, height, character->scale);
 }
 
+static void ApplyStationTextureFiltering(Texture2D *texture)
+{
+    if (!texture || texture->id == 0)
+        return;
+
+    // Mipmaps stabilize minification from the match camera. Anisotropy is applied
+    // after trilinear filtering because raylib configures it as a separate texture
+    // parameter; it preserves the side-wall atlas at shallow viewing angles.
+    GenTextureMipmaps(texture);
+    SetTextureFilter(*texture, TEXTURE_FILTER_TRILINEAR);
+    SetTextureFilter(*texture, TEXTURE_FILTER_ANISOTROPIC_8X);
+}
+
 static void LoadStationAssets(Assets *a)
 {
     a->texStationOrange = LoadTexture(STATION_ROOT "Textures/colormap.png");
     a->texStationPurple = LoadTexture(STATION_ROOT "Textures/variation-a.png");
     a->stationTexturesOk = a->texStationOrange.id > 0 && a->texStationPurple.id > 0;
 
-    if (a->texStationOrange.id > 0)
-    {
-        GenTextureMipmaps(&a->texStationOrange);
-        SetTextureFilter(a->texStationOrange, TEXTURE_FILTER_TRILINEAR);
-    }
-    if (a->texStationPurple.id > 0)
-    {
-        GenTextureMipmaps(&a->texStationPurple);
-        SetTextureFilter(a->texStationPurple, TEXTURE_FILTER_TRILINEAR);
-    }
+    ApplyStationTextureFiltering(&a->texStationOrange);
+    ApplyStationTextureFiltering(&a->texStationPurple);
 
     int loaded = 0;
     for (int id = 0; id < STATION_MODEL_COUNT; id++)
@@ -902,7 +906,6 @@ bool AssetsLoad(Assets *a, int screenW, int screenH)
         a->locOutline    = GetShaderLocation(a->post, "outlineStrength");
         a->locClipNear   = GetShaderLocation(a->post, "clipNear");
         a->locClipFar    = GetShaderLocation(a->post, "clipFar");
-        a->locStyleTime  = GetShaderLocation(a->post, "styleTime");
         a->locPixelate   = GetShaderLocation(a->post, "stylePixelate");
         a->locPainterly  = GetShaderLocation(a->post, "stylePainterly");
         a->locHalftone   = GetShaderLocation(a->post, "styleHalftone");
@@ -1630,11 +1633,11 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
 void AssetsSetStyle(Assets *a, const Tuning *t, float time, float outlineStrength)
 {
     if (!a->postOk) return;
+    (void)time; // Retained in the presentation API for future time-based styles.
 
     SetShaderValue(a->post, a->locBloom, &t->bloom, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locVignette, &t->styleVignette, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locOutline, &outlineStrength, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(a->post, a->locStyleTime, &time, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locPixelate, &t->stylePixelate, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locPainterly, &t->stylePainterly, SHADER_UNIFORM_FLOAT);
     SetShaderValue(a->post, a->locHalftone, &t->styleHalftone, SHADER_UNIFORM_FLOAT);

@@ -104,8 +104,82 @@ void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
     }
 }
 
+const AttackProjectileVisual *AttackProjectileVisualFor(const App *w,
+                                                        const Projectile *p)
+{
+    if (!p || p->abilityIndex < 0 ||
+        p->abilityIndex >= w->content.abilityCount) return NULL;
+    const AttackPresentation *doc = &w->content.attacks[p->abilityIndex];
+    return doc->authored ? &doc->projectile : NULL;
+}
+
+// Trails and projectile-anchored emitters for authored projectiles. The trail
+// stores a short position history per projectile slot; slot reuse resets it.
+static void UpdateProjectileVisuals(App *w, float dt)
+{
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        const Projectile *p = &w->session.projectiles[i];
+        AttackTrail *trail = &w->presentation.attackTrails[i];
+
+        for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+            if (trail->points[point].used) trail->points[point].age += dt;
+
+        if (!p->active)
+        {
+            trail->wasActive = false;
+            continue;
+        }
+        if (!trail->wasActive)
+        {
+            // A new projectile claimed this slot: drop the previous history.
+            for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+                trail->points[point].used = false;
+            trail->pointTimer = 0.0f;
+            trail->emitTimer = 0.0f;
+            trail->wasActive = true;
+        }
+
+        const AttackProjectileVisual *visual = AttackProjectileVisualFor(w, p);
+        const AttackPresentation *doc =
+            (p->abilityIndex >= 0 && p->abilityIndex < w->content.abilityCount)
+            ? &w->content.attacks[p->abilityIndex] : NULL;
+
+        if (visual && visual->trailLength > 0.001f)
+        {
+            trail->pointTimer -= dt;
+            if (trail->pointTimer <= 0.0f)
+            {
+                trail->points[trail->head] = (AttackTrailPoint){
+                    .position = p->position, .age = 0.0f, .used = true
+                };
+                trail->head = (trail->head + 1)%ATTACK_TRAIL_POINTS;
+                trail->pointTimer = visual->trailLength/(float)ATTACK_TRAIL_POINTS;
+            }
+        }
+
+        if (doc && doc->authored)
+        {
+            trail->emitTimer -= dt;
+            if (trail->emitTimer <= 0.0f)
+            {
+                float yaw = atan2f(p->velocity.x, p->velocity.z);
+                for (int layer = 0; layer < MAX_ATTACK_LAYERS; layer++)
+                {
+                    const AttackEffectLayer *def = &doc->layers[layer];
+                    if (!def->used || def->anchor != ATTACK_ANCHOR_PROJECTILE)
+                        continue;
+                    SpawnFromLayer(&w->presentation, def, p->position, yaw, -1);
+                }
+                trail->emitTimer = 0.045f;
+            }
+        }
+    }
+}
+
 void AttackFxUpdate(App *w, float dt)
 {
+    UpdateProjectileVisuals(w, dt);
     for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
     {
         AttackParticle *particle = &w->presentation.attackParticles[i];
@@ -247,11 +321,41 @@ static void DrawBlendGroup(App *w, Assets *a, int blend)
     }
 }
 
+static void DrawTrails(App *w, Assets *a)
+{
+    Camera3D camera = w->presentation.camera;
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        const AttackTrail *trail = &w->presentation.attackTrails[i];
+        const Projectile *p = &w->session.projectiles[i];
+        const AttackProjectileVisual *visual =
+            p->active ? AttackProjectileVisualFor(w, p) : NULL;
+        float length = visual ? visual->trailLength : 0.0f;
+
+        for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+        {
+            const AttackTrailPoint *tp = &trail->points[point];
+            if (!tp->used) continue;
+            float horizon = length > 0.001f ? length : 0.4f;
+            float fade = 1.0f - tp->age/horizon;
+            if (fade <= 0.0f) continue;
+
+            Color color = (visual && visual->tintOverride) ? visual->tint
+                        : (p->active ? p->color : (Color){ 200, 220, 255, 255 });
+            color.a = (unsigned char)(120.0f*fade);
+            float scale = visual ? visual->visualScale : 1.0f;
+            DrawBillboard(camera, a->texGlow, tp->position,
+                          (0.22f + 0.34f*fade)*scale, color);
+        }
+    }
+}
+
 void AttackFxDraw(App *w, Assets *a)
 {
     RenderBeginNoDepthWrite();
     DrawBlendGroup(w, a, ATTACK_BLEND_ALPHA);
     BeginBlendMode(BLEND_ADDITIVE);
+    DrawTrails(w, a);
     DrawBlendGroup(w, a, ATTACK_BLEND_ADDITIVE);
     EndBlendMode();
     RenderEndNoDepthWrite();

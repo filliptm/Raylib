@@ -16,4 +16,10 @@ void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
 void AttackFxUpdate(App *w, float dt);
 void AttackFxDraw(App *w, Assets *a);
 
+// Authored projectile visual block for a live projectile, or NULL when the
+// ability is unauthored. Used by the projectile renderer for tint/scale/glow
+// overrides and by the light submitter.
+const AttackProjectileVisual *AttackProjectileVisualFor(const App *w,
+                                                        const Projectile *p);
+
 #endif

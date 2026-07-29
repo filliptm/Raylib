@@ -206,7 +206,10 @@ static void DrawWallTile(const Arena *arena, Assets *assets, int tx, int tz)
     DrawLit(assets, assets->cube, core, assets->texMetal, WALL_CORE,
             (Vector2){ 1.0f, 1.0f }, 0.0f);
 
-    Matrix plinth = EnvTRS((Vector3){ tileSize*1.04f, 0.26f, tileSize*1.04f },
+    // Keep each plinth strictly inside its tile. The previous 1.04 footprint made
+    // neighboring wall cubes overlap by 4% of a tile, leaving coplanar top strips
+    // for the depth buffer to alternate between as the camera moved.
+    Matrix plinth = EnvTRS((Vector3){ tileSize*0.98f, 0.26f, tileSize*0.98f },
                            0.0f, (Vector3){ c.x, 0.13f, c.z });
     DrawLit(assets, assets->cube, plinth, assets->texMetal, WALL_BASE,
             (Vector2){ 1.0f, 1.0f }, 0.0f);

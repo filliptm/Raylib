@@ -115,6 +115,23 @@ typedef struct AttackParticle {
     Vector3 followOffset;
 } AttackParticle;
 
+// Per-projectile-slot presentation state for authored visuals: a short position
+// history for trails plus the emission clock for projectile-anchored layers.
+#define ATTACK_TRAIL_POINTS 24
+typedef struct AttackTrailPoint {
+    Vector3 position;
+    float age;
+    bool used;
+} AttackTrailPoint;
+
+typedef struct AttackTrail {
+    AttackTrailPoint points[ATTACK_TRAIL_POINTS];
+    int head;
+    bool wasActive;
+    float pointTimer;
+    float emitTimer;
+} AttackTrail;
+
 typedef struct PresentationState {
     Camera3D camera;
     Vector3 camFocus;
@@ -127,6 +144,7 @@ typedef struct PresentationState {
     CharacterActionState actions[MAX_BRAWLERS];
     CharacterAnimState anim[MAX_BRAWLERS];
     AttackParticle attackParticles[MAX_ATTACK_PARTICLES];
+    AttackTrail attackTrails[MAX_PROJECTILES];
     int droppedVfx;
     int vfxEventsConsumed;
     int vfxLayersSpawned;
