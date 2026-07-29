@@ -1113,6 +1113,7 @@ void RenderWorld(App *w)
 
         DrawGems(w, a);
         DrawSolidEffects(w, a);
+        AttackFxDrawSolid(w, a);
         AbilityVisualsDraw(w, a);
         DrawShockwaves(w);
         VfxDraw(&w->presentation, a, w->presentation.camera,

@@ -69,6 +69,8 @@ int main(void)
     app.content.attacks[mainAbility].projectile.trailLength = 0.4f;
     app.content.attacks[mainAbility].projectile.spin = 2.5f;
     app.content.attacks[mainAbility].projectile.hideBody = true;
+    app.content.attacks[mainAbility].layers[0].shape = ATTACK_SHAPE_SHIELD;
+    app.content.attacks[mainAbility].layers[0].emissive = 0.7f;
     app.content.attacks[mainAbility].motions[0] =
         (AttackMotion){ .used = true, .kind = ATTACK_MOTION_RECOIL,
                         .delay = 0.02f, .duration = 0.3f, .amplitude = 1.2f };
@@ -88,6 +90,9 @@ int main(void)
     CHECK(loaded->layers[2].pattern == ATTACK_PATTERN_BURST &&
           loaded->layers[2].count == 6,
           "burst layer did not round trip");
+    CHECK(loaded->layers[0].shape == ATTACK_SHAPE_SHIELD &&
+          loaded->layers[0].emissive == 0.7f,
+          "solid shape did not round trip");
     CHECK(loaded->projectile.trailLength == 0.4f &&
           loaded->projectile.spin == 2.5f &&
           loaded->projectile.hideBody,

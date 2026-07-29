@@ -12,6 +12,9 @@ static const char *PATTERN_NAMES[ATTACK_PATTERN_COUNT] = {
     "single", "burst", "ring", "cone"
 };
 static const char *BLEND_NAMES[ATTACK_BLEND_COUNT] = { "alpha", "additive" };
+static const char *SHAPE_NAMES[ATTACK_SHAPE_COUNT] = {
+    "sprite", "shield", "orb", "disc"
+};
 static const char *MOTION_NAMES[ATTACK_MOTION_COUNT] = {
     "none", "recoil", "raise_right", "raise_left", "swing_right",
     "twist", "slam", "lean"
@@ -61,7 +64,9 @@ static AttackEffectLayer DefaultLayer(void)
         .colorEnd = (Color){ 255, 255, 255, 0 },
         .blend = ATTACK_BLEND_ADDITIVE,
         .rotateSpeed = 0.0f,
-        .ground = false
+        .ground = false,
+        .shape = ATTACK_SHAPE_SPRITE,
+        .emissive = 0.55f
     };
 }
 
@@ -181,6 +186,8 @@ static bool ValidateLayer(const AttackEffectLayer *layer, const char *abilityId,
                 FiniteRange(layer->scaleEnd, 0.0f, 30.0f), "bad scale");
     LAYER_CHECK(layer->blend >= 0 && layer->blend < ATTACK_BLEND_COUNT, "bad blend");
     LAYER_CHECK(FiniteRange(layer->rotateSpeed, -3600.0f, 3600.0f), "bad rotation");
+    LAYER_CHECK(layer->shape >= 0 && layer->shape < ATTACK_SHAPE_COUNT, "bad shape");
+    LAYER_CHECK(FiniteRange(layer->emissive, 0.0f, 1.0f), "bad emissive");
 
     #undef LAYER_CHECK
     return true;
@@ -286,6 +293,10 @@ static void AssignLayerField(AttackEffectLayer *layer, const char *key, const ch
     else if (strcmp(key, "scale1") == 0) layer->scaleEnd = (float)atof(value);
     else if (strcmp(key, "rotate") == 0) layer->rotateSpeed = (float)atof(value);
     else if (strcmp(key, "ground") == 0) layer->ground = atoi(value) != 0;
+    else if (strcmp(key, "shape") == 0 &&
+             (named = NameIndex(value, SHAPE_NAMES, ATTACK_SHAPE_COUNT)) >= 0)
+        layer->shape = named;
+    else if (strcmp(key, "emissive") == 0) layer->emissive = (float)atof(value);
     else if (ParseColorField(key, value, "c0", &layer->colorStart)) { }
     else if (ParseColorField(key, value, "c1", &layer->colorEnd)) { }
 }
@@ -432,7 +443,7 @@ static void WriteLayer(FILE *file, int index, const AttackEffectLayer *layer)
             "count=%d delay=%g duration=%g forward=%g up=%g side=%g spread=%g "
             "speed=%g gravity=%g drag=%g scale0=%g scale1=%g "
             "c0r=%d c0g=%d c0b=%d c0a=%d c1r=%d c1g=%d c1b=%d c1a=%d "
-            "blend=%s rotate=%g ground=%d\n",
+            "blend=%s rotate=%g ground=%d shape=%s emissive=%g\n",
             index, ANCHOR_NAMES[layer->anchor], layer->atlas, layer->frame,
             layer->frameCount, layer->fps, PATTERN_NAMES[layer->pattern],
             layer->count, layer->delay, layer->duration, layer->forward,
@@ -441,7 +452,8 @@ static void WriteLayer(FILE *file, int index, const AttackEffectLayer *layer)
             layer->colorStart.r, layer->colorStart.g, layer->colorStart.b,
             layer->colorStart.a, layer->colorEnd.r, layer->colorEnd.g,
             layer->colorEnd.b, layer->colorEnd.a, BLEND_NAMES[layer->blend],
-            layer->rotateSpeed, layer->ground ? 1 : 0);
+            layer->rotateSpeed, layer->ground ? 1 : 0,
+            SHAPE_NAMES[layer->shape], layer->emissive);
 }
 
 bool AttackContentSaveFile(const ContentCatalog *catalog, const char *path,

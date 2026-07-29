@@ -34,6 +34,17 @@ typedef enum {
     ATTACK_BLEND_COUNT
 } AttackBlendMode;
 
+// Sprite layers are camera-facing flipbook quads; the solid shapes are real lit
+// meshes with depth, shading, and the toon ink outline - a travelling shield
+// wall, an energy orb, or a flat disc.
+typedef enum {
+    ATTACK_SHAPE_SPRITE = 0,
+    ATTACK_SHAPE_SHIELD,
+    ATTACK_SHAPE_ORB,
+    ATTACK_SHAPE_DISC,
+    ATTACK_SHAPE_COUNT
+} AttackShape;
+
 typedef enum {
     ATTACK_MOTION_NONE = 0,
     ATTACK_MOTION_RECOIL,
@@ -64,9 +75,11 @@ typedef struct AttackEffectLayer {
     float drag;
     float scaleStart, scaleEnd;
     Color colorStart, colorEnd;
-    int blend;                  // AttackBlendMode
+    int blend;                  // AttackBlendMode (sprites only)
     float rotateSpeed;          // degrees per second
     bool ground;                // lie flat on the ground instead of billboarding
+    int shape;                  // AttackShape; non-sprite shapes ignore the atlas
+    float emissive;             // solid shapes: 0 fully lit .. 1 self-lit
 } AttackEffectLayer;
 
 typedef struct AttackMotion {

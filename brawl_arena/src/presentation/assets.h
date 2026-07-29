@@ -151,6 +151,7 @@ typedef struct Assets {
     Mesh sphere;    // radius 1 centred on origin
     Mesh cylinder;  // radius 1, height 1, base at y=0
     Mesh plane;     // 1x1 on the XZ plane
+    Mesh shieldArc; // curved double-sided plate facing +Z, for shield effects
 
     Material mat;   // shared material bound to the lighting shader
 

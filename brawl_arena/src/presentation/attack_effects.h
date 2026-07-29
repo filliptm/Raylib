@@ -16,6 +16,10 @@ void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
 void AttackFxUpdate(App *w, float dt);
 void AttackFxDraw(App *w, Assets *a);
 
+// Lit, depth-writing pass for mesh-shaped layers (shield walls, orbs, discs).
+// Call inside the solid section of the world pass, before transparents.
+void AttackFxDrawSolid(App *w, Assets *a);
+
 // Authored projectile visual block for a live projectile, or NULL when the
 // ability is unauthored. Used by the projectile renderer for tint/scale/glow
 // overrides and by the light submitter.

@@ -83,6 +83,9 @@ static void SpawnFromLayer(PresentationState *p, const AttackEffectLayer *layer,
             .rotation = layer->rotateSpeed != 0.0f ? Rand01()*360.0f : 0.0f,
             .rotateSpeed = layer->rotateSpeed,
             .ground = layer->ground,
+            .shape = layer->shape,
+            .yaw = direction,
+            .emissive = layer->emissive,
             .follow = followBrawler,
             .followOffset = Vector3Subtract(base, origin)
         };
@@ -286,6 +289,7 @@ static void DrawBlendGroup(App *w, Assets *a, int blend)
     {
         const AttackParticle *particle = &w->presentation.attackParticles[i];
         if (!particle->active || particle->blend != blend) continue;
+        if (particle->shape != ATTACK_SHAPE_SPRITE) continue;
         if (particle->age < particle->delay) continue;
 
         float t = (particle->age - particle->delay)/particle->duration;
@@ -348,6 +352,59 @@ static void DrawTrails(App *w, Assets *a)
                           (0.22f + 0.34f*fade)*scale, color);
         }
     }
+}
+
+// Solid shapes render through the lit pass with depth writes, so they pick up
+// lighting, occlusion, and the toon ink outline like any world object. Alpha
+// still fades them out over life.
+void AttackFxDrawSolid(App *w, Assets *a)
+{
+    rlDisableBackfaceCulling();
+    for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
+    {
+        const AttackParticle *particle = &w->presentation.attackParticles[i];
+        if (!particle->active || particle->shape == ATTACK_SHAPE_SPRITE) continue;
+        if (particle->age < particle->delay) continue;
+
+        float t = (particle->age - particle->delay)/particle->duration;
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        float size = particle->scaleStart +
+                     (particle->scaleEnd - particle->scaleStart)*t;
+        Color color = LerpColor(particle->colorStart, particle->colorEnd, t);
+        if (color.a < 4 || size <= 0.01f) continue;
+
+        // `rotation` already accumulates rotateSpeed in the update step.
+        float yaw = particle->yaw + particle->rotation*DEG2RAD;
+        Matrix m;
+        Mesh mesh;
+        switch (particle->shape)
+        {
+            case ATTACK_SHAPE_SHIELD:
+                // Wide curved plate: width tracks the size, height stays squat so
+                // it reads as a wall of energy rather than a billboard.
+                mesh = a->shieldArc;
+                m = MatrixMultiply(MatrixScale(size*1.35f, size*0.62f, size),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_ORB:
+                mesh = a->sphere;
+                m = MatrixMultiply(MatrixScale(size*0.5f, size*0.5f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+            default:    // ATTACK_SHAPE_DISC
+                mesh = a->cylinder;
+                m = MatrixMultiply(MatrixScale(size*0.5f, 0.05f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+        }
+        m = MatrixMultiply(m, MatrixTranslate(particle->position.x,
+                                              fmaxf(particle->position.y, 0.05f),
+                                              particle->position.z));
+        DrawLit(a, mesh, m, a->texFlat, color, (Vector2){ 1.0f, 1.0f },
+                particle->emissive);
+    }
+    rlEnableBackfaceCulling();
 }
 
 void AttackFxDraw(App *w, Assets *a)

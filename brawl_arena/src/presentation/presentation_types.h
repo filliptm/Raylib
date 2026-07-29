@@ -111,6 +111,9 @@ typedef struct AttackParticle {
     float rotation;         // degrees
     float rotateSpeed;
     bool ground;
+    int shape;              // AttackShape; solids render in the lit pass
+    float yaw;              // travel heading, orients solid shapes
+    float emissive;
     int follow;             // brawler index for caster-anchored layers, else -1
     Vector3 followOffset;
 } AttackParticle;

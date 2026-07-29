@@ -118,11 +118,13 @@ $(HEALER_TEST_TARGET): tests/test_healer.c $(CONFIG_TEST_OBJECTS)
 
 $(NO_SHAKE_TEST_TARGET): tests/test_no_attack_shake.c $(CONFIG_TEST_OBJECTS) \
 		$(OBJ_DIR)/presentation/effects.o $(OBJ_DIR)/presentation/attack_effects.o \
+		$(OBJ_DIR)/presentation/assets.o $(OBJ_DIR)/presentation/generated_assets.o \
 		$(OBJ_DIR)/presentation/character_animation.o \
 		$(VFX_TEST_OBJECTS)
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_no_attack_shake.c \
 		$(CONFIG_TEST_OBJECTS) $(OBJ_DIR)/presentation/effects.o \
 		$(OBJ_DIR)/presentation/attack_effects.o \
+		$(OBJ_DIR)/presentation/assets.o $(OBJ_DIR)/presentation/generated_assets.o \
 		$(OBJ_DIR)/presentation/character_animation.o $(VFX_TEST_OBJECTS) \
 		$(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 

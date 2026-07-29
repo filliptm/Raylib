@@ -428,6 +428,97 @@ static void PlanetPixel(int x, int y, int size, Color *output)
     output->a = ClampByte(edge*255.0f);
 }
 
+// A curved plate for authored shield-wave effects: a horizontal arc with a slight
+// vertical barrel bulge, centred on the origin and facing +Z, double-sided so it
+// reads from every camera angle. Scaled non-uniformly at draw time.
+static Mesh MakeShieldArcMesh(void)
+{
+    const int columns = 16;
+    const int rows = 4;
+    const float arcSpan = 80.0f*DEG2RAD;
+
+    int gridVerts = (columns + 1)*(rows + 1);
+    int vertexCount = gridVerts*2;               // front and back faces
+    int triangleCount = columns*rows*2*2;
+
+    Mesh mesh = { 0 };
+    mesh.vertexCount = vertexCount;
+    mesh.triangleCount = triangleCount;
+    mesh.vertices = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.normals = malloc((size_t)vertexCount*3*sizeof(float));
+    mesh.texcoords = malloc((size_t)vertexCount*2*sizeof(float));
+    mesh.indices = malloc((size_t)triangleCount*3*sizeof(unsigned short));
+    if (!mesh.vertices || !mesh.normals || !mesh.texcoords || !mesh.indices)
+        return (Mesh){ 0 };
+
+    for (int side = 0; side < 2; side++)
+    {
+        float flip = side == 0 ? 1.0f : -1.0f;
+        for (int row = 0; row <= rows; row++)
+        {
+            float v = row/(float)rows;
+            float bulge = 0.12f*(1.0f - (2.0f*v - 1.0f)*(2.0f*v - 1.0f));
+            for (int col = 0; col <= columns; col++)
+            {
+                float u = col/(float)columns;
+                float a = (u - 0.5f)*arcSpan;
+                float radius = 1.0f + bulge;
+                int index = side*gridVerts + row*(columns + 1) + col;
+
+                mesh.vertices[index*3 + 0] = sinf(a)*radius;
+                mesh.vertices[index*3 + 1] = v - 0.5f;
+                mesh.vertices[index*3 + 2] = cosf(a)*radius - 1.0f;
+                mesh.normals[index*3 + 0] = sinf(a)*flip;
+                mesh.normals[index*3 + 1] = 0.0f;
+                mesh.normals[index*3 + 2] = cosf(a)*flip;
+                mesh.texcoords[index*2 + 0] = u;
+                mesh.texcoords[index*2 + 1] = v;
+            }
+        }
+    }
+
+    int triangle = 0;
+    for (int side = 0; side < 2; side++)
+    {
+        int base = side*gridVerts;
+        for (int row = 0; row < rows; row++)
+        {
+            for (int col = 0; col < columns; col++)
+            {
+                unsigned short a = (unsigned short)(base + row*(columns + 1) + col);
+                unsigned short b = (unsigned short)(a + 1);
+                unsigned short c = (unsigned short)(a + columns + 1);
+                unsigned short d = (unsigned short)(c + 1);
+                if (side == 0)
+                {
+                    mesh.indices[triangle*3 + 0] = a;
+                    mesh.indices[triangle*3 + 1] = c;
+                    mesh.indices[triangle*3 + 2] = b;
+                    triangle++;
+                    mesh.indices[triangle*3 + 0] = b;
+                    mesh.indices[triangle*3 + 1] = c;
+                    mesh.indices[triangle*3 + 2] = d;
+                    triangle++;
+                }
+                else
+                {
+                    mesh.indices[triangle*3 + 0] = a;
+                    mesh.indices[triangle*3 + 1] = b;
+                    mesh.indices[triangle*3 + 2] = c;
+                    triangle++;
+                    mesh.indices[triangle*3 + 0] = b;
+                    mesh.indices[triangle*3 + 1] = d;
+                    mesh.indices[triangle*3 + 2] = c;
+                    triangle++;
+                }
+            }
+        }
+    }
+
+    UploadMesh(&mesh, false);
+    return mesh;
+}
+
 void GeneratedAssetsLoad(Assets *assets)
 {
     assets->grassBlade = MakeGrassBlade();
@@ -442,4 +533,5 @@ void GeneratedAssetsLoad(Assets *assets)
     assets->texGrass = MakeTexture(256, GrassPixel, true);
     assets->texStarfield = MakeTexture(512, StarfieldPixel, true);
     assets->texPlanet = MakeTexture(512, PlanetPixel, true);
+    assets->shieldArc = MakeShieldArcMesh();
 }

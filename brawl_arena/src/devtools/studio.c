@@ -229,17 +229,29 @@ static void AtlasBrowser(CommandUi *ui, Assets *assets, AttackEffectLayer *layer
     ui->y += (int)dest.height + 10;
 }
 
+static const char *SHAPE_LABELS[ATTACK_SHAPE_COUNT] = {
+    "Sprite", "Shield arc", "Orb", "Disc"
+};
+
 static void LayerEditor(CommandUi *ui, Assets *assets, AttackEffectLayer *layer)
 {
     bool changed = false;
     changed |= CommandUiCycler(ui, "Anchor", &layer->anchor,
                                ATTACK_ANCHOR_COUNT, ANCHOR_LABELS);
-    changed |= CommandUiCycler(ui, "Atlas", &layer->atlas,
-                               MAX_ATTACK_ATLASES, ATLAS_LABELS);
-    AtlasBrowser(ui, assets, layer);
-    changed |= CommandUiSliderI(ui, "First frame", &layer->frame, 0, 63);
-    changed |= CommandUiSliderI(ui, "Frame count", &layer->frameCount, 1, 64);
-    changed |= CommandUiSliderF(ui, "Flipbook fps", &layer->fps, 0.0f, 60.0f, "%.0f");
+    changed |= CommandUiCycler(ui, "Shape", &layer->shape,
+                               ATTACK_SHAPE_COUNT, SHAPE_LABELS);
+    if (layer->shape == ATTACK_SHAPE_SPRITE)
+    {
+        changed |= CommandUiCycler(ui, "Atlas", &layer->atlas,
+                                   MAX_ATTACK_ATLASES, ATLAS_LABELS);
+        AtlasBrowser(ui, assets, layer);
+        changed |= CommandUiSliderI(ui, "First frame", &layer->frame, 0, 63);
+        changed |= CommandUiSliderI(ui, "Frame count", &layer->frameCount, 1, 64);
+        changed |= CommandUiSliderF(ui, "Flipbook fps", &layer->fps, 0.0f, 60.0f, "%.0f");
+    }
+    else
+        changed |= CommandUiSliderF(ui, "Self-lit", &layer->emissive,
+                                    0.0f, 1.0f, "%.2f");
     changed |= CommandUiCycler(ui, "Pattern", &layer->pattern,
                                ATTACK_PATTERN_COUNT, PATTERN_LABELS);
     changed |= CommandUiSliderI(ui, "Count", &layer->count, 1, 32);

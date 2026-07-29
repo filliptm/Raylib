@@ -1082,6 +1082,7 @@ void AssetsUnload(Assets *a)
     UnloadMesh(a->sphere);
     UnloadMesh(a->cylinder);
     UnloadMesh(a->plane);
+    UnloadMesh(a->shieldArc);
     UnloadMesh(a->grassBlade);
 
     UnloadTexture(a->texFloor);
