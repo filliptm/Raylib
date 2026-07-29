@@ -68,6 +68,7 @@ int main(void)
     app.content.attacks[mainAbility].layers[1].colorStart = (Color){ 12, 34, 56, 200 };
     app.content.attacks[mainAbility].projectile.trailLength = 0.4f;
     app.content.attacks[mainAbility].projectile.spin = 2.5f;
+    app.content.attacks[mainAbility].projectile.hideBody = true;
     app.content.attacks[mainAbility].motions[0] =
         (AttackMotion){ .used = true, .kind = ATTACK_MOTION_RECOIL,
                         .delay = 0.02f, .duration = 0.3f, .amplitude = 1.2f };
@@ -88,7 +89,8 @@ int main(void)
           loaded->layers[2].count == 6,
           "burst layer did not round trip");
     CHECK(loaded->projectile.trailLength == 0.4f &&
-          loaded->projectile.spin == 2.5f,
+          loaded->projectile.spin == 2.5f &&
+          loaded->projectile.hideBody,
           "projectile visuals did not round trip");
     CHECK(loaded->motions[0].used &&
           loaded->motions[0].kind == ATTACK_MOTION_RECOIL &&

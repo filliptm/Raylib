@@ -78,6 +78,7 @@ typedef struct AttackMotion {
 } AttackMotion;
 
 typedef struct AttackProjectileVisual {
+    bool hideBody;              // suppress the built-in body/halo so layers own the look
     bool tintOverride;
     Color tint;
     float glow;                 // light intensity multiplier, 1 = default

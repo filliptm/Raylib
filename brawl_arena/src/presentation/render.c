@@ -496,7 +496,12 @@ static void DrawSolidEffects(App *w, Assets *a)
         Projectile *p = &w->session.projectiles[i];
         if (!p->active || p->arcing) continue;
 
+        // Authored documents may hide or rescale the built-in body so layered
+        // effects (a wave, a beam) can be the whole look of the shot.
+        const AttackProjectileVisual *bodyVisual = AttackProjectileVisualFor(w, p);
+        if (bodyVisual && bodyVisual->hideBody) continue;
         float r = fmaxf(p->radius, 0.16f)*2.0f;
+        if (bodyVisual) r *= bodyVisual->visualScale;
         if (p->motion == PROJECTILE_MOTION_RETURNING)
         {
             float spin = p->traveled/fmaxf(p->radius, 0.1f)*0.55f;
@@ -642,17 +647,20 @@ static void DrawProjectiles(App *w, Assets *a)
         // the built-in trail with their own history trail.
         const AttackProjectileVisual *authored = AttackProjectileVisualFor(w, p);
         float glowStrength = 1.0f;
+        bool bodyHidden = false;
         if (authored)
         {
             if (authored->tintOverride) glow = authored->tint;
             glowStrength = authored->glow;
+            bodyHidden = authored->hideBody;
         }
         // Visual size only: p->radius stays the gameplay hitbox. The solid body is
         // drawn in the lit pass; this pass only adds a restrained halo and trail.
         float coreSize = p->arcing ? 0.55f : fmaxf(p->radius, 0.16f)*2.6f;
         if (authored) coreSize *= authored->visualScale;
 
-        if (!p->arcing && !(authored && authored->trailLength > 0.001f))
+        if (!p->arcing && !bodyHidden &&
+            !(authored && authored->trailLength > 0.001f))
         {
             // Trail: a few fading billboards strung out behind the shot.
             Vector3 dir = Vector3Normalize(p->velocity);
@@ -702,6 +710,7 @@ static void DrawProjectiles(App *w, Assets *a)
         // The shell already has a solid body, so it only needs a fuse glow, not a core.
         if (p->arcing)
         {
+            if (bodyHidden) continue;
             float flicker = 0.72f + 0.28f*sinf(w->session.time*34.0f + i);
             DrawBillboard(w->presentation.camera, a->texGlow, p->position, coreSize*2.1f*flicker,
                           (Color){ glow.r, glow.g, glow.b, 70 });
@@ -709,6 +718,7 @@ static void DrawProjectiles(App *w, Assets *a)
         }
 
         // One colored halo; the white-hot centre is gone - the solid body is the core.
+        if (bodyHidden) continue;
         DrawBillboard(w->presentation.camera, a->texGlow, p->position, coreSize*1.5f,
                       (Color){ glow.r, glow.g, glow.b,
                                (unsigned char)Clamp(70.0f*glowStrength, 0.0f, 255.0f) });

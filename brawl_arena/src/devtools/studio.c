@@ -413,6 +413,7 @@ static void DrawEditorPanel(App *w, Assets *assets)
     CommandUiSection(&ui, "PROJECTILE");
     AttackProjectileVisual *pv = &doc->projectile;
     bool projectileChanged = false;
+    projectileChanged |= CommandUiToggle(&ui, "Hide projectile body", &pv->hideBody);
     projectileChanged |= CommandUiToggle(&ui, "Tint override", &pv->tintOverride);
     if (pv->tintOverride) ColorEditor(&ui, "TINT", &pv->tint);
     projectileChanged |= CommandUiSliderF(&ui, "Glow", &pv->glow, 0.0f, 4.0f, "%.2f");

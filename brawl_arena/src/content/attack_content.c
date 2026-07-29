@@ -400,6 +400,7 @@ bool AttackContentLoadFile(ContentCatalog *catalog, const char *path,
                 *equals = '\0';
                 const char *value = equals + 1;
                 if (strcmp(pair, "tint") == 0) pv->tintOverride = atoi(value) != 0;
+                else if (strcmp(pair, "hide") == 0) pv->hideBody = atoi(value) != 0;
                 else if (strcmp(pair, "glow") == 0) pv->glow = (float)atof(value);
                 else if (strcmp(pair, "scale") == 0) pv->visualScale = (float)atof(value);
                 else if (strcmp(pair, "spin") == 0) pv->spin = (float)atof(value);
@@ -478,8 +479,9 @@ bool AttackContentSaveFile(const ContentCatalog *catalog, const char *path,
         }
         const AttackProjectileVisual *pv = &doc->projectile;
         fprintf(file,
-                "projectile tint=%d cr=%d cg=%d cb=%d ca=%d glow=%g scale=%g "
+                "projectile hide=%d tint=%d cr=%d cg=%d cb=%d ca=%d glow=%g scale=%g "
                 "spin=%g trail=%g\n",
+                pv->hideBody ? 1 : 0,
                 pv->tintOverride ? 1 : 0, pv->tint.r, pv->tint.g, pv->tint.b,
                 pv->tint.a, pv->glow, pv->visualScale, pv->spin, pv->trailLength);
     }
