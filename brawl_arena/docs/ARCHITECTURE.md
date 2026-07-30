@@ -127,9 +127,11 @@ narrow game APIs. Tests can supply the same value without calling raylib input f
 On iPhone, `player_touch.c` assigns raylib touch IDs to one floating movement stick, one
 floating aim/fire stick, **SUPER**, **SKILL**, and pause. It converts stick displacement
 through the current camera basis, then writes the same move, aim, preview, release,
-secondary, and pause fields used by the desktop controller. The mapping and layout are
-pure functions covered without a window; game/core code never sees touch IDs, UIKit, or
-virtual-control rectangles.
+secondary, and pause fields used by the desktop controller. Movement normalizes to a
+unit vector after the dead zone, so touch and physical-gamepad sticks select direction
+but never a slower walking speed; aim magnitude remains analog. The mapping, full-speed
+normalization, and layout are pure functions covered without a window; game/core code
+never sees touch IDs, UIKit, or virtual-control rectangles.
 
 The command center uses `GameCommandExecute()` for actions such as changing a roster,
 respawning/killing/healing actors, spawning or clearing gems, changing class, and
@@ -205,7 +207,8 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   plinths remain inset to prevent adjacent coplanar geometry.
 - `camera.c`: camera initialization, project-tuned distance, lead, follow, and permitted
   shake. Distance scales the fixed-pitch offset and never enters deterministic
-  simulation state.
+  simulation state. iPhone applies a presentation-only 0.80 effective-distance
+  multiplier with a 20-unit floor.
 - `effects.c`: game-event consumption and transient visual pools.
 - `vfx_catalog.c`: stable, kit-specific effect recipes.
 - `vfx.c`: fixed VFX layer pool, animation, pose-socket resolution, sorting, and draw
@@ -259,21 +262,24 @@ The player-facing shell is split by responsibility:
 
 - `menu.c`: launch deck, mechanic-derived character motifs, orchestrated entrance,
   roster candidate/commit behavior, Controls, and Settings.
+- `phone_layout.c`: pure safe-width iPhone frames and home/roster/result geometry.
 - `hud.c`: body-anchored numeric health/shield bars and player ammo, objective/ability
   broadcast, resettable impact-stamp detection, action-retired tutorials, downed state,
   and the Continue/Rematch/Change Brawler result poster.
-- `mobile_controls.c`: native-resolution, safe-area-aware movement/attack sticks,
-  Super/Skill controls, cooldown/readiness feedback, and idle fade.
+- `mobile_controls.c`: native-resolution, safe-area-aware translucent movement/attack
+  sticks, Super/Skill controls, cooldown/readiness feedback, and idle fade.
 - `menu_scene.c`: the vector arena podium, character preview, and rounded sticker
   compositing pass.
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
   body, provenance header, and persistent save/reset footer.
 
 The resizable window has a 960×600 minimum. Layout scales from the reference canvas.
-On iPhone, the reference canvas is inset by the platform safe area before scaling,
-while the launch-deck backdrop extends across the full viewport beneath the cutout and
-home-indicator regions. Touch targets expand to at least 44 points, and touch-specific
-binding labels are used when the current modality is touch.
+On iPhone, the backdrop extends across the full viewport beneath the cutout and
+home-indicator regions. Home, roster, Controls, Settings, downed, and result UI
+temporarily use a 500-unit-tall phone frame whose reference width expands to fill the
+inset landscape safe area; the shared process-lifetime layout is restored afterward.
+Touch targets expand to at least 44 points, and touch-specific binding labels are used
+when the current modality is touch.
 When post-processing is active, the world renders into a color/sampleable-depth target
 at `presentation.render_scale` (1.0×–2.0×, tracked default 1.5×) and downsamples before
 native-resolution UI. Scene-target sizing and post output resolution use drawable
@@ -284,9 +290,10 @@ resolution before direct world rendering. The backbuffer requests 4× MSAA for d
 post-disabled, resize, and failure-fallback frames. UI preference state is
 profile-scoped; presentation framing and render scale are project-scoped content and
 participate in transactional validation/promotion.
-The iPhone runtime keeps the authored project value intact but caps the effective render
-scale at 1.0× and disables the post pass. World shaders compile as OpenGL ES 3 variants,
-while the safe-area HUD remains native-resolution.
+The iPhone runtime keeps authored project values intact, caps the effective render scale
+at 1.0×, disables the post pass, and applies the camera distance policy described above.
+World shaders compile as OpenGL ES 3 variants, while the safe-area HUD remains
+native-resolution.
 
 `platform.c` is the only app-owned platform policy module. The iPhone bridge changes the
 working directory to the bundled `BrawlAssets` resource root before content load,
@@ -333,8 +340,9 @@ presentation state remains untouched.
 `test_ui` exercises pure layout, target size, focus-neighbor, ID, easing/reduced motion,
 distinct character motifs, result actions, contrast, procedural-skin lifetime, and
 presentation-profile behavior without opening a window. It also covers notched safe
-areas, 44-point touch expansion, non-overlapping mobile controls, camera-relative stick
-mapping, and touch binding language.
+areas, dedicated phone compositions, 44-point touch expansion, non-overlapping mobile
+controls, camera-relative stick mapping, binary full-speed movement, and touch binding
+language.
 `check-ui` prevents migrated player UI from bypassing shared text/skin ownership and
 verifies shipped fonts, procedural ownership, retained reference provenance, and archive
 policy. Graphical checks remain documented in

@@ -9,6 +9,7 @@
 #include "config.h"
 #include "content_catalog.h"
 #include "menu_scene.h"
+#include "phone_layout.h"
 #include "ui_system.h"
 #include "raymath.h"
 #include <stdio.h>
@@ -53,6 +54,7 @@ static Rectangle ScaleRectCentered(Rectangle bounds, float scale)
     };
 }
 
+#if !defined(BRAWL_MOBILE)
 static Rectangle RefRectOffsetY(float x, float y, float width, float height,
                                 float referenceOffset)
 {
@@ -60,6 +62,21 @@ static Rectangle RefRectOffsetY(float x, float y, float width, float height,
     bounds.y += UiScale(referenceOffset);
     return bounds;
 }
+#endif
+
+#if defined(BRAWL_MOBILE)
+static Rectangle OffsetRectY(Rectangle bounds, float offset)
+{
+    bounds.y += offset;
+    return bounds;
+}
+
+static UiPhoneFrame PhoneFrame(void)
+{
+    return UiPhoneFrameForViewport(
+        GetScreenWidth(), GetScreenHeight(), g_ui->insets);
+}
+#endif
 
 static void DrawBackdrop(void)
 {
@@ -188,6 +205,7 @@ static void StartMatch(App *w, bool practice)
     ShellRequestScreen(w, SCREEN_MATCH);
 }
 
+#if !defined(BRAWL_MOBILE)
 static void DrawHome(App *w, float logoScale, float railOffset)
 {
     const UiTheme *t = g_ui->theme;
@@ -259,6 +277,75 @@ static void DrawHome(App *w, float logoScale, float railOffset)
                                  "DEPLOY", UI_BUTTON_PRIMARY, UI_ICON_NEXT);
     if (deploy.activated) StartMatch(w, false);
 }
+#endif
+
+#if defined(BRAWL_MOBILE)
+static void DrawHomeMobile(App *w, float logoScale, float railOffset)
+{
+    const UiTheme *t = g_ui->theme;
+    BrawlerClass selected = (BrawlerClass)w->tune.selectedKit;
+    const CharacterDefinition *character = ContentCharacter(&w->content, selected);
+    UiPhoneHomeLayout layout = UiPhoneHomeLayoutForFrame(PhoneFrame());
+    float entranceOffset = UiScale(railOffset);
+
+    UiDrawArenaLogo(ScaleRectCentered(layout.logo, logoScale));
+
+    UiResponse controls = UiButton(
+        UiHash("home.controls"), layout.controls,
+        "Controls", UI_BUTTON_BLUE, UI_ICON_CONTROLS);
+    if (controls.activated)
+        OpenOverlay(MENU_OVERLAY_CONTROLS, UiHash("home.controls"));
+    UiResponse settings = UiButton(
+        UiHash("home.settings"), layout.settings,
+        "Settings", UI_BUTTON_YELLOW, UI_ICON_SETTINGS);
+    if (settings.activated)
+        OpenOverlay(MENU_OVERLAY_SETTINGS, UiHash("home.settings"));
+
+    layout.rail = OffsetRectY(layout.rail, entranceOffset);
+    layout.roster = OffsetRectY(layout.roster, entranceOffset);
+    layout.mode = OffsetRectY(layout.mode, entranceOffset);
+    layout.modePrevious = OffsetRectY(layout.modePrevious, entranceOffset);
+    layout.modeNext = OffsetRectY(layout.modeNext, entranceOffset);
+    layout.modeSlab = OffsetRectY(layout.modeSlab, entranceOffset);
+    layout.practice = OffsetRectY(layout.practice, entranceOffset);
+    layout.deploy = OffsetRectY(layout.deploy, entranceOffset);
+
+    UiDrawFeaturePanel(layout.rail, t->ink, t->paper, true);
+    UiResponse roster = UiButton(
+        UiHash("home.roster"), layout.roster,
+        character->displayName, UI_BUTTON_BLUE, UI_ICON_NEXT);
+    if (roster.activated) ShellRequestScreen(w, SCREEN_BRAWLERS);
+
+    UiDrawPanel(layout.mode, t->ink, t->paper, false);
+    UiResponse previous = UiIconButton(
+        UiHash("home.mode.previous"), layout.modePrevious,
+        UI_ICON_PREVIOUS, "Previous mode");
+    UiResponse next = UiIconButton(
+        UiHash("home.mode.next"), layout.modeNext,
+        UI_ICON_NEXT, "Next mode");
+    const char *modeName = w->tune.gemGrab ? "GEM GRAB" : "SKIRMISH";
+    UiDrawControlSurface(layout.modeSlab,
+                         w->tune.gemGrab ? t->yellow : t->blue,
+                         t->ink, true);
+    UiDrawTextFit(UI_TEXT_HEADING, modeName, layout.modeSlab,
+                  UI_ALIGN_CENTER, w->tune.gemGrab ? t->ink : t->paper);
+    if (previous.activated || next.activated ||
+        g_ui->previousPressed || g_ui->nextPressed)
+    {
+        w->tune.gemGrab = !w->tune.gemGrab;
+        ConfigMarkDirty();
+    }
+
+    UiResponse practice = UiButton(
+        UiHash("home.practice"), layout.practice,
+        "Practice", UI_BUTTON_BLUE, UI_ICON_PRACTICE);
+    if (practice.activated) StartMatch(w, true);
+    UiResponse deploy = UiButton(
+        UiHash("home.deploy"), layout.deploy,
+        "DEPLOY", UI_BUTTON_PRIMARY, UI_ICON_NEXT);
+    if (deploy.activated) StartMatch(w, false);
+}
+#endif
 
 static void DrawRosterRow(App *w, BrawlerClass cls, Rectangle bounds)
 {
@@ -281,8 +368,120 @@ static void DrawRosterRow(App *w, BrawlerClass cls, Rectangle bounds)
         g_candidate = cls;
 }
 
+#if defined(BRAWL_MOBILE)
+static void DrawRosterMobile(App *w)
+{
+    const UiTheme *t = g_ui->theme;
+    const CharacterDefinition *candidate =
+        ContentCharacter(&w->content, g_candidate);
+    const AbilityDefinition *main =
+        ContentMainAbility(&w->content, g_candidate);
+    const AbilityDefinition *super =
+        ContentSuperAbility(&w->content, g_candidate);
+    const AbilityDefinition *secondary =
+        ContentSecondaryAbility(&w->content, g_candidate);
+    Color accent = CharacterAccent(w, g_candidate);
+    UiPhoneRosterLayout layout = UiPhoneRosterLayoutForFrame(PhoneFrame());
+
+    UiDrawFeaturePanel(layout.header, t->ink, t->paper, true);
+    UiDrawSignalRail(layout.header, accent, false);
+    UiResponse back = UiButton(
+        UiHash("roster.back"), layout.back,
+        "Back", UI_BUTTON_BLUE, UI_ICON_BACK);
+    if (back.activated) ShellRequestScreen(w, SCREEN_MENU);
+    UiDrawTextFit(UI_TEXT_HEADING, "BRAWLER SELECT", layout.title,
+                  UI_ALIGN_CENTER, t->paper);
+
+    char selectLabel[96];
+    snprintf(selectLabel, sizeof(selectLabel), "SELECT %s", candidate->displayName);
+    UiResponse select = UiButton(
+        UiHash("roster.confirm"), layout.select,
+        selectLabel, UI_BUTTON_YELLOW, UI_ICON_NEXT);
+    if (select.activated)
+    {
+        w->tune.selectedKit = g_candidate;
+        ConfigMarkDirty();
+        ShellRequestScreen(w, SCREEN_MENU);
+    }
+
+    UiDrawFeaturePanel(layout.identity, t->inkSoft, t->paper, true);
+    UiDrawSignalRail(layout.identity, accent, false);
+    UiDrawText(UI_TEXT_CAPTION, ROLE_NAMES[candidate->role],
+               (Vector2){ layout.identity.x + UiScale(18),
+                          layout.identity.y + UiScale(14) }, accent);
+    UiDrawTextFit(
+        UI_TEXT_TITLE, candidate->displayName,
+        (Rectangle){ layout.identity.x + UiScale(18),
+                     layout.identity.y + UiScale(31),
+                     layout.identity.width - UiScale(34), UiScale(48) },
+        UI_ALIGN_LEFT, t->paper);
+
+    float abilityY = layout.identity.y + UiScale(86);
+    float abilityHeight = UiScale(72);
+    float abilityGap = UiScale(8);
+    Rectangle abilityBounds = {
+        layout.identity.x + UiScale(16), abilityY,
+        layout.identity.width - UiScale(30), abilityHeight
+    };
+    DrawAbilityBlock(abilityBounds, "MAIN ATTACK", main, t->blue);
+    abilityBounds.y += abilityHeight + abilityGap;
+    if (secondary)
+    {
+        DrawAbilityBlock(abilityBounds, "SKILL", secondary, t->yellow);
+        abilityBounds.y += abilityHeight + abilityGap;
+    }
+    DrawAbilityBlock(abilityBounds, "ULTIMATE", super, t->purple);
+
+    UiDrawFeaturePanel(layout.telemetry, t->inkSoft, t->paper, true);
+    UiDrawSignalRail(layout.telemetry, t->yellow, true);
+    UiDrawText(UI_TEXT_CAPTION, "FIELD TELEMETRY",
+               (Vector2){ layout.telemetry.x + UiScale(20),
+                          layout.telemetry.y + UiScale(16) }, t->yellow);
+    UiDrawText(UI_TEXT_HEADING, "KIT READOUT",
+               (Vector2){ layout.telemetry.x + UiScale(20),
+                          layout.telemetry.y + UiScale(34) }, t->paper);
+
+    char value[48];
+    float metricY = layout.telemetry.y + UiScale(82);
+    float metricHeight = UiScale(42);
+    float metricGap = UiScale(4);
+    Rectangle metric = {
+        layout.telemetry.x + UiScale(16), metricY,
+        layout.telemetry.width - UiScale(32), metricHeight
+    };
+    snprintf(value, sizeof(value), "%d", candidate->maxHealth);
+    DrawMetric(metric, UI_ICON_HEALTH, "Hull", value, t->ally);
+    metric.y += metricHeight + metricGap;
+    int totalDamage = main->damage;
+    if (main->behavior == ABILITY_BEHAVIOR_PROJECTILE ||
+        main->behavior == ABILITY_BEHAVIOR_LOB)
+        totalDamage *= main->data.projectile.pellets;
+    else if (main->behavior == ABILITY_BEHAVIOR_RETURNING)
+        totalDamage *= 2;
+    snprintf(value, sizeof(value), "%d", totalDamage);
+    DrawMetric(metric, UI_ICON_DAMAGE, "Output", value, t->enemy);
+    metric.y += metricHeight + metricGap;
+    snprintf(value, sizeof(value), "%.1f m", main->range);
+    DrawMetric(metric, UI_ICON_RANGE, "Range", value, t->blue);
+    metric.y += metricHeight + metricGap;
+    snprintf(value, sizeof(value), "%.2f s", main->reloadPerAmmo);
+    DrawMetric(metric, UI_ICON_RELOAD, "Reload", value, t->yellow);
+    metric.y += metricHeight + metricGap;
+    snprintf(value, sizeof(value), "%d", candidate->maxAmmo);
+    DrawMetric(metric, UI_ICON_SUPER, "Ammo", value, t->gold);
+
+    UiDrawPanel(layout.candidateRail, t->ink, t->paper, true);
+    for (int i = 0; i < CLASS_COUNT; i++)
+        DrawRosterRow(w, (BrawlerClass)i, layout.candidates[i]);
+}
+#endif
+
 static void DrawRoster(App *w)
 {
+#if defined(BRAWL_MOBILE)
+    DrawRosterMobile(w);
+    return;
+#endif
     const UiTheme *t = g_ui->theme;
     DrawStationHeader(w, "BRAWLER SELECT");
 
@@ -378,9 +577,69 @@ static void DrawControlRow(float x, float y, const char *binding, const char *ac
     UiDrawText(UI_TEXT_BODY, action, UiRefPoint(x + 142, y + 8), t->paper);
 }
 
+#if defined(BRAWL_MOBILE)
+static void DrawPhoneControlRow(Rectangle row, const char *binding,
+                                const char *action)
+{
+    const UiTheme *t = g_ui->theme;
+    float keyWidth = fminf(row.width*0.42f, UiScale(154));
+    UiDrawKeycap((Rectangle){ row.x, row.y, keyWidth, row.height },
+                 binding, false);
+    UiDrawTextFit(
+        UI_TEXT_BODY, action,
+        (Rectangle){ row.x + keyWidth + UiScale(16), row.y,
+                     row.width - keyWidth - UiScale(16), row.height },
+        UI_ALIGN_LEFT, t->paper);
+}
+
+static void DrawControlsOverlayMobile(void)
+{
+    const UiTheme *t = g_ui->theme;
+    UiPhoneFrame frame = PhoneFrame();
+    float width = frame.referenceWidth;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
+    Rectangle panel = UiRefRect(0, 0, width, 500);
+    UiDrawFeaturePanel(panel, t->inkSoft, t->paper, true);
+    UiDrawSignalRail(panel, t->yellow, false);
+    UiDrawTextOutline(UI_TEXT_TITLE, "TOUCH CONTROLS", UiRefPoint(30, 20),
+                      t->yellow, t->ink, 2.0f);
+    UiDrawText(UI_TEXT_CAPTION, "DRAG, AIM, AND RELEASE WITH INDEPENDENT FINGERS",
+               UiRefPoint(32, 70), t->textMuted);
+
+    float columnGap = 28.0f;
+    float columnWidth = (width - 88.0f - columnGap)*0.5f;
+    float left = 30.0f;
+    float right = left + columnWidth + columnGap;
+    UiDrawText(UI_TEXT_LABEL, "MOVEMENT + MAIN", UiRefPoint(left, 118), t->blue);
+    DrawPhoneControlRow(UiRefRect(left, 146, columnWidth, 58),
+                        "LEFT STICK", "Move at full speed");
+    DrawPhoneControlRow(UiRefRect(left, 216, columnWidth, 58),
+                        "DRAG ATTACK", "Aim main attack");
+    DrawPhoneControlRow(UiRefRect(left, 286, columnWidth, 58),
+                        "RELEASE", "Fire in that direction");
+
+    UiDrawText(UI_TEXT_LABEL, "ABILITIES + SYSTEM", UiRefPoint(right, 118), t->purple);
+    DrawPhoneControlRow(UiRefRect(right, 146, columnWidth, 58),
+                        "DRAG SUPER", "Aim and cast ultimate");
+    DrawPhoneControlRow(UiRefRect(right, 216, columnWidth, 58),
+                        "SKILL", "Press, hold, or release");
+    DrawPhoneControlRow(UiRefRect(right, 286, columnWidth, 58),
+                        "PAUSE", "Return to launch deck");
+
+    UiResponse close = UiButton(
+        UiHash("controls.close"), UiRefRect(width - 250.0f, 420.0f, 220.0f, 62.0f),
+        "Close controls", UI_BUTTON_YELLOW, UI_ICON_CLOSE);
+    if (close.activated) CloseOverlay();
+}
+#endif
+
 static void DrawControlsOverlay(App *w)
 {
     (void)w;
+#if defined(BRAWL_MOBILE)
+    DrawControlsOverlayMobile();
+    return;
+#endif
     const UiTheme *t = g_ui->theme;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
     Rectangle panel = UiRefRect(190, 76, 900, 648);
@@ -440,8 +699,82 @@ static void PreferenceToggle(UiId id, Rectangle bounds, const char *label, bool 
     }
 }
 
+#if defined(BRAWL_MOBILE)
+static void DrawSettingsOverlayMobile(App *w)
+{
+    const UiTheme *t = g_ui->theme;
+    UiPhoneFrame frame = PhoneFrame();
+    float width = frame.referenceWidth;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
+    Rectangle panel = UiRefRect(28.0f, 0.0f, width - 56.0f, 500.0f);
+    UiDrawFeaturePanel(panel, t->inkSoft, t->paper, true);
+    UiDrawSignalRail(panel, t->yellow, false);
+    UiDrawTextOutline(UI_TEXT_TITLE, "SETTINGS", UiRefPoint(58, 22),
+                      t->yellow, t->ink, 2.0f);
+    UiDrawText(UI_TEXT_CAPTION, "PROFILE-SCOPED // SAVED AUTOMATICALLY",
+               UiRefPoint(60, 72), t->textMuted);
+
+    UiDrawText(UI_TEXT_LABEL, "INTERFACE SCALE", UiRefPoint(60, 112), t->blue);
+    Rectangle scalePanel = UiRefRect(60, 138, width - 120.0f, 72);
+    UiDrawPanel(scalePanel, t->inkSoft, t->border, false);
+    UiResponse smaller = UiIconButton(
+        UiHash("settings.scale.down"), UiRefRect(72, 144, 62, 60),
+        UI_ICON_PREVIOUS, "Decrease UI scale");
+    UiResponse larger = UiIconButton(
+        UiHash("settings.scale.up"), UiRefRect(width - 134, 144, 62, 60),
+        UI_ICON_NEXT, "Increase UI scale");
+    char scale[32];
+    snprintf(scale, sizeof(scale), "%.0f%%", w->uiPreferences.scale*100.0f);
+    UiDrawTextAligned(UI_TEXT_DATA, scale,
+                      UiRefRect(150, 144, width - 300.0f, 60),
+                      UI_ALIGN_CENTER, t->paper);
+    if (smaller.activated || larger.activated)
+    {
+        w->uiPreferences.scale = Clamp(w->uiPreferences.scale +
+            (larger.activated ? 0.10f : -0.10f), 0.75f, 1.50f);
+        ConfigMarkDirty();
+    }
+
+    float half = (width - 132.0f)*0.5f;
+    PreferenceToggle(
+        UiHash("settings.motion"), UiRefRect(60, 236, half, 64),
+        "Reduced decorative motion", &w->uiPreferences.reducedMotion);
+    PreferenceToggle(
+        UiHash("settings.contrast"), UiRefRect(72 + half, 236, half, 64),
+        "High-contrast combat cues", &w->uiPreferences.highContrast);
+    PreferenceToggle(
+        UiHash("settings.hints"), UiRefRect(60, 316, half, 64),
+        "Action tutorial hints", &w->uiPreferences.showTutorialHints);
+    Rectangle touchStatus = UiRefRect(72 + half, 316, half, 64);
+    UiDrawPanel(touchStatus, t->surface, t->border, false);
+    UiDrawTextFit(UI_TEXT_LABEL, "TOUCH INPUT // ACTIVE", touchStatus,
+                  UI_ALIGN_CENTER, t->paper);
+
+    UiResponse reset = UiButton(
+        UiHash("settings.reset.hints"), UiRefRect(60, 414, half, 62),
+        "Reset tutorial", UI_BUTTON_BLUE, UI_ICON_CONTROLS);
+    if (reset.activated)
+    {
+        w->uiPreferences.tutorialFlags = 0;
+        ConfigMarkDirty();
+    }
+    UiResponse close = UiButton(
+        UiHash("settings.close"), UiRefRect(72 + half, 414, half, 62),
+        "Save and close", UI_BUTTON_YELLOW, UI_ICON_CLOSE);
+    if (close.activated)
+    {
+        ConfigFlush(w);
+        CloseOverlay();
+    }
+}
+#endif
+
 static void DrawSettingsOverlay(App *w)
 {
+#if defined(BRAWL_MOBILE)
+    DrawSettingsOverlayMobile(w);
+    return;
+#endif
     const UiTheme *t = g_ui->theme;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), t->scrim);
     Rectangle panel = UiRefRect(330, 78, 620, 600);
@@ -580,6 +913,10 @@ void MenuUpdate(App *w, float dt)
 void MenuDraw(App *w)
 {
     DrawBackdrop();
+#if defined(BRAWL_MOBILE)
+    UiPhoneFrame phoneFrame = PhoneFrame();
+    UiFrameLayout previousLayout = UiPhoneApplyFrame(g_ui, phoneFrame);
+#endif
     BrawlerClass preview = w->flow.screen == SCREEN_BRAWLERS
         ? g_candidate : (BrawlerClass)w->tune.selectedKit;
     const CharacterDefinition *character = ContentCharacter(&w->content, preview);
@@ -593,6 +930,24 @@ void MenuDraw(App *w)
     float railOffset = 54.0f*(1.0f - UiEaseOutCubic(screenT));
     MenuSceneDrawStage(&g_scene, w, preview, w->flow.screen);
     Color accent = CharacterAccent(w, preview);
+#if defined(BRAWL_MOBILE)
+    UiPhoneRosterLayout phoneRoster = UiPhoneRosterLayoutForFrame(phoneFrame);
+    UiPhoneHomeLayout phoneHome = UiPhoneHomeLayoutForFrame(phoneFrame);
+    Rectangle phoneStage = w->flow.screen == SCREEN_BRAWLERS
+        ? phoneRoster.stage : phoneHome.stage;
+    UiDrawDecoration(
+        w->flow.screen == SCREEN_BRAWLERS
+            ? UI_DECORATION_HALFTONE : UI_DECORATION_BURST,
+        phoneStage,
+        w->flow.screen == SCREEN_BRAWLERS ? g_ui->theme->ink : g_ui->theme->yellow,
+        w->flow.screen == SCREEN_BRAWLERS ? 0.14f : 0.30f);
+    UiDrawDecoration(UI_DECORATION_SPEED_LINES, phoneStage, accent, 0.13f);
+    if (character && style)
+        UiDrawCharacterMotif(style->motif, phoneStage,
+                             style->primary, style->secondary, 0.24f);
+    MenuSceneCompositeBrawler(
+        &g_scene, w, preview, w->flow.screen, stickerScale*1.08f);
+#else
     if (w->flow.screen == SCREEN_BRAWLERS)
         UiDrawDecoration(UI_DECORATION_HALFTONE, UiRefRect(356, 112, 568, 568),
                          g_ui->theme->ink, 0.14f);
@@ -605,15 +960,26 @@ void MenuDraw(App *w)
         UiDrawCharacterMotif(style->motif, UiRefRect(358, 112, 564, 548),
                              style->primary, style->secondary, 0.26f);
     MenuSceneCompositeBrawler(&g_scene, w, preview, w->flow.screen, stickerScale);
+#endif
 
     bool entranceReady = w->uiPreferences.reducedMotion || screenT >= 0.98f;
     UiSetInteractionsEnabled(g_overlay == MENU_OVERLAY_NONE && entranceReady);
     if (w->flow.screen == SCREEN_BRAWLERS) DrawRoster(w);
-    else DrawHome(w, logoScale, railOffset);
+    else
+    {
+#if defined(BRAWL_MOBILE)
+        DrawHomeMobile(w, logoScale, railOffset);
+#else
+        DrawHome(w, logoScale, railOffset);
+#endif
+    }
 
     UiSetInteractionsEnabled(true);
     if (g_overlay == MENU_OVERLAY_CONTROLS) DrawControlsOverlay(w);
     else if (g_overlay == MENU_OVERLAY_SETTINGS) DrawSettingsOverlay(w);
+#if defined(BRAWL_MOBILE)
+    UiPhoneRestoreFrame(g_ui, previousLayout);
+#endif
 }
 
 void MenuPrepareDraw(App *w)

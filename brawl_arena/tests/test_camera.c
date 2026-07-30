@@ -21,6 +21,13 @@ static bool Near(float a, float b)
 
 int main(void)
 {
+    CHECK(Near(CameraEffectiveDistance(32.0f, false), 32.0f),
+          "desktop camera distance no longer uses the authored value");
+    CHECK(Near(CameraEffectiveDistance(32.0f, true), 25.6f),
+          "mobile camera distance no longer provides the intended close framing");
+    CHECK(Near(CameraEffectiveDistance(20.0f, true), 20.0f),
+          "mobile camera distance escaped its readability floor");
+
     App world = { 0 };
     world.tune.matchCameraDistance = DEFAULT_MATCH_CAMERA_DISTANCE;
 

@@ -151,6 +151,14 @@ Vector3 PlayerTouchCameraIntent(Camera3D camera, Vector2 stick)
     return intent;
 }
 
+Vector3 PlayerFullSpeedMoveIntent(Vector3 intent, float deadZone)
+{
+    intent.y = 0.0f;
+    float length = Vector3Length(intent);
+    if (length <= fmaxf(0.0f, deadZone)) return (Vector3){ 0 };
+    return Vector3Scale(intent, 1.0f/length);
+}
+
 static void ApplyAim(const App *app, Vector2 stick, float range, PlayerInput *input)
 {
     if (app->session.playerIdx < 0 ||
@@ -223,7 +231,10 @@ void PlayerTouchCapture(App *app, PlayerInput *input)
     // Newly claimed sticks have zero values until their first drag but their press
     // edges must be visible to the player controller in this same frame.
     input->moveIntent = controls->move.active
-        ? PlayerTouchCameraIntent(app->presentation.camera, controls->move.value)
+        ? PlayerFullSpeedMoveIntent(
+            PlayerTouchCameraIntent(
+                app->presentation.camera, controls->move.value),
+            TOUCH_DEAD_ZONE)
         : (Vector3){ 0 };
     input->attackPressed |= controls->attack.pressed;
     input->attackReleased |= controls->attack.released;

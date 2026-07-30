@@ -53,6 +53,11 @@ to the ignored player profile. Menu, roster, overlays,
 result screen, and tuning controls support pointer and keyboard focus; player-facing
 screens also support gamepad focus.
 
+On iPhone, home, roster, Controls, Settings, downed, and result screens use a dedicated
+safe-width landscape composition instead of shrinking the desktop canvas into the
+middle of the display. The backdrop remains full bleed, while controls stay clear of
+the cutout and home-indicator regions.
+
 The shell and HUD use the **Arena Ink** skin: saturated blue, red, and yellow poster
 fields; heavy black contours; rounded button paper keylines; clipped panel corners; hard
 shadows; halftone; and code-drawn bursts and speed lines. Button labels remain centered
@@ -101,11 +106,13 @@ is disabled so this navigation remains explicit.
 | `R` | Reset the match (keeps your tuning) |
 
 On iPhone, play in landscape with four safe-area-aware touch controls: drag the left
-stick to move; drag and release the right stick to aim and fire; tap the right stick for
-auto-aim; drag and release **SUPER** to aim and cast; and hold, drag, or release
-**SKILL** according to the selected brawler's secondary. The pause button is at the
-top-right. Touch contacts keep stable ownership, so moving and aiming work
-simultaneously.
+stick past its dead zone to move at full speed; drag and release the right stick to aim
+and fire; tap the right stick for auto-aim; drag and release **SUPER** to aim and cast;
+and hold, drag, or release **SKILL** according to the selected brawler's secondary. The
+pause button is at the top-right. Move and Attack visuals are translucent over the
+arena; ability buttons retain their established opacity. Touch contacts keep stable
+ownership, so moving and aiming work simultaneously. Physical gamepad movement uses the
+same full-speed-or-stopped rule.
 
 ## What's implemented
 
@@ -438,11 +445,13 @@ caps world rendering at native resolution and disables the post-processing pass 
 touch response and thermal cost predictable. Imported character animation is CPU-skinned
 on iPhone before the normal lighting pass; desktop retains GPU skinning. The HUD remains
 at native resolution, and the launch backdrop fills the display behind the safe-area
-edges while controls remain inset.
+edges while controls remain inset. The iPhone match camera renders at 80% of the authored
+distance, clamped to a 20-unit minimum, so combat subjects are about 25% larger without
+forking the project tuning.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
-units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
-follow offset—so changing it moves the camera along the established pitch without
-altering aim lead or vertical framing.
+units. The tracked project value is 31.999340. The compiled 38.013156 recovery value is
+the length of the original `{0, 31, -22}` follow offset, and changing the authored value
+moves the camera along that established pitch without altering aim lead.
 
 **The VISUAL tab** in the command center is a full mix-and-match viewport rig: toon
 banding and ink outlines, painterly (Kuwahara), pixelate, halftone comic dots,

@@ -168,11 +168,18 @@ void MenuSceneDrawStage(MenuScene *scene, const App *app, BrawlerClass candidate
                         AppScreen screen)
 {
     if (!scene || !app || candidate < 0 || candidate >= CLASS_COUNT) return;
+#if defined(BRAWL_MOBILE)
+    (void)screen;
+    float scale = GetScreenHeight()/720.0f;
+    float centerX = GetScreenWidth()*0.5f;
+    float centerY = GetScreenHeight()*0.765f;
+#else
     float scale = fminf(GetScreenWidth()/1280.0f, GetScreenHeight()/800.0f);
     float ox = (GetScreenWidth() - 1280.0f*scale)*0.5f;
     float oy = (GetScreenHeight() - 800.0f*scale)*0.5f;
     float centerX = ox + 640.0f*scale;
     float centerY = oy + (screen == SCREEN_BRAWLERS ? 610.0f : 612.0f)*scale;
+#endif
     float rx = 258.0f*scale;
     float ry = 62.0f*scale;
     const CharacterUiStyle *style = ContentCharacterUiStyle(candidate);

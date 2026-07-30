@@ -4,6 +4,7 @@
 #include "config.h"
 #include "content_catalog.h"
 #include "brawler.h"
+#include "phone_layout.h"
 #include "weapons.h"
 #include "ui_system.h"
 #include "raymath.h"
@@ -530,6 +531,34 @@ static void DrawDowned(const Brawler *player, float respawnTotal)
 {
     if (respawnTotal < 0.1f) respawnTotal = 0.1f;
     const UiTheme *t = UiSystemActive()->theme;
+#if defined(BRAWL_MOBILE)
+    UiSystem *ui = UiSystemActive();
+    UiPhoneFrame frame = UiPhoneFrameForViewport(
+        GetScreenWidth(), GetScreenHeight(), ui->insets);
+    UiFrameLayout previous = UiPhoneApplyFrame(ui, frame);
+    float width = frame.referenceWidth;
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                  (Color){ 30, 5, 10, 110 });
+    Rectangle panel = UiRefRect(width*0.20f, 148, width*0.60f, 210);
+    UiDrawFeaturePanel(panel, t->ink, t->enemy, true);
+    UiDrawDecoration(UI_DECORATION_SPEED_LINES, panel, t->enemy, 0.13f);
+    UiDrawSignalRail(panel, t->enemy, false);
+    UiDrawTextAligned(
+        UI_TEXT_TITLE, "BRAWLER DOWN",
+        UiRefRect(width*0.20f + 28, 172, width*0.60f - 56, 64),
+        UI_ALIGN_CENTER, t->enemy);
+    char timer[64];
+    snprintf(timer, sizeof(timer), "REDEPLOY IN %.1f SECONDS", player->respawnTimer);
+    UiDrawTextAligned(
+        UI_TEXT_DATA, timer,
+        UiRefRect(width*0.20f + 28, 246, width*0.60f - 56, 46),
+        UI_ALIGN_CENTER, t->paper);
+    UiDrawProgress(
+        UiRefRect(width*0.20f + 68, 318, width*0.60f - 136, 12),
+        1.0f - Clamp(player->respawnTimer/respawnTotal, 0.0f, 1.0f),
+        t->yellow, false, 0);
+    UiPhoneRestoreFrame(ui, previous);
+#else
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){ 30, 5, 10, 110 });
     Rectangle panel = UiRefRect(410, 296, 460, 190);
@@ -545,10 +574,108 @@ static void DrawDowned(const Brawler *player, float respawnTotal)
     UiDrawProgress(UiRefRect(474, 454, 332, 10),
                    1.0f - Clamp(player->respawnTimer/respawnTotal, 0.0f, 1.0f),
                    t->yellow, false, 0);
+#endif
 }
+
+#if defined(BRAWL_MOBILE)
+static void DrawResultMobile(App *w)
+{
+    UiSystem *ui = UiSystemActive();
+    const UiTheme *t = ui->theme;
+    bool won = w->session.match.winner == TEAM_PLAYER;
+    UiPhoneFrame frame = UiPhoneFrameForViewport(
+        GetScreenWidth(), GetScreenHeight(), ui->insets);
+    UiFrameLayout previous = UiPhoneApplyFrame(ui, frame);
+    UiPhoneResultLayout layout = UiPhoneResultLayoutForFrame(frame);
+
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                  (Color){ 2, 6, 12, 236 });
+    Vector2 left[4] = {
+        { layout.canvas.x, layout.canvas.y },
+        { layout.canvas.x, layout.canvas.y + layout.canvas.height },
+        { layout.canvas.x + layout.canvas.width*0.43f,
+          layout.canvas.y + layout.canvas.height },
+        { layout.canvas.x + layout.canvas.width*0.61f, layout.canvas.y }
+    };
+    Vector2 right[4] = {
+        { layout.canvas.x + layout.canvas.width*0.61f, layout.canvas.y },
+        { layout.canvas.x + layout.canvas.width*0.43f,
+          layout.canvas.y + layout.canvas.height },
+        { layout.canvas.x + layout.canvas.width,
+          layout.canvas.y + layout.canvas.height },
+        { layout.canvas.x + layout.canvas.width, layout.canvas.y }
+    };
+    DrawTriangleFan(left, 4, won ? t->blue : t->enemy);
+    DrawTriangleFan(right, 4, won ? t->yellow : t->surfaceRaised);
+    UiDrawDecoration(UI_DECORATION_HALFTONE, layout.canvas, t->ink, 0.18f);
+
+    Color outcome = won ? t->ally : t->enemy;
+    UiDrawFeaturePanel(layout.panel, t->ink, t->paper, true);
+    UiDrawDecoration(UI_DECORATION_BURST, layout.motif,
+                     won ? t->yellow : t->enemy, 0.24f);
+    UiDrawSignalRail(layout.panel, outcome, false);
+    UiDrawTextAligned(UI_TEXT_RESULT, won ? "VICTORY" : "DEFEAT",
+                      layout.title, UI_ALIGN_CENTER, outcome);
+
+    const Brawler *player = &w->session.brawlers[w->session.playerIdx];
+    const CharacterDefinition *character =
+        ContentCharacter(&w->content, player->cls);
+    if (character)
+    {
+        const CharacterUiStyle *style = ContentCharacterUiStyle(player->cls);
+        UiDrawCharacterMotif(style->motif, layout.motif,
+                             style->primary, style->secondary, 0.30f);
+        UiDrawTextAligned(UI_TEXT_HEADING, character->displayName,
+                          layout.character, UI_ALIGN_CENTER, t->paper);
+        UiDrawTextAligned(UI_TEXT_CAPTION, style->impactLabel,
+                          layout.impact, UI_ALIGN_CENTER, style->secondary);
+    }
+
+    char score[48];
+    snprintf(score, sizeof(score), "%d  —  %d",
+             w->session.match.teamGems[TEAM_PLAYER],
+             w->session.match.teamGems[TEAM_ENEMY]);
+    UiDrawTextAligned(UI_TEXT_DISPLAY, score, layout.score,
+                      UI_ALIGN_CENTER, t->paper);
+    char summary[96];
+    snprintf(summary, sizeof(summary), "%d KOs  //  %d DOWNS  //  %s",
+             w->session.kills, w->session.deaths,
+             won ? "TEAM SECURED" : "TEAM OVERRUN");
+    UiDrawTextAligned(UI_TEXT_DATA, summary, layout.summary,
+                      UI_ALIGN_CENTER, t->textSecondary);
+
+    UiResponse continueButton = UiButton(
+        UiHash("result.continue"), layout.actions[0],
+        "CONTINUE", UI_BUTTON_YELLOW, UI_ICON_NEXT);
+    UiResponse rematchButton = UiButton(
+        UiHash("result.rematch"), layout.actions[1],
+        "REMATCH", UI_BUTTON_PRIMARY, UI_ICON_PRACTICE);
+    UiResponse changeButton = UiButton(
+        UiHash("result.change"), layout.actions[2],
+        "CHANGE BRAWLER", UI_BUTTON_BLUE, UI_ICON_CONTROLS);
+    if (continueButton.activated) g_resultAction = HUD_RESULT_CONTINUE;
+    else if (rematchButton.activated)
+        g_resultAction = HUD_RESULT_REMATCH;
+    else if (changeButton.activated)
+        g_resultAction = HUD_RESULT_CHANGE_BRAWLER;
+
+    int remaining =
+        (int)ceilf(w->tune.matchResultHold - w->session.match.overTimer);
+    if (remaining < 0) remaining = 0;
+    char fallback[80];
+    snprintf(fallback, sizeof(fallback), "AUTO RETURN IN %d", remaining);
+    UiDrawTextAligned(UI_TEXT_CAPTION, fallback, layout.fallback,
+                      UI_ALIGN_CENTER, t->textMuted);
+    UiPhoneRestoreFrame(ui, previous);
+}
+#endif
 
 static void DrawResult(App *w)
 {
+#if defined(BRAWL_MOBILE)
+    DrawResultMobile(w);
+    return;
+#endif
     const UiTheme *t = UiSystemActive()->theme;
     bool won = w->session.match.winner == TEAM_PLAYER;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),

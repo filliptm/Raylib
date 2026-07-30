@@ -25,15 +25,15 @@ static Vector2 KnobPosition(const MobileStickState *stick, Vector2 home,
 static void DrawStickBase(Vector2 center, float radius, Color accent,
                           bool active, float idleAlpha)
 {
-    unsigned char baseAlpha = (unsigned char)(active ? 178.0f : idleAlpha);
+    unsigned char baseAlpha = (unsigned char)(active ? 132.0f : idleAlpha);
     DrawCircleV(Vector2Add(center, (Vector2){ 4, 6 }), radius + 4.0f,
                 Alpha(BLACK, (unsigned char)(baseAlpha*0.58f)));
     DrawCircleV(center, radius, Alpha((Color){ 3, 15, 27, 255 }, baseAlpha));
     DrawRing(center, radius - 3.0f, radius, 0.0f, 360.0f, 64,
              Alpha((Color){ 255, 247, 218, 255 },
-                   (unsigned char)(active ? 220 : baseAlpha)));
+                   (unsigned char)(active ? 205 : baseAlpha)));
     DrawRing(center, radius - 8.0f, radius - 5.0f, -48.0f, 78.0f, 24,
-             Alpha(accent, (unsigned char)(active ? 255 : baseAlpha)));
+             Alpha(accent, (unsigned char)(active ? 220 : baseAlpha)));
     DrawLineEx((Vector2){ center.x - radius*0.46f, center.y },
                (Vector2){ center.x + radius*0.46f, center.y }, 1.5f,
                Alpha(accent, (unsigned char)(baseAlpha*0.66f)));
@@ -51,19 +51,19 @@ static void DrawStick(const MobileStickState *stick, Vector2 home, float radius,
 
     float knobRadius = radius*0.42f;
     DrawCircleV(Vector2Add(knob, (Vector2){ 3, 4 }), knobRadius + 2.0f,
-                Alpha(BLACK, stick->active ? 150 : 75));
+                Alpha(BLACK, stick->active ? 110 : 60));
     DrawCircleV(knob, knobRadius,
-                Alpha(accent, stick->active ? 238 : (unsigned char)idleAlpha));
+                Alpha(accent, stick->active ? 184 : (unsigned char)idleAlpha));
     DrawRing(knob, knobRadius - 3.0f, knobRadius, 0.0f, 360.0f, 32,
              Alpha((Color){ 255, 247, 218, 255 },
-                   stick->active ? 240 : (unsigned char)idleAlpha));
+                   stick->active ? 210 : (unsigned char)idleAlpha));
 
     int fontSize = (int)Clamp(radius*0.22f, 11.0f, 15.0f);
     int width = MeasureText(label, fontSize);
     DrawText(label, (int)(base.x - width*0.5f),
              (int)(base.y + radius + 7.0f), fontSize,
              Alpha((Color){ 255, 247, 218, 255 },
-                   stick->active ? 235 : (unsigned char)idleAlpha));
+                   stick->active ? 210 : (unsigned char)idleAlpha));
 }
 
 static void DrawAction(const MobileStickState *stick, Vector2 home, float radius,
@@ -134,11 +134,12 @@ void MobileControlsDraw(const App *app)
     float idle = controls->idleAge < 1.4f
         ? 150.0f : fmaxf(82.0f, 150.0f - (controls->idleAge - 1.4f)*48.0f);
     if (!player->alive) idle *= 0.55f;
+    float stickIdle = idle*0.72f;
 
     DrawStick(&controls->move, layout.moveHome, layout.mainRadius,
-              theme->blue, "MOVE", idle);
+              theme->blue, "MOVE", stickIdle);
     DrawStick(&controls->attack, layout.attackHome, layout.mainRadius,
-              theme->enemy, "ATTACK", idle);
+              theme->enemy, "ATTACK", stickIdle);
 
     const AbilityDefinition *secondary =
         ContentSecondaryAbility(&app->content, player->cls);

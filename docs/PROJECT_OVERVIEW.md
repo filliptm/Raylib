@@ -548,7 +548,9 @@ The main launch deck is intentionally sparse: it presents the title, open charac
 stage, active brawler and mode controls, Practice, settings utilities, and Deploy without
 duplicating combat telemetry. Brawler Select is the comparison surface, with live
 identity, ability, and stat readouts around a centered candidate preview and a fixed
-five-character choice row.
+five-character choice row. On iPhone, the launch deck, roster, modal overlays, downed
+state, and result poster use a dedicated 500-unit-tall landscape composition that expands
+across the safe width instead of fitting the narrower desktop reference canvas.
 
 The current roster contains five kits:
 
@@ -624,7 +626,7 @@ The headless suite covers:
   interruption, caps, and disable state.
 - The rule that no attack, impact, damage, or elimination shakes any user's camera.
 - Match-camera distance tuning at the original framing and a live alternate distance,
-  including fixed pitch and aim-lead separation.
+  including fixed pitch, aim-lead separation, and the iPhone effective-distance policy.
 - Tank self-healing, projectile snapshotting, Shoulder Jets timing/cover behavior, and
   preservation of Charge damage/crate destruction.
 - Scrapper Ripsaw/Wrecking Disc outbound and return hits, cover policy, ownership,
@@ -639,11 +641,12 @@ The headless suite covers:
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
-- UI layout/focus at four desktop viewports plus a notched iPhone safe area, physical
-  touch-target expansion, mobile-control placement/camera mapping, touch glyph language,
-  contrast, easing/reduced motion, distinct character motifs, result actions,
-  procedural-skin lifetime/policy, profile preference round trips, and the shared
-  character-showcase contract.
+- UI layout/focus at four desktop viewports plus a notched iPhone safe area, dedicated
+  phone home/roster/result compositions, physical touch-target expansion, non-overlapping
+  mobile-control placement, camera-relative mapping, full-speed stick normalization,
+  touch glyph language, contrast, easing/reduced motion, distinct character motifs,
+  result actions, procedural-skin lifetime/policy, profile preference round trips, and
+  the shared character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -775,6 +778,9 @@ through its shader; then draws screen controls, overlays, and the transition fad
 native UI resolution. The wordmark, sticker, and launch rail share one short entrance,
 with an immediate reduced-motion resolution. The launch deck keeps the wordmark and
 bottom controls free of secondary deployment/brawler/mode captions and side markers.
+The iPhone shell temporarily applies its own safe-width reference frame while composing
+home, roster, Controls, Settings, downed, and result UI, then restores the process-wide
+layout.
 
 When Gem Grab ends, player/AI/projectile simulation freezes while effects and the camera
 finish presenting the result. The result is banked into the profile once. Continue
@@ -783,7 +789,9 @@ roster, and the configured hold still provides an automatic menu fallback.
 
 ## Controls and modes
 
-- WASD/arrows or left stick: camera-relative movement.
+- WASD/arrows or left stick: camera-relative movement. Keyboard, gamepad, and touch
+  movement resolve to full speed or stopped after their dead zones; stick direction
+  remains continuous.
 - Left Shift or left bumper: use the current kit's secondary. Scrapper holds its
   360-degree Magnetic Scrap Shell until released or broken; Longshot holds to preview
   its cover-aware grapple path and releases to launch; Mortar places a mine at its
@@ -799,7 +807,8 @@ roster, and the configured hold still provides an automatic menu fallback.
 
 On iPhone, the player uses independent stable touch IDs:
 
-- Left floating stick: camera-relative movement.
+- Left floating stick: camera-relative direction with binary full-speed movement after
+  the dead zone.
 - Right floating stick: drag to aim the main attack and release to fire; a quick tap
   preserves the existing nearest-target auto-aim.
 - `SUPER`: drag/release ultimate aiming and activation.
@@ -808,8 +817,10 @@ On iPhone, the player uses independent stable touch IDs:
 - Pause: clear captured touches and return to the launch deck.
 
 The mobile shell uses safe-area insets and expands touch hit targets to at least 44
-points. It hides desktop-only Quit, command-center, and VFX Studio actions. Backgrounding
-clears active touch IDs and flushes dirty profile/draft state.
+points. Its Move and Attack stick artwork is translucent over the world; Super, Skill,
+and pause retain their established visual treatment. It hides desktop-only Quit,
+command-center, and VFX Studio actions. Backgrounding clears active touch IDs and flushes
+dirty profile/draft state.
 
 Play constructs Gem Grab when enabled. Team size is configurable from one to four per
 side; slot zero is the human and other player-side slots are allied bots. Teams race to
@@ -991,8 +1002,10 @@ damage/elimination paths.
 The presentation layer owns:
 
 - A perspective follow camera with aim lead and a project-scoped 20–60-unit distance.
-  The tracked 38.013156-unit default reproduces the original `{0, 31, -22}` offset;
-  live distance edits scale that vector without changing pitch.
+  The tracked project value is 31.999340 units; the compiled recovery value of
+  38.013156 reproduces the original `{0, 31, -22}` offset. Live distance edits scale
+  that vector without changing pitch. iPhone preserves the authored value but renders
+  at 80% of it, with a 20-unit floor, for closer phone-readable framing.
 - Imported/fallback brawler drawing and movement-owned animation selection. Stationary
   casts retain idle as their base and cannot be changed by the independent bush-reveal
   timer. Successful actions emit an explicit presentation-only one-shot that blends an
@@ -1054,9 +1067,10 @@ The presentation layer owns:
   the intended world sampling ratio when those dimensions differ on a HiDPI platform.
 - The iOS target compiles the same shader programs as OpenGL ES 3 sources through
   ANGLE/Metal. Its runtime caps world scale at 1.0×, disables the desktop post pass, and
-  retains the MSAA direct path. Imported character animations use raylib CPU skinning
-  before the ordinary ES 3 lighting pass because the pinned fork's GPU-bone path
-  produces invalid vertex positions on ANGLE. Desktop retains GPU skinning.
+  retains the MSAA direct path. Its match camera uses the presentation-only closer
+  distance above. Imported character animations use raylib CPU skinning before the
+  ordinary ES 3 lighting pass because the pinned fork's GPU-bone path produces invalid
+  vertex positions on ANGLE. Desktop retains GPU skinning.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated

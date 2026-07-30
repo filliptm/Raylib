@@ -174,11 +174,11 @@ test exist to keep simulation usable without a window.
 | `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
-| `test_ui` | viewport/safe-area layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping/touch language, and the shared showcase |
+| `test_ui` | desktop and safe-width phone home/roster/result layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping, full-speed stick normalization, touch language, and the shared showcase |
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
-| `test_camera` | live match-camera distance, original default framing, fixed pitch, follow, and aim-lead separation |
+| `test_camera` | live match-camera distance, original recovery framing, iPhone effective distance/floor, fixed pitch, follow, and aim-lead separation |
 | `test_character_pipeline.py` | rig rejection, merged-source rest-pose fallback, bind-relative math, deterministic baking, canonical clips, raylib-safe mesh indices, and 1K model/output validation |
 | `test_vfx_pipeline.py` | deterministic atlas generation, source provenance, and manifest validation |
 
@@ -219,11 +219,13 @@ matrix. At minimum, after changes to runtime/presentation:
 - In the iPhone simulator, check the landscape launch deck and a direct match smoke
   launch (`BRAWL_IOS_SMOKE_MATCH=1`) at a notched safe area. Confirm the desktop-only
   Studio, Quit, and command center controls are absent, the backdrop fills the display,
-  imported CPU-skinned characters are stable, and every touch control stays clear of
-  the objective and pause.
+  home/roster/overlays/results occupy the safe landscape width, imported CPU-skinned
+  characters are stable, the closer match framing is readable, and every touch control
+  stays clear of the objective and pause.
 - On a physical iPhone, install and launch the signed bundle, then exercise simultaneous
-  move/aim, tap auto-aim, attack release, Super release, each kit's Skill interaction,
-  pause/background/resume, rotation lock, and sustained-play responsiveness.
+  full-speed-or-stopped move/aim, tap auto-aim, attack release, Super release, each
+  kit's Skill interaction, pause/background/resume, rotation lock, and sustained-play
+  responsiveness.
 
 Report when the graphical checklist was not run; passing headless tests does not compile
 GPU shaders or validate visual alignment.

@@ -59,7 +59,8 @@ left/right orientations.
 
 ## Touch controls
 
-- Left floating stick: camera-relative movement.
+- Left floating stick: camera-relative direction; movement is stopped inside the dead
+  zone and full speed outside it.
 - Right floating stick: hold and drag to aim the main attack; release to fire. A quick
   tap keeps the existing nearest-target auto-aim behavior.
 - `SUPER`: hold and drag to aim; release to activate when charged.
@@ -69,7 +70,9 @@ left/right orientations.
 
 Every touch is tracked by its stable platform ID, so movement, attack aim, and an ability
 can be held independently. The control HUD uses iPhone safe-area insets, 44-point-or-
-larger targets, cooldown/readiness rings, and a dim idle state.
+larger targets, cooldown/readiness rings, and a dim idle state. Move and Attack artwork
+is additionally translucent over the arena; Super and Skill retain their established
+visual treatment.
 
 ## Runtime policy
 
@@ -84,7 +87,10 @@ rigged GLBs are animated with raylib CPU skinning on iOS and drawn through the o
 OpenGL ES 3 lighting shader; this avoids invalid vertex positions from the pinned ANGLE
 GPU-bone path while preserving the packaged models and animations. Desktop retains GPU
 skinning. The command center and VFX Studio are desktop authoring tools and are not
-exposed in the mobile shell.
+exposed in the mobile shell. Home, roster, Controls, Settings, downed, and result screens
+use a dedicated safe-width landscape composition. The match camera preserves the
+project-authored distance but renders at 80% of it, with a 20-unit floor, for closer
+phone framing.
 
 For automated graphical smoke checks, launching with
 `BRAWL_IOS_SMOKE_MATCH=1` opens directly into a match without changing persisted

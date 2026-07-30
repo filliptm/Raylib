@@ -3,6 +3,7 @@
 
 #include "app_types.h"
 
+float CameraEffectiveDistance(float authoredDistance, bool mobile);
 void CameraInit(App *world);
 void CameraUpdate(App *world, float deltaTime);
 

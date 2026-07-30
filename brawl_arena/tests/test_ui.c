@@ -1,6 +1,7 @@
 #include "ui_system.h"
 #include "content_catalog.h"
 #include "hud.h"
+#include "phone_layout.h"
 #include "player_touch.h"
 #include "raymath.h"
 #include <math.h>
@@ -19,6 +20,19 @@ static bool Near(float a, float b)
 static bool SameColor(Color a, Color b)
 {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
+static bool Contains(Rectangle outer, Rectangle inner)
+{
+    return inner.x >= outer.x - 0.01f &&
+           inner.y >= outer.y - 0.01f &&
+           inner.x + inner.width <= outer.x + outer.width + 0.01f &&
+           inner.y + inner.height <= outer.y + outer.height + 0.01f;
+}
+
+static bool EndsBefore(Rectangle left, Rectangle right)
+{
+    return left.x + left.width <= right.x + 0.01f;
 }
 
 int main(void)
@@ -59,6 +73,87 @@ int main(void)
           phoneSafe.y + phoneSafe.height <= 402.0f - phoneInsets.bottom + 0.01f,
           "notched-phone UI safe rectangle escaped its usable viewport");
 
+    UiPhoneFrame phoneFrame =
+        UiPhoneFrameForViewport(874, 402, phoneInsets);
+    CHECK(Contains((Rectangle){ 0, 0, 874, 402 }, phoneFrame.safe),
+          "phone composition escaped the viewport");
+    CHECK(phoneFrame.safe.x >= phoneInsets.left &&
+          phoneFrame.safe.y >= phoneInsets.top &&
+          phoneFrame.safe.x + phoneFrame.safe.width <=
+              874.0f - phoneInsets.right + 0.01f &&
+          phoneFrame.safe.y + phoneFrame.safe.height <=
+              402.0f - phoneInsets.bottom + 0.01f,
+          "phone composition ignored the device safe area");
+    CHECK(phoneFrame.referenceWidth > 960.0f,
+          "phone composition did not gain usable landscape width");
+
+    UiPhoneHomeLayout phoneHome =
+        UiPhoneHomeLayoutForFrame(phoneFrame);
+    CHECK(Contains(phoneFrame.safe, phoneHome.rail) &&
+          phoneHome.rail.width >= phoneFrame.safe.width*0.99f,
+          "phone launch rail does not use the safe landscape width");
+    CHECK(Contains(phoneFrame.safe, phoneHome.controls) &&
+          Contains(phoneFrame.safe, phoneHome.settings) &&
+          Contains(phoneFrame.safe, phoneHome.roster) &&
+          Contains(phoneFrame.safe, phoneHome.mode) &&
+          Contains(phoneFrame.safe, phoneHome.practice) &&
+          Contains(phoneFrame.safe, phoneHome.deploy),
+          "phone launch controls escaped the safe composition");
+    CHECK(EndsBefore(phoneHome.roster, phoneHome.mode) &&
+          EndsBefore(phoneHome.mode, phoneHome.practice) &&
+          EndsBefore(phoneHome.practice, phoneHome.deploy),
+          "phone launch controls overlap");
+    CHECK(phoneHome.controls.height >= 44.0f &&
+          phoneHome.settings.height >= 44.0f &&
+          phoneHome.roster.height >= 44.0f &&
+          phoneHome.practice.height >= 44.0f &&
+          phoneHome.deploy.height >= 44.0f,
+          "phone launch control fell below the physical target floor");
+
+    UiPhoneRosterLayout phoneRoster =
+        UiPhoneRosterLayoutForFrame(phoneFrame);
+    CHECK(Contains(phoneFrame.safe, phoneRoster.header) &&
+          Contains(phoneFrame.safe, phoneRoster.identity) &&
+          Contains(phoneFrame.safe, phoneRoster.stage) &&
+          Contains(phoneFrame.safe, phoneRoster.telemetry) &&
+          Contains(phoneFrame.safe, phoneRoster.candidateRail),
+          "phone roster region escaped the safe composition");
+    CHECK(EndsBefore(phoneRoster.identity, phoneRoster.stage) &&
+          EndsBefore(phoneRoster.stage, phoneRoster.telemetry),
+          "phone roster columns overlap");
+    for (int i = 0; i < CLASS_COUNT; i++)
+        CHECK(Contains(phoneFrame.safe, phoneRoster.candidates[i]) &&
+              phoneRoster.candidates[i].height >= 44.0f,
+              "phone roster candidate escaped or became too small");
+
+    UiPhoneResultLayout phoneResult =
+        UiPhoneResultLayoutForFrame(phoneFrame);
+    CHECK(Contains(phoneFrame.safe, phoneResult.panel),
+          "phone result panel escaped the safe composition");
+    for (int i = 0; i < 3; i++)
+        CHECK(Contains(phoneFrame.safe, phoneResult.actions[i]) &&
+              phoneResult.actions[i].height >= 44.0f,
+              "phone result action escaped or became too small");
+    CHECK(EndsBefore(phoneResult.actions[0], phoneResult.actions[1]) &&
+          EndsBefore(phoneResult.actions[1], phoneResult.actions[2]),
+          "phone result actions overlap");
+
+    UiSystem frameUi = { 0 };
+    frameUi.layout.scale = 1.25f;
+    frameUi.layout.viewportScale = 1.10f;
+    frameUi.layout.origin = (Vector2){ 7.0f, 9.0f };
+    UiFrameLayout previousFrame = UiPhoneApplyFrame(&frameUi, phoneFrame);
+    CHECK(Near(frameUi.layout.scale, phoneFrame.scale) &&
+          Near(frameUi.layout.origin.x, phoneFrame.origin.x) &&
+          Near(frameUi.layout.origin.y, phoneFrame.origin.y),
+          "phone frame did not become the active UI composition");
+    UiPhoneRestoreFrame(&frameUi, previousFrame);
+    CHECK(Near(frameUi.layout.scale, 1.25f) &&
+          Near(frameUi.layout.viewportScale, 1.10f) &&
+          Near(frameUi.layout.origin.x, 7.0f) &&
+          Near(frameUi.layout.origin.y, 9.0f),
+          "phone frame did not restore the shared UI layout");
+
     Rectangle smallTarget = { 20, 30, 18, 24 };
     Rectangle touchTarget = UiTouchTargetBounds(smallTarget, 44.0f);
     CHECK(Near(touchTarget.width, 44.0f) && Near(touchTarget.height, 44.0f) &&
@@ -94,6 +189,14 @@ int main(void)
     CHECK(touchRight.x > 0.99f && fabsf(touchRight.z) < 0.01f &&
           touchForward.z < -0.99f && fabsf(touchForward.x) < 0.01f,
           "touch stick directions no longer follow the arena camera");
+    Vector3 fullSpeed = PlayerFullSpeedMoveIntent(
+        (Vector3){ 0.20f, 0.70f, 0.10f }, 0.14f);
+    Vector3 stopped = PlayerFullSpeedMoveIntent(
+        (Vector3){ 0.10f, 0.00f, 0.00f }, 0.14f);
+    CHECK(Near(Vector3Length(fullSpeed), 1.0f) && Near(fullSpeed.y, 0.0f),
+          "partial stick movement no longer resolves to full ground speed");
+    CHECK(Near(Vector3Length(stopped), 0.0f),
+          "movement dead zone no longer resolves to a full stop");
 
     UiSystem touchUi = { 0 };
     touchUi.modality = UI_INPUT_TOUCH;
@@ -215,6 +318,6 @@ int main(void)
               "character UI identity is incomplete");
     }
 
-    puts("UI layout, skin, focus, motion, motifs, team bars, and result actions passed");
+    puts("UI phone layout, binary movement, skin, focus, motion, motifs, bars, and results passed");
     return 0;
 }

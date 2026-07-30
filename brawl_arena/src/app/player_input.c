@@ -76,11 +76,11 @@ PlayerInput PlayerCaptureInput(App *w)
         float stickY = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_LEFT_Y);
         if (fabsf(stickX) > 0.18f || fabsf(stickY) > 0.18f)
         {
-            input.moveIntent = Vector3Add(Vector3Scale(cameraRight, stickX),
-                                          Vector3Scale(cameraForward, -stickY));
-            input.moveIntent.y = 0.0f;
-            if (Vector3Length(input.moveIntent) > 1.0f)
-                input.moveIntent = Vector3Normalize(input.moveIntent);
+            Vector3 gamepadIntent =
+                Vector3Add(Vector3Scale(cameraRight, stickX),
+                           Vector3Scale(cameraForward, -stickY));
+            input.moveIntent =
+                PlayerFullSpeedMoveIntent(gamepadIntent, 0.18f);
         }
 
         float aimX = GetGamepadAxisMovement(gamepad, GAMEPAD_AXIS_RIGHT_X);

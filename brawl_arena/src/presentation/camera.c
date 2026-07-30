@@ -6,14 +6,27 @@
 
 static const Vector3 CAMERA_OFFSET = { 0.0f, 31.0f, -22.0f };
 
+float CameraEffectiveDistance(float authoredDistance, bool mobile)
+{
+    if (!mobile) return authoredDistance;
+    return fmaxf(20.0f, authoredDistance*0.80f);
+}
+
 static Vector3 MatchCameraOffset(const Tuning *tuning)
 {
     // Scale the established offset as one vector. This keeps the camera pitch fixed
     // while exposing a true focus-to-camera distance instead of independently moving
     // its height or depth.
+#if defined(BRAWL_MOBILE)
+    const bool mobile = true;
+#else
+    const bool mobile = false;
+#endif
+    float effectiveDistance =
+        CameraEffectiveDistance(tuning->matchCameraDistance, mobile);
     return Vector3Scale(
         CAMERA_OFFSET,
-        tuning->matchCameraDistance/DEFAULT_MATCH_CAMERA_DISTANCE);
+        effectiveDistance/DEFAULT_MATCH_CAMERA_DISTANCE);
 }
 
 void CameraInit(App *world)

@@ -170,11 +170,12 @@ $(SECONDARIES_TEST_TARGET): tests/test_secondaries.c $(GAME_CORE_OBJECTS)
 
 $(UI_TEST_TARGET): tests/test_ui.c $(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o \
 	$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/ui/ui_skin.o \
+	$(OBJ_DIR)/ui/phone_layout.o \
 	$(OBJ_DIR)/content/content_catalog.o $(OBJ_DIR)/app/player_touch.o \
 	$(OBJ_DIR)/app/platform.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_ui.c \
 	$(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o $(OBJ_DIR)/ui/ui_icons.o \
-	$(OBJ_DIR)/ui/ui_skin.o \
+	$(OBJ_DIR)/ui/ui_skin.o $(OBJ_DIR)/ui/phone_layout.o \
 	$(OBJ_DIR)/content/content_catalog.o $(OBJ_DIR)/app/player_touch.o \
 	$(OBJ_DIR)/app/platform.o $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 

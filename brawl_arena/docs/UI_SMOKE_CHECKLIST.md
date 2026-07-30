@@ -45,6 +45,8 @@ At every size verify:
 - On iPhone, all player UI and touch controls remain inside the reported safe area. The
   objective, pause, Move, Attack, Super, and Skill regions do not overlap. The launch
   backdrop fills the physical display behind the cutout instead of exposing side bars.
+  Home, roster, Controls, Settings, downed, and result compositions use the safe
+  landscape width instead of a narrow centered desktop canvas.
 
 ## Screen pass
 
@@ -79,9 +81,12 @@ At every size verify:
 - WORLD match-camera distance applies live at 20 and 60 units without changing pitch,
   breaking aim lead, or clipping the playable arena.
 - iPhone launch deck: Studio and Quit are absent, the remaining actions are reachable,
-  and system-owned app exit/background behavior is not imitated by an in-game Quit.
+  the bottom action rail spans the safe width, utilities use the upper-right space, and
+  system-owned app exit/background behavior is not imitated by an in-game Quit.
 - iPhone match: desktop ability/tutorial tiles and the command center are absent; the
-  native-resolution touch HUD remains readable over both maps.
+  native-resolution touch HUD remains readable over both maps, the camera uses the
+  closer phone framing, Move/Attack remain translucent, and Super/Skill retain their
+  established treatment.
 
 ## Input matrix
 
@@ -91,12 +96,13 @@ At every size verify:
 - Keyboard: arrows/WASD focus movement, Enter/Space activation, Escape hierarchy, and
   Shift fine slider adjustment.
 - Gamepad: D-pad/left-stick focus, A activation, B back, bumpers/category movement,
-  left-stick move, right-stick aim, triggers/main, right bumper/super, and left
-  bumper/secondary.
+  left-stick full-speed-or-stopped move, right-stick aim, triggers/main, right
+  bumper/super, and left bumper/secondary.
 - Switch between pointer, keyboard, and gamepad; focus visibility and binding glyphs
   should follow the active/forced modality without moving control bounds.
-- iPhone touch: one finger moves while a second finger aims; releasing Attack fires in
-  the displayed direction, while a tap requests auto-aim.
+- iPhone touch: one finger selects a movement direction while a second finger aims;
+  movement is stopped inside the dead zone and full speed outside it, releasing Attack
+  fires in the displayed direction, and a tap requests auto-aim.
 - Drag/release Super and hold/drag/release Skill for each kit. Contacts must retain their
   original control when fingers cross or other contacts begin/end.
 - Pause, background, and resume must clear held contacts; returning to play must not move

@@ -140,25 +140,31 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 - Uninterrupted bottom rail with a blue brawler switcher, centered yellow mode choice,
   blue Practice, and the dominant red Deploy action.
 - On iPhone, the launch deck preserves the playable choices but omits desktop-only
-  Studio and Quit actions; app exit remains owned by iOS.
+  Studio and Quit actions; its safe-width deployment deck places utilities in the
+  upper-right and spans the bottom rail across the usable landscape width. App exit
+  remains owned by iOS.
 
 ### Roster
 
 - Left identity/ability stack, centered sticker preview, right live telemetry.
 - Five visible candidates with a yellow selected state.
 - Explicit yellow Select and separate Back action preserve candidate/commit behavior.
+- On iPhone, those three columns and the five-character rail fill the safe landscape
+  width rather than inheriting the centered desktop composition.
 
 ### Controls and Settings
 
 - Modal ink panels with halftone accents and outlined yellow headings.
 - Existing focus restore, scale, motion, contrast, tutorial, and glyph behavior remains.
+- iPhone uses two-column touch instructions and settings groups sized to the safe width.
 
 ### Match and results
 
 - Objective and ability surfaces use the comic geometry and stable semantic colors.
 - On iPhone, desktop ability/tutorial tiles yield to the two virtual sticks, separate
   Super and Skill controls, and a safe-area pause action. The command center remains a
-  desktop authoring surface and is not shown.
+  desktop authoring surface and is not shown. Move and Attack are translucent over the
+  arena; ability buttons retain their established opacity.
 - Body bars use the shared ink-framed progress primitive.
 - KO/readiness/break/downed/team-lock reactions are brief comic stamps; Gem Grab lock
   also escalates the objective container.
@@ -177,9 +183,10 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 
 - Layout scales from the 1280×800 reference canvas with a 960×600 minimum.
 - Player targets retain a 44-reference-pixel minimum.
-- iPhone layout first removes the platform safe-area insets, then scales the reference
-  canvas; the launch backdrop remains full-bleed behind those insets, and touch hit
-  regions expand to at least 44 points even when a visual is smaller.
+- iPhone player-facing menus use a dedicated 500-unit-tall reference frame whose width
+  expands across the platform safe area; the launch backdrop remains full-bleed behind
+  those insets, and touch hit regions expand to at least 44 points even when a visual is
+  smaller.
 - Keyboard/gamepad focus uses an ink outer and paper inner ring, independent of hue.
 - Pointer hover deepens the button face and lifts it two pixels without adding a
   perimeter shape; press moves it down and deepens it further. Keyboard/gamepad focus
@@ -215,8 +222,10 @@ On 2026-07-29:
 - the optimized game compiled without warnings;
 - architecture, UI policy, character/VFX asset, and canonical-config checks passed;
 - the full normal and maintained Darwin UBSan suites passed;
-- the UI test covered four viewport calculations, focus, easing/reduced motion, all five
-  motifs, contrast, result-action identity, skin lifetime, and the shared showcase;
+- the UI test covered four desktop viewport calculations, the notched-iPhone safe-width
+  home/roster/result compositions, 44-point actions, full-speed stick normalization,
+  focus, easing/reduced motion, all five motifs, contrast, result-action identity, skin
+  lifetime, and the shared showcase;
 - the config test covered profile preferences without changing project provenance;
 - a 1280×800 launch-only smoke check on an Apple M5 Max loaded all four imported
   characters, allocated the sticker target, and compiled the updated sticker fragment
@@ -226,12 +235,13 @@ On 2026-07-29:
   or icon overlap.
 - a hidden 1280-pixel launch-rail render verified continuous panel corners and matched
   button keyline/fill paths without exposed background wedges.
-- an iPhone 17 Pro simulator rendered the full-bleed landscape launch deck and a direct
-  match with correct notch-safe controls, stable imported CPU-skinned brawlers,
+- an iPhone 17 Pro simulator rendered the safe-width landscape launch deck and a direct
+  match with correct notch-safe controls, stable imported CPU-skinned brawlers, closer
+  match framing, translucent Move/Attack sticks, unchanged ability-button treatment,
   world/HUD composition, and all five mobile controls;
-- a signed arm64 bundle installed and launched on a physical iPhone 12 mini. Physical
-  multitouch feel and sustained-play thermal behavior were not exercised during this
-  verification.
+- the updated signed arm64 bundle installed and launched on a paired physical iPhone
+  12 mini. Physical multitouch feel and sustained-play thermal behavior were not
+  exercised during this verification.
 
 Earlier first-pass 1280×800 captures covered the launch deck, roster, Controls, match HUD,
 and Scrapper sticker. The enhancement pass did not use desktop input automation and did

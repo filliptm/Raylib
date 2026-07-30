@@ -60,7 +60,10 @@ Global out-of-combat recovery is authored with
 `gameplay.health_regen_max_ratio`; a zero ratio disables passive regeneration.
 `presentation.match_camera_distance` is the project-scoped 20–60-unit distance from the
 match camera to its smoothed player/aim focus. It scales the established camera offset
-without changing its pitch.
+without changing its pitch. The tracked project value is 31.999340; the compiled
+38.013156 recovery value reproduces the original `{0, 31, -22}` offset. iPhone keeps
+the project value intact and applies a presentation-only 0.80 multiplier with a
+20-unit effective floor.
 Each kit declares `main.self_heal_ratio`, `main.return_speed`, a complete
 `secondary.*` block, and returning-super speed/pull/knockback fields. The shared
 secondary record includes cooldown/duration/speed plus `range`, `delay`, `radius`,
