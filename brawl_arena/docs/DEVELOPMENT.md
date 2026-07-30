@@ -168,13 +168,13 @@ test exist to keep simulation usable without a window.
 | `test_healer` | typed Guardian content and rain/Resonance timing/outcomes |
 | `test_no_attack_shake` | every kit plus impact/damage/death camera isolation |
 | `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability, circle clearance, swept wall/crate collision, and wall sliding |
-| `test_gameplay` | identical input replay, simulation event/presentation isolation, slow-frame velocity clamping, ally/enemy actor pass-through, and an integrated Helios-9 bot route |
+| `test_gameplay` | identical input replay, simulation event/presentation isolation, slow-frame velocity clamping, ally/enemy actor pass-through, an integrated Helios-9 bot route, direct touch auto-aim without preview, and fast aimed-drag preservation |
 | `test_regeneration` | max-health recovery delay/cadence, combat resets, symmetry, caps, and disable state |
 | `test_tank` | actual-damage self-heal, snapshotting, mobility timing/collision, and Charge regression |
 | `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
-| `test_ui` | desktop and safe-width phone home/roster/result layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping, full-speed stick normalization, touch language, and the shared showcase |
+| `test_ui` | desktop and safe-width phone home/roster/result layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping, full-speed stick normalization, tap/drag attack edges, touch language, and the shared showcase |
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
@@ -223,8 +223,9 @@ matrix. At minimum, after changes to runtime/presentation:
   characters are stable, the closer match framing is readable, and every touch control
   stays clear of the objective and pause.
 - On a physical iPhone, install and launch the signed bundle, then exercise simultaneous
-  full-speed-or-stopped move/aim, tap auto-aim, attack release, Super release, each
-  kit's Skill interaction, pause/background/resume, rotation lock, and sustained-play
+  full-speed-or-stopped move/aim, preview-free tap auto-aim, directed attack release,
+  exterior Super/Skill progress rings and ready lighting, Super release, each kit's
+  Skill interaction, pause/background/resume, rotation lock, and sustained-play
   responsiveness.
 
 Report when the graphical checklist was not run; passing headless tests does not compile

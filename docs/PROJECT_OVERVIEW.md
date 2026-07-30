@@ -1,6 +1,6 @@
 # Project Overview
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 This is the maintained repository-level guide to the projects in this workspace. It is
 intended for contributors, coding agents, and anyone deciding where a change belongs.
@@ -644,9 +644,9 @@ The headless suite covers:
 - UI layout/focus at four desktop viewports plus a notched iPhone safe area, dedicated
   phone home/roster/result compositions, physical touch-target expansion, non-overlapping
   mobile-control placement, camera-relative mapping, full-speed stick normalization,
-  touch glyph language, contrast, easing/reduced motion, distinct character motifs,
-  result actions, procedural-skin lifetime/policy, profile preference round trips, and
-  the shared character-showcase contract.
+  tap-versus-drag attack intent, touch glyph language, contrast, easing/reduced motion,
+  distinct character motifs, result actions, procedural-skin lifetime/policy, profile
+  preference round trips, and the shared character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -810,17 +810,19 @@ On iPhone, the player uses independent stable touch IDs:
 - Left floating stick: camera-relative direction with binary full-speed movement after
   the dead zone.
 - Right floating stick: drag to aim the main attack and release to fire; a quick tap
-  preserves the existing nearest-target auto-aim.
+  fires through nearest-target auto-aim without opening the skill-shot preview.
 - `SUPER`: drag/release ultimate aiming and activation.
 - `SKILL`: press instant secondaries, hold Scrapper's shield, or drag/release Longshot's
   grapple.
 - Pause: clear captured touches and return to the launch deck.
 
 The mobile shell uses safe-area insets and expands touch hit targets to at least 44
-points. Its Move and Attack stick artwork is translucent over the world; Super, Skill,
-and pause retain their established visual treatment. It hides desktop-only Quit,
-command-center, and VFX Studio actions. Backgrounding clears active touch IDs and flushes
-dirty profile/draft state.
+points. Its Move and Attack stick artwork stays at a fixed low translucency while idle,
+held, or dragged, while pause retains its established treatment. Super and Skill artwork
+is rendered at 75% of its prior size without reducing its touch regions. Their charge
+and cooldown fill exterior progress rings; the corresponding button face and halo light
+only when usable. It hides desktop-only Quit, command-center, and VFX Studio actions.
+Backgrounding clears active touch IDs and flushes dirty profile/draft state.
 
 Play constructs Gem Grab when enabled. Team size is configurable from one to four per
 side; slot zero is the human and other player-side slots are allied bots. Teams race to

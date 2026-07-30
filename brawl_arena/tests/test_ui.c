@@ -198,6 +198,33 @@ int main(void)
     CHECK(Near(Vector3Length(stopped), 0.0f),
           "movement dead zone no longer resolves to a full stop");
 
+    PlayerInput tapInput = { 0 };
+    MobileStickState tapRelease = { .released = true };
+    PlayerTouchApplyAttackInput(&tapRelease, &tapInput);
+    CHECK(tapInput.autoAttackPressed &&
+          !tapInput.attackPressed && !tapInput.attackReleased &&
+          !tapInput.attackAimed,
+          "touch attack tap entered the skill-shot preview path");
+
+    PlayerInput dragInput = { 0 };
+    MobileStickState dragStart = {
+        .active = true, .dragged = true, .dragStarted = true
+    };
+    PlayerTouchApplyAttackInput(&dragStart, &dragInput);
+    CHECK(dragInput.attackPressed && dragInput.attackAimed &&
+          !dragInput.autoAttackPressed,
+          "touch attack drag did not enter deliberate aiming");
+
+    PlayerInput dragReleaseInput = { 0 };
+    MobileStickState dragRelease = {
+        .released = true, .dragged = true
+    };
+    PlayerTouchApplyAttackInput(&dragRelease, &dragReleaseInput);
+    CHECK(dragReleaseInput.attackReleased &&
+          dragReleaseInput.attackAimed &&
+          !dragReleaseInput.autoAttackPressed,
+          "touch attack drag release became an auto-aim tap");
+
     UiSystem touchUi = { 0 };
     touchUi.modality = UI_INPUT_TOUCH;
     touchUi.glyphMode = UI_GLYPH_AUTO;

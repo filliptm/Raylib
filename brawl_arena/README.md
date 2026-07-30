@@ -107,12 +107,14 @@ is disabled so this navigation remains explicit.
 
 On iPhone, play in landscape with four safe-area-aware touch controls: drag the left
 stick past its dead zone to move at full speed; drag and release the right stick to aim
-and fire; tap the right stick for auto-aim; drag and release **SUPER** to aim and cast;
-and hold, drag, or release **SKILL** according to the selected brawler's secondary. The
-pause button is at the top-right. Move and Attack visuals are translucent over the
-arena; ability buttons retain their established opacity. Touch contacts keep stable
-ownership, so moving and aiming work simultaneously. Physical gamepad movement uses the
-same full-speed-or-stopped rule.
+and fire; tap the right stick to fire with auto-aim without showing a skill-shot
+indicator; drag and release **SUPER** to aim and cast; and hold, drag, or release
+**SKILL** according to the selected brawler's secondary. The pause button is at the
+top-right. Move and Attack visuals stay at the same low translucency while idle, held,
+or dragged. Super and Skill artwork is 25% smaller without shrinking its touch targets;
+charge and cooldown still grow as exterior rings, and the button face lights when the
+action is usable. Touch contacts keep stable ownership, so moving and aiming work
+simultaneously. Physical gamepad movement uses the same full-speed-or-stopped rule.
 
 ## What's implemented
 
@@ -131,7 +133,8 @@ Every rib of the cone and the center of the beam are raycast, so the shape is
 clipped flat against whatever wall it runs into rather than passing through it: you can
 read exactly where a shot dies before committing. Supers preview in gold, ordinary shots
 in blue, and Guardian support previews in green. A quick tap instead fires an auto-aimed
-shot with target leading, standing in for mobile's tap-to-shoot.
+shot with target leading. On touch, the preview begins only after the Attack stick
+crosses its drag threshold, so tap-to-shoot never flashes the indicator.
 
 **Turn-and-fire.** An auto-aimed shot snaps the brawler around to face its target,
 holds that facing for a beat, then eases back to whichever way it is running. The shot

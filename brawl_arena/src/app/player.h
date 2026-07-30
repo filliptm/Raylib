@@ -11,6 +11,9 @@ typedef struct PlayerInput {
     int selectedClass;          // -1 when no class hotkey was pressed
     bool attackPressed;
     bool attackReleased;
+    // Touch drag explicitly selected a direction, even if press-to-release time
+    // was shorter than the desktop quick-tap threshold.
+    bool attackAimed;
     bool superHeld;
     bool autoAttackPressed;
     bool secondaryPressed;

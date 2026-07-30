@@ -239,7 +239,8 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
     if (input->attackReleased && w->controller.charging)
     {
         w->controller.charging = false;
-        bool tap = w->controller.chargeTime < TAP_THRESHOLD;
+        bool tap = !input->attackAimed &&
+                   w->controller.chargeTime < TAP_THRESHOLD;
         if (FireMainAttack(w, idx, tap))
             w->controller.attackBufferTimer = 0.0f;
         else
@@ -258,20 +259,17 @@ void PlayerUpdate(App *w, const PlayerInput *input, float dt)
             w->controller.attackBufferTimer = 0.0f;
     }
 
-    // Space is a straight auto-aim shot, handy while repositioning.
+    // Space/gamepad quick action and a touch tap are direct auto-aim shots. They
+    // never enter charging, but retain the same near-cooldown input buffer.
     if (input->autoAttackPressed)
     {
-        int target = AutoAimTarget(w, idx);
-        if (target >= 0)
+        if (FireMainAttack(w, idx, true))
+            w->controller.attackBufferTimer = 0.0f;
+        else
         {
-            Vector3 d = Vector3Subtract(w->session.brawlers[target].position, b->position);
-            d.y = 0.0f;
-            b->aimAngle = atan2f(d.x, d.z);
-            if (BrawlerTryAttack(game, idx, Vector3Length(d)))
-                BrawlerFaceShot(game, idx, b->aimAngle, 0.45f);
+            w->controller.attackBufferTimer = w->tune.inputBuffer;
+            w->controller.attackBufferTap = true;
         }
-        else if (BrawlerTryAttack(game, idx, aimLen))
-            BrawlerFaceShot(game, idx, b->aimAngle, 0.25f);
     }
 
     b->deliberateAim = w->controller.charging ||

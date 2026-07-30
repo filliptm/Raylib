@@ -37,6 +37,8 @@ typedef struct MobileStickState {
     bool active;
     bool pressed;
     bool released;
+    bool dragged;
+    bool dragStarted;
     Vector2 origin;
     Vector2 position;
     Vector2 value;

@@ -1,6 +1,6 @@
 # Arena Ink implementation record
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 This document records the Arena Ink interface that is connected to the live Brawl Arena
 runtime. It complements the browser-ready [visual field guide](index.html) and the
@@ -103,8 +103,12 @@ every surface with motion:
 `src/ui/mobile_controls.[ch]`
 
 - Draws the floating Move and Attack sticks plus Super, Skill, and pause affordances.
-- Uses the Arena Ink palette, readiness/cooldown feedback, idle fade, native-resolution
-  placement, safe-area insets, and minimum 44-point touch targets.
+- Uses the Arena Ink palette, exterior readiness/cooldown rings, ready-face/halo
+  lighting, idle fade, native-resolution placement, safe-area insets, and minimum
+  44-point touch targets.
+- Keeps Move/Attack at one low-opacity treatment while idle or manipulated. Super/Skill
+  artwork renders at 75% of its former size while its existing touch geometry remains
+  unchanged.
 
 `src/devtools/command_center.c`, `command_widgets.c`, and `studio.c`
 
@@ -163,8 +167,10 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 - Objective and ability surfaces use the comic geometry and stable semantic colors.
 - On iPhone, desktop ability/tutorial tiles yield to the two virtual sticks, separate
   Super and Skill controls, and a safe-area pause action. The command center remains a
-  desktop authoring surface and is not shown. Move and Attack are translucent over the
-  arena; ability buttons retain their established opacity.
+  desktop authoring surface and is not shown. Move and Attack remain equally translucent
+  while idle and in use. Super and Skill artwork is 25% smaller without reducing touch
+  targets. Their charge/cooldown grows as an exterior status ring; the muted face and
+  completed halo light only when ready.
 - Body bars use the shared ink-framed progress primitive.
 - KO/readiness/break/downed/team-lock reactions are brief comic stamps; Gem Grab lock
   also escalates the objective container.
@@ -200,6 +206,9 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 - Decorative patterns sit behind protected text and character regions.
 - Hover presentation is pointer-only. Touch uses pressed, held, readiness, and release
   feedback without relying on hover or focus rings.
+- Attack touch-down is visually quiet until the finger crosses the deliberate-aim
+  threshold. A release before that threshold fires auto-aim without showing the world
+  preview; a fast drag remains an aimed shot.
 
 ## Asset policy
 
@@ -217,6 +226,20 @@ as licensed legacy references. Their runtime PNGs are not loaded by Arena Ink.
 
 ## Verification record
 
+On 2026-07-30:
+
+- the optimized desktop build, architecture policy, UI policy, canonical configuration,
+  full normal suite, and maintained Darwin UBSan suite passed;
+- an iPhone 17 Pro simulator build launched directly into a match, and its capture
+  verified the lower-density Move/Attack artwork plus the 25%-smaller Skill/Super
+  artwork with exterior progress rings intact;
+- source inspection confirmed that Move/Attack opacity no longer branches on active
+  touch state and that Skill/Super drawing scales independently from unchanged touch
+  geometry;
+- the updated signed arm64 bundle built and installed on the paired physical iPhone
+  12 mini. Automated launch was again denied because the phone was locked, so physical
+  manipulation feel was not exercised.
+
 On 2026-07-29:
 
 - the optimized game compiled without warnings;
@@ -224,8 +247,11 @@ On 2026-07-29:
 - the full normal and maintained Darwin UBSan suites passed;
 - the UI test covered four desktop viewport calculations, the notched-iPhone safe-width
   home/roster/result compositions, 44-point actions, full-speed stick normalization,
-  focus, easing/reduced motion, all five motifs, contrast, result-action identity, skin
-  lifetime, and the shared showcase;
+  preview-free tap versus deliberate-drag attack intent, focus, easing/reduced motion,
+  all five motifs, contrast, result-action identity, skin lifetime, and the shared
+  showcase;
+- the gameplay test verified that a touch tap fires auto-aim without entering the
+  charging/preview state and that a fast deliberate drag preserves its explicit aim;
 - the config test covered profile preferences without changing project provenance;
 - a 1280×800 launch-only smoke check on an Apple M5 Max loaded all four imported
   characters, allocated the sticker target, and compiled the updated sticker fragment
@@ -237,11 +263,13 @@ On 2026-07-29:
   button keyline/fill paths without exposed background wedges.
 - an iPhone 17 Pro simulator rendered the safe-width landscape launch deck and a direct
   match with correct notch-safe controls, stable imported CPU-skinned brawlers, closer
-  match framing, translucent Move/Attack sticks, unchanged ability-button treatment,
-  world/HUD composition, and all five mobile controls;
-- the updated signed arm64 bundle installed and launched on a paired physical iPhone
-  12 mini. Physical multitouch feel and sustained-play thermal behavior were not
-  exercised during this verification.
+  match framing, translucent Move/Attack sticks, exterior Skill/Super progress tracks,
+  the completed Skill halo and illuminated face, world/HUD composition, and all five
+  mobile controls;
+- the updated signed arm64 bundle installed on a paired physical iPhone 12 mini.
+  Automated launch of this build was denied because the phone was locked. Physical
+  multitouch feel and sustained-play thermal behavior were not exercised during this
+  verification.
 
 Earlier first-pass 1280×800 captures covered the launch deck, roster, Controls, match HUD,
 and Scrapper sticker. The enhancement pass did not use desktop input automation and did

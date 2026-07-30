@@ -129,9 +129,13 @@ floating aim/fire stick, **SUPER**, **SKILL**, and pause. It converts stick disp
 through the current camera basis, then writes the same move, aim, preview, release,
 secondary, and pause fields used by the desktop controller. Movement normalizes to a
 unit vector after the dead zone, so touch and physical-gamepad sticks select direction
-but never a slower walking speed; aim magnitude remains analog. The mapping, full-speed
-normalization, and layout are pure functions covered without a window; game/core code
-never sees touch IDs, UIKit, or virtual-control rectangles.
+but never a slower walking speed; aim magnitude remains analog. Attack touch-down alone
+does not enter charging. Crossing the drag threshold emits the deliberate press edge,
+while release without crossing emits the direct auto-aim edge, so tap-to-shoot cannot
+render a preview. An explicit aimed marker prevents a fast drag/release from being
+misclassified by the desktop time-based tap rule. The mapping, gesture classification,
+full-speed normalization, and layout are pure functions covered without a window;
+game/core code never sees touch IDs, UIKit, or virtual-control rectangles.
 
 The command center uses `GameCommandExecute()` for actions such as changing a roster,
 respawning/killing/healing actors, spawning or clearing gems, changing class, and
@@ -267,7 +271,9 @@ The player-facing shell is split by responsibility:
   broadcast, resettable impact-stamp detection, action-retired tutorials, downed state,
   and the Continue/Rematch/Change Brawler result poster.
 - `mobile_controls.c`: native-resolution, safe-area-aware translucent movement/attack
-  sticks, Super/Skill controls, cooldown/readiness feedback, and idle fade.
+  sticks with opacity independent of touch state, 75%-scale Super/Skill artwork over
+  unchanged touch regions, exterior charge/cooldown rings, ready-face/halo feedback,
+  and ability/pause idle fade.
 - `menu_scene.c`: the vector arena podium, character preview, and rounded sticker
   compositing pass.
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
@@ -341,8 +347,8 @@ presentation state remains untouched.
 distinct character motifs, result actions, contrast, procedural-skin lifetime, and
 presentation-profile behavior without opening a window. It also covers notched safe
 areas, dedicated phone compositions, 44-point touch expansion, non-overlapping mobile
-controls, camera-relative stick mapping, binary full-speed movement, and touch binding
-language.
+controls, camera-relative stick mapping, binary full-speed movement, tap/drag attack
+classification, and touch binding language.
 `check-ui` prevents migrated player UI from bypassing shared text/skin ownership and
 verifies shipped fonts, procedural ownership, retained reference provenance, and archive
 policy. Graphical checks remain documented in

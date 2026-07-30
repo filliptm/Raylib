@@ -62,17 +62,19 @@ left/right orientations.
 - Left floating stick: camera-relative direction; movement is stopped inside the dead
   zone and full speed outside it.
 - Right floating stick: hold and drag to aim the main attack; release to fire. A quick
-  tap keeps the existing nearest-target auto-aim behavior.
+  tap fires through nearest-target auto-aim without entering or flashing the skill-shot
+  preview.
 - `SUPER`: hold and drag to aim; release to activate when charged.
 - `SKILL`: press for instant secondaries, hold for shields, or drag/release Longshot's
   grapple.
 - Pause button: return to the launch deck.
 
 Every touch is tracked by its stable platform ID, so movement, attack aim, and an ability
-can be held independently. The control HUD uses iPhone safe-area insets, 44-point-or-
-larger targets, cooldown/readiness rings, and a dim idle state. Move and Attack artwork
-is additionally translucent over the arena; Super and Skill retain their established
-visual treatment.
+can be held independently. The control HUD uses iPhone safe-area insets and 44-point-or-
+larger targets. Move and Attack artwork stays at a fixed low translucency while idle or
+in use. Super and Skill artwork is 25% smaller while retaining its larger touch regions;
+their charge/cooldown uses exterior progress rings, with the button face and completed
+halo lighting when ready.
 
 ## Runtime policy
 

@@ -1,6 +1,6 @@
 # Arena Ink UI smoke checklist
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 Use this checklist after UI, rendering, input, character, or configuration changes.
 Automated checks establish geometry and policy; this pass verifies the parts that need a
@@ -85,8 +85,10 @@ At every size verify:
   system-owned app exit/background behavior is not imitated by an in-game Quit.
 - iPhone match: desktop ability/tutorial tiles and the command center are absent; the
   native-resolution touch HUD remains readable over both maps, the camera uses the
-  closer phone framing, Move/Attack remain translucent, and Super/Skill retain their
-  established treatment.
+  closer phone framing, Move/Attack stay at the same low translucency before and during
+  a drag, and the 25%-smaller Super/Skill artwork remains legible. Its progress grows
+  outside the paper edge before the face and completed halo light at readiness, while
+  the unchanged larger touch regions remain easy to acquire.
 
 ## Input matrix
 
@@ -102,7 +104,8 @@ At every size verify:
   should follow the active/forced modality without moving control bounds.
 - iPhone touch: one finger selects a movement direction while a second finger aims;
   movement is stopped inside the dead zone and full speed outside it, releasing Attack
-  fires in the displayed direction, and a tap requests auto-aim.
+  fires in the displayed direction, and a tap fires with auto-aim without flashing the
+  skill-shot indicator. A quick deliberate flick must still use the displayed direction.
 - Drag/release Super and hold/drag/release Skill for each kit. Contacts must retain their
   original control when fingers cross or other contacts begin/end.
 - Pause, background, and resume must clear held contacts; returning to play must not move

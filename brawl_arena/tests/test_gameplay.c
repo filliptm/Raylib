@@ -267,6 +267,54 @@ static int CheckGrappleSkillShot(void)
     return 0;
 }
 
+static int CheckTouchAttackIntent(void)
+{
+    App app;
+    CHECK(Initialize(&app), "could not initialize touch-attack session");
+    Brawler *player = &app.session.brawlers[app.session.playerIdx];
+    float ammoBefore = player->ammo;
+
+    PlayerInput tap = {
+        .aimPoint = player->position,
+        .selectedClass = -1,
+        .autoAttackPressed = true
+    };
+    PlayerUpdate(&app, &tap, 1.0f/60.0f);
+    CHECK(!app.controller.charging && !player->deliberateAim,
+          "direct auto-aim tap exposed the skill-shot preview");
+    CHECK(player->ammo < ammoBefore,
+          "direct auto-aim tap did not fire");
+
+    App aimed;
+    CHECK(Initialize(&aimed), "could not initialize aimed-touch session");
+    Brawler *aimedPlayer =
+        &aimed.session.brawlers[aimed.session.playerIdx];
+    Vector3 explicitAim =
+        Vector3Add(aimedPlayer->position, (Vector3){ 10.0f, 0.0f, 0.0f });
+    PlayerInput press = {
+        .aimPoint = explicitAim,
+        .selectedClass = -1,
+        .attackPressed = true,
+        .attackAimed = true
+    };
+    PlayerUpdate(&aimed, &press, 1.0f/240.0f);
+    CHECK(aimed.controller.charging && aimedPlayer->deliberateAim,
+          "aimed touch drag did not expose its preview");
+
+    PlayerInput release = {
+        .aimPoint = explicitAim,
+        .selectedClass = -1,
+        .attackReleased = true,
+        .attackAimed = true
+    };
+    PlayerUpdate(&aimed, &release, 1.0f/240.0f);
+    CHECK(!aimed.controller.charging && !aimedPlayer->deliberateAim,
+          "aimed touch release left its preview active");
+    CHECK(aimedPlayer->aimAngle > 1.4f && aimedPlayer->aimAngle < 1.7f,
+          "quick aimed touch drag fell back to auto-aim");
+    return 0;
+}
+
 int main(void)
 {
     App first, replay;
@@ -323,7 +371,9 @@ int main(void)
           "class swap checks failed");
     CHECK(CheckGrappleSkillShot() == 0,
           "grapple skill-shot input checks failed");
+    CHECK(CheckTouchAttackIntent() == 0,
+          "touch tap/drag attack checks failed");
 
-    puts("deterministic replay, movement, bot routing, class swap, and grapple input passed");
+    puts("deterministic replay, movement, navigation, class swap, grapple, and touch attack passed");
     return 0;
 }

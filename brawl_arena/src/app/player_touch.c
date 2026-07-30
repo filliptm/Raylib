@@ -8,6 +8,7 @@
 
 #define TOUCH_NONE (-1)
 #define TOUCH_DEAD_ZONE 0.14f
+#define TOUCH_AIM_ACTIVATION 0.22f
 
 static float ClampMinimum(float value, float minimum)
 {
@@ -93,6 +94,8 @@ static void BeginStick(MobileStickState *stick, int touchId, Vector2 position,
     stick->active = true;
     stick->pressed = true;
     stick->released = false;
+    stick->dragged = false;
+    stick->dragStarted = false;
     stick->origin = floating ? position : home;
     stick->position = position;
     stick->value = (Vector2){ 0 };
@@ -102,6 +105,7 @@ static void UpdateStick(MobileStickState *stick, float radius)
 {
     stick->pressed = false;
     stick->released = false;
+    stick->dragStarted = false;
     if (!stick->active) return;
 
     int index = TouchIndexForId(stick->touchId);
@@ -128,6 +132,11 @@ static void UpdateStick(MobileStickState *stick, float radius)
                                  : (Vector2){ 0 };
     if (length < radius*TOUCH_DEAD_ZONE)
         stick->value = (Vector2){ 0 };
+    if (!stick->dragged && length >= radius*TOUCH_AIM_ACTIVATION)
+    {
+        stick->dragged = true;
+        stick->dragStarted = true;
+    }
 }
 
 static bool PointInCircle(Vector2 point, Vector2 center, float radius)
@@ -157,6 +166,18 @@ Vector3 PlayerFullSpeedMoveIntent(Vector3 intent, float deadZone)
     float length = Vector3Length(intent);
     if (length <= fmaxf(0.0f, deadZone)) return (Vector3){ 0 };
     return Vector3Scale(intent, 1.0f/length);
+}
+
+void PlayerTouchApplyAttackInput(const MobileStickState *stick,
+                                 PlayerInput *input)
+{
+    if (!stick || !input) return;
+    input->attackPressed |= stick->dragStarted;
+    input->attackAimed |= stick->dragged;
+    if (!stick->released) return;
+
+    if (stick->dragged) input->attackReleased = true;
+    else input->autoAttackPressed = true;
 }
 
 static void ApplyAim(const App *app, Vector2 stick, float range, PlayerInput *input)
@@ -228,16 +249,16 @@ void PlayerTouchCapture(App *app, PlayerInput *input)
     UpdateStick(&controls->secondary, layout.actionRadius);
     ClaimNewTouches(app, layout);
 
-    // Newly claimed sticks have zero values until their first drag but their press
-    // edges must be visible to the player controller in this same frame.
+    // Newly claimed sticks have zero values until their first drag. Attack remains
+    // preview-free until it crosses the aim threshold; release before that point is
+    // a direct auto-aim request.
     input->moveIntent = controls->move.active
         ? PlayerFullSpeedMoveIntent(
             PlayerTouchCameraIntent(
                 app->presentation.camera, controls->move.value),
             TOUCH_DEAD_ZONE)
         : (Vector3){ 0 };
-    input->attackPressed |= controls->attack.pressed;
-    input->attackReleased |= controls->attack.released;
+    PlayerTouchApplyAttackInput(&controls->attack, input);
     input->superHeld |= controls->superAbility.active;
     input->secondaryPressed |= controls->secondary.pressed;
     input->secondaryHeld |= controls->secondary.active;
