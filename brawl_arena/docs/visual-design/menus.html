@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Brawl Arena home menu and brawler-select visual design concepts.">
+    <title>Brawl Arena — Menu Concepts</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <nav class="site-nav" aria-label="Visual design documentation">
+        <a class="brand" href="index.html">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+                <strong>Brawl Arena</strong>
+                <small>Visual design field guide</small>
+            </span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">System</a>
+            <a href="menus.html" aria-current="page">Menus</a>
+            <a href="hud.html">HUD + Tools</a>
+            <a href="audit.html">Audit</a>
+        </div>
+        <span class="proposal-badge">Runtime reference — implemented July 2026</span>
+    </nav>
+
+    <main id="content" class="page">
+        <header class="section-heading">
+            <div>
+                <p class="eyebrow">Screen study / Menu shell</p>
+                <h1 style="font-size:clamp(54px,8vw,112px)">Brawlers first</h1>
+            </div>
+            <p>
+                The runtime now follows these compositions: each screen has one scan path and
+                reserves protected space for every character silhouette.
+            </p>
+        </header>
+
+        <section class="section" style="padding-top:48px">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">01 / Home</p>
+                    <h2>Launch deck</h2>
+                </div>
+                <p>
+                    The open stage sells the active brawler without turning the launch screen
+                    into a stat sheet. Title and utilities stay light; brawler, mode, Practice,
+                    and Deploy form one decisive bottom rail. The runtime now pops the wordmark,
+                    sticker fighter, and rail in as one short sequence.
+                </p>
+            </div>
+            <div class="game-frame-wrap">
+                <div class="game-frame" aria-label="Conceptual home-menu layout">
+                    <span class="frame-corner top-left"></span>
+                    <span class="frame-corner top-right"></span>
+                    <span class="frame-corner bottom-left"></span>
+                    <span class="frame-corner bottom-right"></span>
+                    <div class="home-topbar">
+                        <div class="home-profile">
+                            <span><strong>Brawl Arena</strong></span>
+                        </div>
+                        <div class="station-id">Launch deck</div>
+                        <div class="home-utility">
+                            <span class="keycap">Controls</span>
+                            <span class="keycap">Settings</span>
+                            <span class="keycap">Quit</span>
+                        </div>
+                    </div>
+
+                    <div class="model-stage" style="left:23%;right:23%;top:13%;bottom:18%">
+                        <div class="podium"></div>
+                        <div class="model-placeholder" aria-hidden="true">
+                            <svg viewBox="0 0 220 340" role="img">
+                                <defs>
+                                    <linearGradient id="tank-body" x1="0" y1="0" x2="1" y2="1">
+                                        <stop offset="0" stop-color="#d8e2ea"/>
+                                        <stop offset=".5" stop-color="#7189a2"/>
+                                        <stop offset="1" stop-color="#2a4058"/>
+                                    </linearGradient>
+                                </defs>
+                                <ellipse cx="108" cy="323" rx="76" ry="12" fill="#07111f" opacity=".65"/>
+                                <path d="M86 74 L122 66 L148 93 L154 170 L136 231 L79 231 L60 170 L66 100 Z" fill="url(#tank-body)" stroke="#9fd4ff" stroke-width="2"/>
+                                <path d="M85 54 L101 29 L127 31 L142 58 L129 83 L96 82 Z" fill="#7f94aa" stroke="#dce6ef" stroke-width="2"/>
+                                <path d="M73 219 L101 219 L96 310 L59 310 L61 265 Z" fill="#546c84" stroke="#a8b7c8" stroke-width="2"/>
+                                <path d="M117 219 L143 216 L162 304 L126 311 L111 266 Z" fill="#546c84" stroke="#a8b7c8" stroke-width="2"/>
+                                <path d="M28 92 L78 76 L91 185 L54 235 L18 207 Z" fill="#ff9d42" stroke="#ffd0a7" stroke-width="3"/>
+                                <path d="M32 108 L69 95 L74 177 L50 208 L28 192 Z" fill="#1a3049" opacity=".45"/>
+                                <circle cx="111" cy="55" r="8" fill="#64b9ff"/>
+                                <path d="M135 95 L174 120 L159 176 L143 166 Z" fill="#647d95" stroke="#a8b7c8" stroke-width="2"/>
+                            </svg>
+                        </div>
+                        <span class="model-caption">Active brawler · typed motif · rounded sticker contour</span>
+                    </div>
+
+                    <div class="home-launch">
+                        <div class="mode-deck frame-panel">
+                            <span class="mode-symbol">04</span>
+                            <span><strong>Tank</strong><small>Open Brawler Select for full kit details.</small></span>
+                        </div>
+                        <div class="mode-deck frame-panel">
+                            <span class="mode-symbol">3V3</span>
+                            <span><strong>Gem Grab</strong><small>Hold 10 gems to win.</small></span>
+                            <span class="keycap">◀ ▶</span>
+                        </div>
+                        <button class="frame-button" type="button">Practice</button>
+                        <button class="frame-play" type="button">Deploy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="screen-caption">
+                <span>Concept / 1280×800 reference composition</span>
+                <span>No combat telemetry · explicit brawler and mode controls · one primary action</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">02 / Character select</p>
+                    <h2>Roster bay</h2>
+                </div>
+                <p>
+                    This is where character detail belongs: identity and abilities on the
+                    left, a centered candidate, live telemetry on the right, and all five
+                    concise choices fixed along the bottom.
+                </p>
+            </div>
+            <div class="game-frame-wrap">
+                <div class="game-frame" aria-label="Conceptual brawler-select layout">
+                    <span class="frame-corner top-left"></span>
+                    <span class="frame-corner top-right"></span>
+                    <span class="frame-corner bottom-left"></span>
+                    <span class="frame-corner bottom-right"></span>
+                    <span class="signal-rail"></span>
+
+                    <div class="select-topbar">
+                        <strong>Helios-9</strong>
+                        <span class="frame-label">Brawler Select</span>
+                        <span class="frame-label">1 W / 0 L / 3 KO</span>
+                    </div>
+                    <button class="select-back frame-button" type="button">‹ Back</button>
+
+                    <article class="select-detail select-detail-left frame-panel">
+                        <span class="frame-label">Tank</span>
+                        <div class="frame-title">Tank</div>
+                        <p>Reclaiming rounds and shoulder jets.</p>
+                        <div class="ability-row">
+                            <span class="ability-icon">LMB</span>
+                            <span><strong>Main attack</strong><small>6 projectiles / 40 degree spread</small></span>
+                        </div>
+                        <div class="ability-row">
+                            <span class="ability-icon">Shift</span>
+                            <span><strong>Shoulder Jets</strong><small>Armored mobility drive</small></span>
+                        </div>
+                        <div class="ability-row">
+                            <span class="ability-icon super">Q</span>
+                            <span><strong>Charge</strong><small>Crate-breaking impact</small></span>
+                        </div>
+                    </article>
+
+                    <div class="model-stage select-stage">
+                        <div class="podium"></div>
+                        <div class="model-placeholder" aria-hidden="true">
+                            <svg viewBox="0 0 220 340">
+                                <ellipse cx="110" cy="323" rx="75" ry="12" fill="#07111f" opacity=".65"/>
+                                <path d="M78 79 L142 79 L159 181 L141 233 L80 233 L61 181 Z" fill="#7189a2" stroke="#dce6ef" stroke-width="2"/>
+                                <path d="M85 56 L99 29 L125 29 L139 56 L127 82 L97 82 Z" fill="#8295aa" stroke="#dce6ef" stroke-width="2"/>
+                                <path d="M79 226 L106 226 L99 311 L64 311 Z" fill="#536d86" stroke="#a8b7c8" stroke-width="2"/>
+                                <path d="M116 226 L143 226 L157 311 L122 311 Z" fill="#536d86" stroke="#a8b7c8" stroke-width="2"/>
+                                <path d="M39 90 L76 84 L81 215 L35 225 L20 181 Z" fill="#ff9d42" stroke="#ffd0a7" stroke-width="3"/>
+                                <path d="M144 86 L184 94 L199 184 L184 225 L139 213 Z" fill="#ff9d42" stroke="#ffd0a7" stroke-width="3"/>
+                                <circle cx="112" cy="54" r="8" fill="#64b9ff"/>
+                            </svg>
+                        </div>
+                        <span class="model-caption">Centered candidate · mechanic motif · rounded sticker contour</span>
+                    </div>
+
+                    <article class="select-detail select-detail-right frame-panel">
+                        <span class="frame-label">Field telemetry</span>
+                        <div class="frame-title">Kit readout</div>
+                        <dl>
+                            <div class="mini-stat"><dt>Hull integrity</dt><dd>8,009</dd></div>
+                            <div class="mini-stat"><dt>Attack output</dt><dd>1,800</dd></div>
+                            <div class="mini-stat"><dt>Effective range</dt><dd>9.0 m</dd></div>
+                            <div class="mini-stat"><dt>Ammo reload</dt><dd>1.25 s</dd></div>
+                            <div class="mini-stat"><dt>Ammo cells</dt><dd>3</dd></div>
+                        </dl>
+                        <span class="selection-status">Currently equipped.</span>
+                    </article>
+
+                    <div class="select-roster-dock frame-panel">
+                        <span class="frame-label">Choose a brawler</span>
+                        <div class="select-roster-grid">
+                            <button class="roster-choice" type="button">Scrapper</button>
+                            <button class="roster-choice" type="button">Longshot</button>
+                            <button class="roster-choice" type="button">Mortar</button>
+                            <button class="roster-choice selected" type="button">Tank<small>Preview</small></button>
+                            <button class="roster-choice" type="button">Guardian</button>
+                            <button class="frame-play" type="button">Select Tank</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="screen-caption">
+                <span>Runtime composition / candidate detail belongs here</span>
+                <span>Fixed five-choice row · candidate preview stays separate from commitment</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">03 / Shared showcase</p>
+                    <h2>One authored frame</h2>
+                </div>
+                <p>
+                    Both player menu screens consume one project-authored showcase so changing
+                    candidates never moves the camera, stage, or protected composition.
+                </p>
+            </div>
+            <div class="table-scroll">
+                <table class="token-table">
+                    <thead>
+                        <tr><th>Project field</th><th>Purpose</th><th>Tracked value</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>preview.showcase.yaw_degrees</code></td><td>Fixed menu facing</td><td>180°</td></tr>
+                        <tr><td><code>preview.showcase.scale</code></td><td>Preview-only model scale</td><td>0.90</td></tr>
+                        <tr><td><code>preview.showcase.offset_x/y</code></td><td>Center the silhouette</td><td>0.0 / 0.0</td></tr>
+                        <tr><td><code>preview.showcase.camera_position_*</code></td><td>Shared eye position</td><td>0.0 / 2.7 / -7.6</td></tr>
+                        <tr><td><code>preview.showcase.camera_target_*</code></td><td>Shared look target</td><td>0.0 / 1.4 / 0.0</td></tr>
+                        <tr><td><code>preview.showcase.vertical_fov</code></td><td>Shared perspective</td><td>40°</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="grid-3">
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Controls overlay</span>
+                    <h3>Group by task</h3>
+                    <p>Move, combat, brawler ability, and system controls become four short groups with consistent keycaps.</p>
+                </article>
+                <article class="panel">
+                    <span class="panel-kicker">Mode selection</span>
+                    <h3>Show the options</h3>
+                    <p>Replace “click to change” with explicit previous/next controls or a segmented selector that exposes state.</p>
+                </article>
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Result state</span>
+                    <h3>Close the loop</h3>
+                    <p>Add mode result, personal summary, earned progression, and a clear Continue action before returning home.</p>
+                </article>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <div>
+                <strong>Next: match and tuning surfaces</strong>
+                <p>The same hierarchy carries into the combat HUD and the denser command center without making them look identical.</p>
+            </div>
+            <div class="footer-meta">
+                <a href="hud.html">Open HUD + tool concepts →</a><br>
+                Brawl Arena / Arena Ink
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

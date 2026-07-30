@@ -1,0 +1,39 @@
+{
+  "format_version": 1,
+  "rig": "meshy_humanoid_v1",
+  "animation_library": "resources/characters/animations/meshy_humanoid_v1.glb",
+  "characters": [
+    {
+      "id": "sentinel",
+      "class": "CLASS_SHOTGUNNER",
+      "model": "resources/characters/models/sentinel.glb",
+      "overrides": [
+        "resources/characters/animations/overrides/sentinel.glb"
+      ],
+      "output": "build/assets/characters/sentinel.glb"
+    },
+    {
+      "id": "longshot",
+      "class": "CLASS_SNIPER",
+      "model": "resources/characters/models/longshot.glb",
+      "overrides": [],
+      "output": "build/assets/characters/longshot.glb"
+    },
+    {
+      "id": "ironclad_guardian",
+      "class": "CLASS_BRUISER",
+      "model": "resources/characters/models/ironclad_guardian.glb",
+      "overrides": [],
+      "output": "build/assets/characters/ironclad_guardian.glb"
+    },
+    {
+      "id": "gaia_guardian",
+      "class": "CLASS_HEALER",
+      "model": "resources/characters/models/gaia_guardian.glb",
+      "overrides": [
+        "resources/characters/animations/overrides/gaia_guardian.glb"
+      ],
+      "output": "build/assets/characters/gaia_guardian.glb"
+    }
+  ]
+}

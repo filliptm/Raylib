@@ -1,0 +1,452 @@
+#include "attack_effects.h"
+
+#include "render_state.h"
+#include "vfx_catalog.h"
+#include "raymath.h"
+#include "rlgl.h"
+#include <math.h>
+#include <stddef.h>
+
+// Presentation-only randomness: deterministic sim state is never touched.
+static unsigned int g_seed = 0x9E3779B9u;
+static float Rand01(void)
+{
+    g_seed ^= g_seed << 13;
+    g_seed ^= g_seed >> 17;
+    g_seed ^= g_seed << 5;
+    return (float)(g_seed & 0xFFFFFF)/(float)0xFFFFFF;
+}
+
+static AttackParticle *AllocParticle(PresentationState *p)
+{
+    for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
+        if (!p->attackParticles[i].active) return &p->attackParticles[i];
+    return NULL;
+}
+
+static void SpawnFromLayer(PresentationState *p, const AttackEffectLayer *layer,
+                           Vector3 origin, float yaw, int followBrawler,
+                           float fieldRadius, float lifeOverride,
+                           Color eventColor)
+{
+    Color colorStart = layer->colorStart;
+    Color colorEnd = layer->colorEnd;
+    if (layer->useEventColor)
+    {
+        // The event supplies the RGB identity; the layer keeps its alpha ramp.
+        colorStart = (Color){ eventColor.r, eventColor.g, eventColor.b,
+                              layer->colorStart.a };
+        colorEnd = (Color){ eventColor.r, eventColor.g, eventColor.b,
+                            layer->colorEnd.a };
+    }
+
+    float duration = layer->duration;
+    if (layer->loop && lifeOverride > 0.0f) duration = lifeOverride;
+    float scaleMul = (layer->fitField && fieldRadius > 0.0f) ? fieldRadius : 1.0f;
+
+    Vector3 forward = { sinf(yaw), 0.0f, cosf(yaw) };
+    Vector3 side = { cosf(yaw), 0.0f, -sinf(yaw) };
+    Vector3 base = Vector3Add(origin,
+        Vector3Add(Vector3Scale(forward, layer->forward),
+        Vector3Add((Vector3){ 0.0f, layer->up, 0.0f },
+                   Vector3Scale(side, layer->side))));
+
+    int count = layer->pattern == ATTACK_PATTERN_SINGLE ? 1 : layer->count;
+    float spread = layer->spreadDeg*DEG2RAD;
+
+    for (int i = 0; i < count; i++)
+    {
+        AttackParticle *particle = AllocParticle(p);
+        if (!particle) return;
+
+        float direction = yaw;
+        float speed = layer->speed;
+        float lift = 0.0f;
+        switch (layer->pattern)
+        {
+            case ATTACK_PATTERN_BURST:
+                direction = yaw + (Rand01() - 0.5f)*spread;
+                speed = layer->speed*(0.55f + 0.45f*Rand01());
+                lift = fabsf(layer->speed)*0.30f*Rand01();
+                break;
+            case ATTACK_PATTERN_RING:
+                direction = (i/(float)count)*PI*2.0f;
+                break;
+            case ATTACK_PATTERN_CONE:
+                direction = yaw + ((count == 1) ? 0.0f
+                          : ((i/(float)(count - 1)) - 0.5f))*spread;
+                break;
+            default: break;
+        }
+
+        *particle = (AttackParticle){
+            .active = true,
+            .atlas = layer->atlas,
+            .frame = layer->frame,
+            .frameCount = layer->frameCount,
+            .fps = layer->fps,
+            .position = base,
+            .velocity = { sinf(direction)*speed, lift, cosf(direction)*speed },
+            .gravity = layer->gravity,
+            .drag = layer->drag,
+            .delay = layer->delay,
+            .age = 0.0f,
+            .duration = duration,
+            .scaleStart = layer->scaleStart*scaleMul,
+            .scaleEnd = layer->scaleEnd*scaleMul,
+            .colorStart = colorStart,
+            .colorEnd = colorEnd,
+            .blend = layer->blend,
+            .rotation = layer->rotateSpeed != 0.0f ? Rand01()*360.0f : 0.0f,
+            .rotateSpeed = layer->rotateSpeed,
+            .ground = layer->ground,
+            .shape = layer->shape,
+            .yaw = direction,
+            .emissive = layer->emissive,
+            .follow = followBrawler,
+            .followOffset = Vector3Subtract(base, origin)
+        };
+        if (followBrawler >= 0)
+            particle->followOffset = Vector3Subtract(base, origin);
+    }
+}
+
+void AttackFxSpawn(App *w, const AttackPresentation *doc, int anchor,
+                   Vector3 origin, float yaw, int followBrawler,
+                   float fieldRadius, float lifeOverride, Color eventColor)
+{
+    if (!doc || !doc->authored) return;
+    bool follows = anchor == ATTACK_ANCHOR_SELF ||
+                   anchor == ATTACK_ANCHOR_MARK_APPLIED ||
+                   anchor == ATTACK_ANCHOR_MARK_TICK;
+    for (int i = 0; i < MAX_ATTACK_LAYERS; i++)
+    {
+        const AttackEffectLayer *layer = &doc->layers[i];
+        if (!layer->used || layer->anchor != anchor) continue;
+        SpawnFromLayer(&w->presentation, layer, origin, yaw,
+                       follows ? followBrawler : -1, fieldRadius, lifeOverride,
+                       eventColor);
+    }
+}
+
+const AttackProjectileVisual *AttackProjectileVisualFor(const App *w,
+                                                        const Projectile *p)
+{
+    if (!p || p->abilityIndex < 0 ||
+        p->abilityIndex >= w->content.abilityCount) return NULL;
+    const AttackPresentation *doc = &w->content.attacks[p->abilityIndex];
+    return doc->authored ? &doc->projectile : NULL;
+}
+
+// Trails and projectile-anchored emitters for authored projectiles. The trail
+// stores a short position history per projectile slot; slot reuse resets it.
+static void UpdateProjectileVisuals(App *w, float dt)
+{
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        const Projectile *p = &w->session.projectiles[i];
+        AttackTrail *trail = &w->presentation.attackTrails[i];
+
+        for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+            if (trail->points[point].used) trail->points[point].age += dt;
+
+        if (!p->active)
+        {
+            trail->wasActive = false;
+            continue;
+        }
+        if (!trail->wasActive)
+        {
+            // A new projectile claimed this slot: drop the previous history.
+            for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+                trail->points[point].used = false;
+            trail->pointTimer = 0.0f;
+            trail->emitTimer = 0.0f;
+            trail->wasActive = true;
+        }
+
+        const AttackProjectileVisual *visual = AttackProjectileVisualFor(w, p);
+        const AttackPresentation *doc =
+            (p->abilityIndex >= 0 && p->abilityIndex < w->content.abilityCount)
+            ? &w->content.attacks[p->abilityIndex] : NULL;
+
+        if (visual && visual->trailLength > 0.001f)
+        {
+            trail->pointTimer -= dt;
+            if (trail->pointTimer <= 0.0f)
+            {
+                trail->points[trail->head] = (AttackTrailPoint){
+                    .position = p->position, .age = 0.0f, .used = true
+                };
+                trail->head = (trail->head + 1)%ATTACK_TRAIL_POINTS;
+                trail->pointTimer = visual->trailLength/(float)ATTACK_TRAIL_POINTS;
+            }
+        }
+
+        if (doc && doc->authored)
+        {
+            trail->emitTimer -= dt;
+            if (trail->emitTimer <= 0.0f)
+            {
+                float yaw = atan2f(p->velocity.x, p->velocity.z);
+                for (int layer = 0; layer < MAX_ATTACK_LAYERS; layer++)
+                {
+                    const AttackEffectLayer *def = &doc->layers[layer];
+                    if (!def->used || def->anchor != ATTACK_ANCHOR_PROJECTILE)
+                        continue;
+                    SpawnFromLayer(&w->presentation, def, p->position, yaw, -1,
+                                   0.0f, 0.0f, p->color);
+                }
+                trail->emitTimer = 0.045f;
+            }
+        }
+    }
+}
+
+void AttackFxUpdate(App *w, float dt)
+{
+    UpdateProjectileVisuals(w, dt);
+    for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
+    {
+        AttackParticle *particle = &w->presentation.attackParticles[i];
+        if (!particle->active) continue;
+
+        particle->age += dt;
+        if (particle->age >= particle->delay + particle->duration)
+        {
+            particle->active = false;
+            continue;
+        }
+        if (particle->age < particle->delay) continue;
+
+        particle->velocity.y += particle->gravity*dt;
+        float damp = 1.0f - particle->drag*dt;
+        if (damp < 0.0f) damp = 0.0f;
+        particle->velocity = Vector3Scale(particle->velocity, damp);
+        particle->rotation += particle->rotateSpeed*dt;
+
+        if (particle->follow >= 0 && particle->follow < w->session.brawlerCount)
+        {
+            // Caster-anchored: physics run in the caster's local frame.
+            particle->followOffset = Vector3Add(particle->followOffset,
+                                                Vector3Scale(particle->velocity, dt));
+            particle->position = Vector3Add(
+                w->session.brawlers[particle->follow].position,
+                particle->followOffset);
+        }
+        else
+            particle->position = Vector3Add(particle->position,
+                                            Vector3Scale(particle->velocity, dt));
+    }
+}
+
+static Rectangle AtlasFrame(const Assets *a, int atlas, int frame, Texture2D *texture)
+{
+    if (atlas < 0) atlas = 0;
+    if (atlas >= VFX_ATLAS_COUNT) atlas = VFX_ATLAS_COUNT - 1;
+    *texture = a->vfxAtlases[atlas];
+
+    int columns = 1, rows = 1, frames = 1;
+    VfxAtlasGrid((VfxAtlasId)atlas, &columns, &rows, &frames);
+    if (frame < 0) frame = 0;
+    if (frame >= frames) frame = frames - 1;
+    float width = texture->width/(float)columns;
+    float height = texture->height/(float)rows;
+    const float inset = 0.5f;
+    return (Rectangle){
+        (frame%columns)*width + inset,
+        (frame/columns)*height + inset,
+        width - inset*2.0f,
+        height - inset*2.0f
+    };
+}
+
+static void DrawGroundQuad(Texture2D texture, Rectangle source, Vector3 position,
+                           float rotationDeg, float size, Color color)
+{
+    float angle = rotationDeg*DEG2RAD;
+    float half = size*0.5f;
+    Vector3 right = { cosf(angle)*half, 0.0f, -sinf(angle)*half };
+    Vector3 forward = { sinf(angle)*half, 0.0f, cosf(angle)*half };
+    Vector3 y = { 0.0f, fmaxf(position.y, 0.03f), 0.0f };
+
+    float u0 = source.x/texture.width;
+    float v0 = source.y/texture.height;
+    float u1 = (source.x + source.width)/texture.width;
+    float v1 = (source.y + source.height)/texture.height;
+
+    rlSetTexture(texture.id);
+    rlBegin(RL_QUADS);
+    rlColor4ub(color.r, color.g, color.b, color.a);
+    rlNormal3f(0.0f, 1.0f, 0.0f);
+    rlTexCoord2f(u0, v0);
+    rlVertex3f(position.x - right.x - forward.x, y.y,
+               position.z - right.z - forward.z);
+    rlTexCoord2f(u0, v1);
+    rlVertex3f(position.x - right.x + forward.x, y.y,
+               position.z - right.z + forward.z);
+    rlTexCoord2f(u1, v1);
+    rlVertex3f(position.x + right.x + forward.x, y.y,
+               position.z + right.z + forward.z);
+    rlTexCoord2f(u1, v0);
+    rlVertex3f(position.x + right.x - forward.x, y.y,
+               position.z + right.z - forward.z);
+    rlEnd();
+    rlSetTexture(0);
+}
+
+static Color LerpColor(Color a, Color b, float t)
+{
+    return (Color){
+        (unsigned char)(a.r + (b.r - a.r)*t),
+        (unsigned char)(a.g + (b.g - a.g)*t),
+        (unsigned char)(a.b + (b.b - a.b)*t),
+        (unsigned char)(a.a + (b.a - a.a)*t)
+    };
+}
+
+static void DrawBlendGroup(App *w, Assets *a, int blend)
+{
+    Camera3D camera = w->presentation.camera;
+    for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
+    {
+        const AttackParticle *particle = &w->presentation.attackParticles[i];
+        if (!particle->active || particle->blend != blend) continue;
+        if (particle->shape != ATTACK_SHAPE_SPRITE) continue;
+        if (particle->age < particle->delay) continue;
+
+        float t = (particle->age - particle->delay)/particle->duration;
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+
+        int frame = particle->frame;
+        if (particle->frameCount > 1 && particle->fps > 0.0f)
+            frame += ((int)((particle->age - particle->delay)*particle->fps))
+                     %particle->frameCount;
+
+        Texture2D texture;
+        Rectangle source = AtlasFrame(a, particle->atlas, frame, &texture);
+        if (texture.id == 0)
+        {
+            texture = a->texGlow;
+            source = (Rectangle){ 0, 0, (float)texture.width, (float)texture.height };
+        }
+
+        float size = particle->scaleStart +
+                     (particle->scaleEnd - particle->scaleStart)*t;
+        Color color = LerpColor(particle->colorStart, particle->colorEnd, t);
+
+        if (particle->ground)
+            DrawGroundQuad(texture, source, particle->position,
+                           particle->rotation, size, color);
+        else
+            DrawBillboardPro(camera, texture, source, particle->position,
+                             (Vector3){ 0.0f, 1.0f, 0.0f },
+                             (Vector2){ size, size },
+                             (Vector2){ size*0.5f, size*0.5f },
+                             particle->rotation, color);
+    }
+}
+
+static void DrawTrails(App *w, Assets *a)
+{
+    Camera3D camera = w->presentation.camera;
+    for (int i = 0; i < MAX_PROJECTILES; i++)
+    {
+        const AttackTrail *trail = &w->presentation.attackTrails[i];
+        const Projectile *p = &w->session.projectiles[i];
+        const AttackProjectileVisual *visual =
+            p->active ? AttackProjectileVisualFor(w, p) : NULL;
+        float length = visual ? visual->trailLength : 0.0f;
+
+        for (int point = 0; point < ATTACK_TRAIL_POINTS; point++)
+        {
+            const AttackTrailPoint *tp = &trail->points[point];
+            if (!tp->used) continue;
+            float horizon = length > 0.001f ? length : 0.4f;
+            float fade = 1.0f - tp->age/horizon;
+            if (fade <= 0.0f) continue;
+
+            Color color = (visual && visual->tintOverride) ? visual->tint
+                        : (p->active ? p->color : (Color){ 200, 220, 255, 255 });
+            color.a = (unsigned char)(120.0f*fade);
+            float scale = visual ? visual->visualScale : 1.0f;
+            DrawBillboard(camera, a->texGlow, tp->position,
+                          (0.22f + 0.34f*fade)*scale, color);
+        }
+    }
+}
+
+// Solid shapes render through the lit pass with depth writes, so they pick up
+// lighting, occlusion, and the toon ink outline like any world object. Alpha
+// still fades them out over life.
+void AttackFxDrawSolid(App *w, Assets *a)
+{
+    rlDisableBackfaceCulling();
+    for (int i = 0; i < MAX_ATTACK_PARTICLES; i++)
+    {
+        const AttackParticle *particle = &w->presentation.attackParticles[i];
+        if (!particle->active || particle->shape == ATTACK_SHAPE_SPRITE) continue;
+        if (particle->age < particle->delay) continue;
+
+        float t = (particle->age - particle->delay)/particle->duration;
+        if (t < 0.0f) t = 0.0f;
+        if (t > 1.0f) t = 1.0f;
+        float size = particle->scaleStart +
+                     (particle->scaleEnd - particle->scaleStart)*t;
+        Color color = LerpColor(particle->colorStart, particle->colorEnd, t);
+        if (color.a < 4 || size <= 0.01f) continue;
+
+        // `rotation` already accumulates rotateSpeed in the update step.
+        float yaw = particle->yaw + particle->rotation*DEG2RAD;
+        Matrix m;
+        Mesh mesh;
+        switch (particle->shape)
+        {
+            case ATTACK_SHAPE_SHIELD:
+                // Wide curved plate: width tracks the size, height stays squat so
+                // it reads as a wall of energy rather than a billboard.
+                mesh = a->shieldArc;
+                m = MatrixMultiply(MatrixScale(size*1.35f, size*0.62f, size),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_ORB:
+                mesh = a->sphere;
+                m = MatrixMultiply(MatrixScale(size*0.5f, size*0.5f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_DOME:
+                mesh = a->dome;
+                m = MatrixMultiply(MatrixScale(size*0.5f, size*0.42f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+            case ATTACK_SHAPE_COLUMN:
+                mesh = a->column;
+                m = MatrixMultiply(MatrixScale(size*0.35f, size*2.2f, size*0.35f),
+                                   MatrixRotateY(yaw));
+                break;
+            default:    // ATTACK_SHAPE_DISC
+                mesh = a->cylinder;
+                m = MatrixMultiply(MatrixScale(size*0.5f, 0.05f, size*0.5f),
+                                   MatrixRotateY(yaw));
+                break;
+        }
+        m = MatrixMultiply(m, MatrixTranslate(particle->position.x,
+                                              fmaxf(particle->position.y, 0.05f),
+                                              particle->position.z));
+        DrawLit(a, mesh, m, a->texFlat, color, (Vector2){ 1.0f, 1.0f },
+                particle->emissive);
+    }
+    rlEnableBackfaceCulling();
+}
+
+void AttackFxDraw(App *w, Assets *a)
+{
+    RenderBeginNoDepthWrite();
+    DrawBlendGroup(w, a, ATTACK_BLEND_ALPHA);
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawTrails(w, a);
+    DrawBlendGroup(w, a, ATTACK_BLEND_ADDITIVE);
+    EndBlendMode();
+    RenderEndNoDepthWrite();
+}

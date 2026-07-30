@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Code-grounded Brawl Arena visual audit and staged implementation roadmap.">
+    <title>Brawl Arena — Visual Audit and Roadmap</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <nav class="site-nav" aria-label="Visual design documentation">
+        <a class="brand" href="index.html">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>
+                <strong>Brawl Arena</strong>
+                <small>Visual design field guide</small>
+            </span>
+        </a>
+        <div class="nav-links">
+            <a href="index.html">System</a>
+            <a href="menus.html">Menus</a>
+            <a href="hud.html">HUD + Tools</a>
+            <a href="audit.html" aria-current="page">Audit + Roadmap</a>
+        </div>
+        <span class="proposal-badge">Historical audit — pre-implementation</span>
+    </nav>
+
+    <main id="content" class="page page-narrow">
+        <header class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Pre-implementation code audit / July 2026</p>
+                <h1 style="font-size:clamp(58px,8vw,106px)">Presentation gap</h1>
+                <p>
+                    This page preserves the baseline that ultimately motivated Arena Ink. The
+                    presentation system and focused screen migrations described here have
+                    since landed in the runtime.
+                </p>
+            </div>
+            <dl class="hero-side">
+                <div class="hero-stat"><dt>UI files</dt><dd>Menu · HUD · tools</dd></div>
+                <div class="hero-stat"><dt>Text path</dt><dd>Was default bitmap font</dd></div>
+                <div class="hero-stat"><dt>Layout</dt><dd>Was fixed at 1280×800</dd></div>
+                <div class="hero-stat"><dt>Outcome</dt><dd>Foundation then migration</dd></div>
+            </dl>
+        </header>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">01 / Verdict</p>
+                    <h2>Strong game, fragmented shell</h2>
+                </div>
+                <p>
+                    The UI is functional and the code is understandable, but each screen has
+                    accumulated its own sizes, colors, interaction details, and layout rules.
+                    That makes polish expensive and model-specific problems recurrent.
+                </p>
+            </div>
+            <div class="grid-2">
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Keep</span>
+                    <h3>What already works</h3>
+                    <ul class="compact-list">
+                        <li>Menu cards are connected to real actions.</li>
+                        <li>Selected-kit data already drives multiple screens.</li>
+                        <li>Objective, ammo, health, ability, and result state are present.</li>
+                        <li>Command-center local/project provenance is a strong foundation.</li>
+                        <li>Station assets, toon shading, lights, bloom, and ability VFX give the world identity.</li>
+                    </ul>
+                </article>
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">Change</span>
+                    <h3>What blocks polish</h3>
+                    <ul class="compact-list">
+                        <li>No shared font or semantic UI theme service.</li>
+                        <li>Hard-coded layouts assume one window shape and one model frame.</li>
+                        <li>Mouse interaction exists without a unified focus/navigation model.</li>
+                        <li>Rounded cards and frequent pulses flatten screen hierarchy.</li>
+                        <li>Player UI and developer tools repeat visual decisions separately.</li>
+                    </ul>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">02 / Code evidence</p>
+                    <h2>What the tree says</h2>
+                </div>
+                <p>
+                    Findings were traced through the live menu, HUD, command-center, asset,
+                    rendering, startup, and tuning paths. Counts are a point-in-time audit,
+                    not a permanent API contract.
+                </p>
+            </div>
+            <div class="table-scroll">
+                <table class="audit-table">
+                    <thead>
+                        <tr><th>Area</th><th>Observed implementation</th><th>Effect</th><th>Priority</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Typography</td>
+                            <td><code>DrawText</code>/<code>MeasureText</code> throughout; no loaded UI fonts or <code>DrawTextEx</code> path</td>
+                            <td>One bitmap voice is stretched across display, body, data, and tool labels</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>Theme</td>
+                            <td>Dark navy, blue, gold, team, and text colors are declared within individual UI files</td>
+                            <td>Small changes drift and visual meaning is not enforceable</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>Layout</td>
+                            <td>Startup targets 1280×800; many menu/tool rectangles are absolute</td>
+                            <td>Model framing and text density break before the screen can safely become resizable</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>Input</td>
+                            <td>Menu selection is pointer-driven with Escape navigation; no shared keyboard/controller focus graph</td>
+                            <td>Accessibility and controller play require screen-by-screen rework</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>Buttons</td>
+                            <td>Hover and hold alter card position/height</td>
+                            <td>Feedback is lively but can create subtle layout and pointer jitter</td>
+                            <td><span class="priority p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>Home</td>
+                            <td>Profile, utility, identity, stats, mode, and play are isolated floating cards</td>
+                            <td>The brawler remains central, but the player scan path is weak</td>
+                            <td><span class="priority p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>Brawler select</td>
+                            <td>One podium camera/offset serves five silhouettes; detailed roster cards scroll infinitely</td>
+                            <td>Large shields/stances collide with labels and the roster repeats too much detail</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>HUD</td>
+                            <td>Useful state exists, but multiple unrelated pulses and fixed-duration tutorials compete</td>
+                            <td>Urgency and teaching are harder to distinguish during combat</td>
+                            <td><span class="priority p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>Command center</td>
+                            <td>Six tabs and dense default-font controls fit in a narrow fixed panel</td>
+                            <td>Powerful tuning flow is visually compressed and harder to scan</td>
+                            <td><span class="priority p1">P1</span></td>
+                        </tr>
+                        <tr>
+                            <td>Accessibility</td>
+                            <td>No runtime text-scale, reduced-motion, unified focus, or color-independent team system</td>
+                            <td>Comfort and alternative input needs are not first-class settings</td>
+                            <td><span class="priority p0">P0</span></td>
+                        </tr>
+                        <tr>
+                            <td>World rendering</td>
+                            <td>Models, station materials, dynamic lights, toon/post effects, and authored ability visuals already exist</td>
+                            <td>World polish should focus on calibration and menu integration, not adding every possible effect</td>
+                            <td><span class="priority p2">P2</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">03 / Highest-value fixes</p>
+                    <h2>Start where changes multiply</h2>
+                </div>
+                <p>
+                    These investments reduce the cost of every later screen. They also avoid
+                    coupling the visual pass to gameplay simulation.
+                </p>
+            </div>
+            <div class="grid-3">
+                <article class="panel">
+                    <span class="panel-kicker">P0 / Foundation</span>
+                    <h3>Theme + text</h3>
+                    <p>Own font lifetime, semantic colors, type roles, measurement, shadows, and text fitting in one UI layer.</p>
+                </article>
+                <article class="panel" data-accent="orange">
+                    <span class="panel-kicker">P0 / Composition</span>
+                    <h3>Layout + profiles</h3>
+                    <p>Add reference-canvas scaling, safe zones, anchors, and per-character preview profiles for home and select.</p>
+                </article>
+                <article class="panel" data-accent="violet">
+                    <span class="panel-kicker">P0 / Access</span>
+                    <h3>Focus + navigation</h3>
+                    <p>Unify pointer, keyboard, and controller activation before migrating screens onto new components.</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">04 / Implementation sequence</p>
+                    <h2>Six controlled passes</h2>
+                </div>
+                <p>
+                    Each pass should land with a build, architecture check, focused tests,
+                    and screenshots at the reference and at least one stress viewport.
+                </p>
+            </div>
+            <ol class="phase-list">
+                <li>
+                    <strong>Inventory + baselines</strong>
+                    <span>Capture current home, select, controls, HUD, results, and every command-center tab. Record focus order, click areas, and key UI values before changing presentation.</span>
+                </li>
+                <li>
+                    <strong>Presentation foundation</strong>
+                    <span>Add <code>ui_theme</code>, <code>ui_text</code>, <code>ui_layout</code>, and font assets. Preserve exact existing behavior while routing text and colors through named roles.</span>
+                </li>
+                <li>
+                    <strong>Input + components</strong>
+                    <span>Add focus/navigation state and reusable buttons, panels, keycaps, bars, stat rows, segmented selectors, and text fitting. Include reduced-motion and UI-scale settings.</span>
+                </li>
+                <li>
+                    <strong>Menu migration</strong>
+                    <span>Build the launch deck, roster bay, grouped controls, and result summary. Introduce per-character preview profiles and test every imported/fallback model.</span>
+                </li>
+                <li>
+                    <strong>HUD + tool migration</strong>
+                    <span>Consolidate the objective broadcast, survival and ability docks, action-based tutorials, and match summary. Give command-center controls a wider inspector layout and sticky provenance.</span>
+                </li>
+                <li>
+                    <strong>World integration + QA</strong>
+                    <span>Add a lightweight station/hangar menu context, tune lighting/post effects, verify contrast and color-independent state, exercise controller flow, and compare all baseline screenshots.</span>
+                </li>
+            </ol>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">05 / Definition of done</p>
+                    <h2>Evidence, not vibes</h2>
+                </div>
+                <p>
+                    A detail pass is finished when the system survives real content and input,
+                    not when one ideal screenshot looks polished.
+                </p>
+            </div>
+            <div class="grid-2">
+                <article class="panel" data-accent="green">
+                    <span class="panel-kicker">Visual acceptance</span>
+                    <ul class="compact-list">
+                        <li>All five brawlers and primitive fallbacks fit home/select protected zones.</li>
+                        <li>No menu or HUD copy clips at supported UI scales.</li>
+                        <li>Primary, secondary, utility, destructive, disabled, focus, and pressed states are distinct.</li>
+                        <li>Gameplay remains legible with bloom, outline, and color filters at their supported extremes.</li>
+                        <li>Reduced motion removes non-essential orbit, pulse, sweep, and bob effects.</li>
+                    </ul>
+                </article>
+                <article class="panel">
+                    <span class="panel-kicker">Interaction acceptance</span>
+                    <ul class="compact-list">
+                        <li>Every menu action is reachable by mouse, keyboard, and controller.</li>
+                        <li>Focus returns to the invoking control when a modal closes.</li>
+                        <li>Mode, selected brawler, config source, dirty state, and save destination are never implicit.</li>
+                        <li>Tutorial prompts retire per demonstrated action and can be reset.</li>
+                        <li>No attack shakes any user’s camera.</li>
+                    </ul>
+                </article>
+            </div>
+            <div class="callout warning" style="margin-top:16px">
+                <div>
+                    <strong>Known platform boundary</strong>
+                    <p>
+                        Contrast, scaling, reduced motion, focus, and controller navigation are
+                        achievable inside raylib. Full operating-system screen-reader semantics
+                        would require a deliberate native accessibility bridge and should not be
+                        implied by the UI refactor alone.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <div class="section-heading">
+                <div>
+                    <p class="eyebrow">06 / Files in scope</p>
+                    <h2>Likely implementation map</h2>
+                </div>
+                <p>
+                    Gameplay mechanics stay outside this pass. The visual system belongs in
+                    the player-facing UI layer, with only presentation metadata and asset
+                    ownership crossing into presentation/content where appropriate.
+                </p>
+            </div>
+            <div class="table-scroll">
+                <table class="token-table">
+                    <thead>
+                        <tr><th>Existing area</th><th>Role in the pass</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>src/ui/menu.c</code></td><td>Migrate home, select, controls, result flow composition and per-screen focus</td></tr>
+                        <tr><td><code>src/ui/hud.c</code></td><td>Regroup objective, player state, ability state, tutorials, and result presentation</td></tr>
+                        <tr><td><code>src/devtools/command_center.c</code></td><td>Inspector layout, category navigation, provenance, save/reset hierarchy</td></tr>
+                        <tr><td><code>src/devtools/command_widgets.c</code></td><td>Dense control states and shared font/token adoption</td></tr>
+                        <tr><td><code>src/presentation/assets.[ch]</code></td><td>Own or expose font assets if the UI does not get a dedicated asset lifetime</td></tr>
+                        <tr><td><code>src/presentation/render.c</code></td><td>Menu-world context and visual calibration only; no UI policy</td></tr>
+                        <tr><td><code>src/content/</code></td><td>Optional data-driven preview profiles if presentation metadata becomes authorable content</td></tr>
+                        <tr><td><code>config/gameplay.cfg</code></td><td>Remains gameplay ground truth; presentation preferences need a deliberately separate settings owner</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <div>
+                <strong>Recommendation</strong>
+                <p>
+                    Approve the direction, then implement the presentation foundation as a
+                    bounded first milestone. Do not begin by restyling all existing
+                    <code>DrawText</code> calls in place.
+                </p>
+            </div>
+            <div class="footer-meta">
+                <a href="IMPLEMENTATION_PLAN.md">Open the full implementation plan →</a><br>
+                <a href="index.html">Return to visual system →</a><br>
+                Code-grounded audit / 2026-07-27
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

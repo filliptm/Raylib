@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "output_directory": "build/assets/vfx",
+  "atlases": [
+    {
+      "id": "shapes",
+      "output": "shapes.png",
+      "columns": 4,
+      "rows": 2,
+      "frames": 8,
+      "frame_width": 512,
+      "frame_height": 512,
+      "padding": 8,
+      "pack": "kenney_particle_pack",
+      "sources": [
+        "resources/vfx/sources/kenney_particle_pack/muzzle.png",
+        "resources/vfx/sources/kenney_particle_pack/trace.png",
+        "resources/vfx/sources/kenney_particle_pack/flame.png",
+        "resources/vfx/sources/kenney_particle_pack/smoke.png",
+        "resources/vfx/sources/kenney_particle_pack/spark.png",
+        "resources/vfx/sources/kenney_particle_pack/magic.png",
+        "resources/vfx/sources/kenney_particle_pack/scorch.png",
+        "resources/vfx/sources/kenney_particle_pack/circle.png"
+      ]
+    },
+    {
+      "id": "explosion",
+      "output": "explosion.png",
+      "columns": 8,
+      "rows": 4,
+      "frames": 32,
+      "frame_width": 256,
+      "frame_height": 256,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/explosion.png"
+    },
+    {
+      "id": "water",
+      "output": "water.png",
+      "columns": 8,
+      "rows": 4,
+      "frames": 32,
+      "frame_width": 256,
+      "frame_height": 256,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/water.png"
+    },
+    {
+      "id": "energy_loop",
+      "output": "energy_loop.png",
+      "columns": 8,
+      "rows": 4,
+      "frames": 32,
+      "frame_width": 128,
+      "frame_height": 128,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/energy_loop.png"
+    },
+    {
+      "id": "air_burst",
+      "output": "air_burst.png",
+      "columns": 8,
+      "rows": 4,
+      "frames": 32,
+      "frame_width": 256,
+      "frame_height": 256,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/air_burst.png"
+    },
+    {
+      "id": "divine_impact",
+      "output": "divine_impact.png",
+      "columns": 8,
+      "rows": 2,
+      "frames": 16,
+      "frame_width": 256,
+      "frame_height": 256,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/divine_impact.png"
+    },
+    {
+      "id": "smoke_loop",
+      "output": "smoke_loop.png",
+      "columns": 8,
+      "rows": 8,
+      "frames": 64,
+      "frame_width": 128,
+      "frame_height": 128,
+      "pack": "rpg_vfx_pack",
+      "source": "resources/vfx/sources/rpg_vfx_pack/smoke_loop.png"
+    }
+  ],
+  "licenses": {
+    "kenney_particle_pack": {
+      "license": "CC0-1.0",
+      "source": "https://www.kenney.nl/assets/particle-pack",
+      "notice": "resources/vfx/licenses/kenney_particle_pack.txt"
+    },
+    "rpg_vfx_pack": {
+      "license": "CC0-1.0",
+      "source": "https://opengameart.org/node/146141",
+      "notice": "resources/vfx/licenses/rpg_vfx_pack_readme.txt"
+    }
+  }
+}

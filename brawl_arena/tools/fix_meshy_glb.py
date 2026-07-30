@@ -32,7 +32,7 @@ What this does
     read the statics; where a channel IS missing, a constant channel holding the
     original static value is inserted so the rewrite cannot leak into animation.
   - Merges the separate per-animation GLBs into one file with named clips.
-  - Downscales the absurd 4K texture (99.9% of the file) for small on-screen use.
+  - Standardizes every embedded character texture to the runtime 1024x1024 contract.
 
 Usage:  python3 fix_meshy_glb.py <dir-with-meshy-glbs> <output.glb> [texture-size]
 Both Meshy export styles are handled: one GLB per animation (clip named from its
@@ -41,6 +41,8 @@ lowercased). The file carrying the most clips becomes the base; a T-pose
 Character_output file just contributes its clip.
 """
 import struct, json, math, io, os, re, sys
+
+CHARACTER_TEXTURE_SIZE = 1024
 
 # ---------------------------------------------------------------- glb container
 
@@ -145,7 +147,13 @@ def node_local_mat(node):
 
 # ---------------------------------------------------------------- main
 
-def main(src_dir, out_path, tex_size=512):
+def main(src_dir, out_path, tex_size=CHARACTER_TEXTURE_SIZE):
+    if tex_size != CHARACTER_TEXTURE_SIZE:
+        raise ValueError(
+            'runtime character textures must be exactly %dx%d, got %d'
+            % (CHARACTER_TEXTURE_SIZE, CHARACTER_TEXTURE_SIZE, tex_size)
+        )
+
     glbs = sorted(f for f in os.listdir(src_dir) if f.lower().endswith('.glb'))
 
     # Newer Meshy exports ship one merged-animations GLB alongside the T-pose file.
@@ -346,21 +354,31 @@ def main(src_dir, out_path, tex_size=512):
             print('merged clip %-34s (%d channels, %d filler)' %
                   (merged['name'], len(merged['channels']), filled))
 
-    # ---- 3. texture: 4K is 99.9% of the file, for a character ~70px tall -------
+    # ---- 3. texture: normalize every embedded payload to the 1K contract --------
     try:
         from PIL import Image
-        for img in j.get('images', []):
-            iv = img['bufferView']
-            pic = Image.open(io.BytesIO(bytes(data[iv]))).convert('RGB')
-            if pic.size[0] > tex_size:
-                buf = io.BytesIO()
-                pic.resize((tex_size, tex_size), Image.LANCZOS).save(buf, 'PNG', optimize=True)
-                print('texture %s -> %dx%d (%.1f MB -> %.2f MB)' %
-                      (pic.size, tex_size, tex_size, len(data[iv])/1048576, buf.tell()/1048576))
-                data[iv] = bytearray(buf.getvalue())
-                views[iv] = {'byteLength': len(data[iv])}
-    except ImportError:
-        print('Pillow not available: texture left at source size')
+    except ImportError as exc:
+        raise RuntimeError(
+            'Pillow is required to enforce the 1024x1024 character texture contract'
+        ) from exc
+
+    for img in j.get('images', []):
+        iv = img['bufferView']
+        pic = Image.open(io.BytesIO(bytes(data[iv])))
+        # Keep a real alpha channel (cutouts/decals); flatten everything else to
+        # RGB so an opaque texture never pays for a dead fourth channel.
+        pic = pic.convert('RGBA' if 'A' in pic.getbands() and
+                          pic.convert('RGBA').getextrema()[3][0] < 255 else 'RGB')
+        if pic.size != (tex_size, tex_size):
+            buf = io.BytesIO()
+            pic.resize((tex_size, tex_size), Image.LANCZOS).save(buf, 'PNG', optimize=True)
+            print('texture %s -> %dx%d (%.1f MB -> %.2f MB)' %
+                  (pic.size, tex_size, tex_size, len(data[iv])/1048576, buf.tell()/1048576))
+            data[iv] = bytearray(buf.getvalue())
+            views[iv] = {'byteLength': len(data[iv])}
+        else:
+            print('texture %s already satisfies the %dx%d contract' %
+                  (pic.size, tex_size, tex_size))
 
     # ---- 4. rebuild the buffer and write ---------------------------------------
     blob = bytearray()
@@ -378,6 +396,12 @@ def main(src_dir, out_path, tex_size=512):
           (out_path, size/1048576, [a['name'] for a in j['animations']]))
 
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit('usage: fix_meshy_glb.py <meshy-export-dir> <output.glb> [texture-size]')
-    main(sys.argv[1], sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else 512)
+    requested_size = int(sys.argv[3]) if len(sys.argv) > 3 else CHARACTER_TEXTURE_SIZE
+    if requested_size != CHARACTER_TEXTURE_SIZE:
+        sys.exit(
+            'character texture size is fixed at %d; do not generate 512px runtime assets'
+            % CHARACTER_TEXTURE_SIZE
+        )
+    main(sys.argv[1], sys.argv[2], requested_size)

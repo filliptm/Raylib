@@ -3,6 +3,8 @@
 # Build artifacts
 *.o
 build/
+__pycache__/
+*.pyc
 
 # Compiled binaries
 example_launcher
@@ -11,9 +13,13 @@ hearthstone/build/
 
 # Runtime-generated tuning (per-machine sandbox state)
 brawl_arena/tuning.cfg
+brawl_arena/tuning.local.cfg
+brawl_arena/profile.cfg
+brawl_arena/attacks.local.cfg
 
 # Local logs
 logs/
 
-# Imported character source art (large; the repacked .glb is what the game uses)
+# Imported character source art (large; curated files under resources/ are what the game uses)
 brawl_arena/*.zip
+brawl_arena/*.glb
