@@ -1,6 +1,6 @@
 # Brawl Arena content and tuning
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 This document explains which values are authoritative, how live tuning becomes a tracked
 change, and how authoring records become typed runtime content.
@@ -46,9 +46,9 @@ short target-recreation debounce. Its 1.0×–2.0× range scales the world color
 target from the drawable framebuffer independently of logical UI coordinates. The
 tracked 1.5× default leaves authored screen-space post-effect sizes unchanged and keeps
 the intended sampling ratio on platforms where drawable and logical dimensions differ.
-The iPhone runtime does not rewrite or fork this project value. It applies a platform
-policy that caps the effective scale at 1.0× and disables post-processing while the
-authored 1.5× value remains available to desktop and future mobile profiling.
+The iPhone runtime does not rewrite or fork this project value. It applies the same
+authored 1.0×–2.0× scale and complete post-processing stack as desktop; the tracked
+1.5× value is therefore live on both platforms.
 
 After 0.6 seconds of inactivity:
 

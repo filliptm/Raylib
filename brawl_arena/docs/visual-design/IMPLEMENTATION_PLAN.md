@@ -233,12 +233,25 @@ On 2026-07-30:
 - an iPhone 17 Pro simulator build launched directly into a match, and its capture
   verified the lower-density Move/Attack artwork plus the 25%-smaller Skill/Super
   artwork with exterior progress rings intact;
+- a subsequent iPhone 17 Pro simulator build used the same project-authored 1.5× world
+  scale and complete post-processing path as desktop. Its direct-match capture showed
+  the tracked saturation/grade and vignette over the world without stretching, stale
+  edges, or loss of native-resolution HUD clarity; the runtime log contained no shader,
+  framebuffer, or target-allocation errors;
+- a cold-launch iPhone menu capture reproduced the flat Scrapper material while the
+  launch log confirmed that all embedded character textures had loaded. The shared
+  mobile lighting shader still held GLSL's zero `uvScale` because no arena material had
+  drawn yet. After character draws began restoring unit UV state through the common
+  material-state cache, three settled clean-process Home launches showed the complete
+  authored texture and a direct-match capture preserved textured characters and world
+  materials;
 - source inspection confirmed that Move/Attack opacity no longer branches on active
   touch state and that Skill/Super drawing scales independently from unchanged touch
   geometry;
-- the updated signed arm64 bundle built and installed on the paired physical iPhone
-  12 mini. Automated launch was again denied because the phone was locked, so physical
-  manipulation feel was not exercised.
+- the full-render, cold-menu-material-fix signed arm64 bundle built and installed on the
+  paired physical iPhone 12 mini. Automated launch was again denied because the phone
+  was locked, so the Home texture fix, physical manipulation feel, sustained frame
+  pacing, and thermal behavior were not exercised on hardware.
 
 On 2026-07-29:
 

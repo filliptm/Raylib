@@ -1,6 +1,6 @@
 # Brawl Arena architecture
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 This is the implemented ownership and dependency contract for Brawl Arena. The project is
 a modular C application with fixed-capacity simulation storage. It is not a reusable
@@ -236,8 +236,10 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 Imported runtime character GLBs are used when available on both desktop and iPhone.
 Desktop uploads composed bone matrices to the skinned shader. The pinned iPhone ANGLE
 path instead applies the same animation poses to the model's position and normal buffers
-with raylib CPU skinning, then draws them through the OpenGL ES 3 lighting shader. The
-procedural characters remain asset-failure fallbacks on both platforms.
+with raylib CPU skinning, then draws them through the OpenGL ES 3 lighting shader. That
+mobile draw establishes the imported material's unit UV scale explicitly, so the
+off-screen cold-launch menu preview cannot inherit a zero or tiled world-material
+uniform. The procedural characters remain asset-failure fallbacks on both platforms.
 
 The renderer reads simulation snapshots and presentation events. Ability VFX can name a
 source/target brawler and semantic rig socket; the final composed character pose supplies
@@ -296,10 +298,11 @@ resolution before direct world rendering. The backbuffer requests 4× MSAA for d
 post-disabled, resize, and failure-fallback frames. UI preference state is
 profile-scoped; presentation framing and render scale are project-scoped content and
 participate in transactional validation/promotion.
-The iPhone runtime keeps authored project values intact, caps the effective render scale
-at 1.0×, disables the post pass, and applies the camera distance policy described above.
-World shaders compile as OpenGL ES 3 variants, while the safe-area HUD remains
-native-resolution.
+The iPhone runtime applies the same authored 1.0×–2.0× render scale and complete post
+pass as desktop, then applies the camera distance policy described above. World and post
+shaders compile as OpenGL ES 3 variants through ANGLE/Metal, while the safe-area HUD
+remains native-resolution. Failed scaled target allocation follows the shared
+native-scale retry and direct-render fallback.
 
 `platform.c` is the only app-owned platform policy module. The iPhone bridge changes the
 working directory to the bundled `BrawlAssets` resource root before content load,

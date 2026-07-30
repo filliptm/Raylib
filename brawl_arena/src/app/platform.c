@@ -54,12 +54,3 @@ AppSafeInsets AppPlatformSafeInsets(void)
     return (AppSafeInsets){ 0 };
 #endif
 }
-
-bool AppPlatformIsMobile(void)
-{
-#if defined(BRAWL_MOBILE)
-    return true;
-#else
-    return false;
-#endif
-}

@@ -166,7 +166,10 @@ subset; later libraries listed for a character replace earlier clips with the sa
 canonical name.
 
 `AssetsLoad()` measures the GPU-equivalent idle pose and normalizes every character to
-`CHARACTER_TARGET_H` (currently 3.1 world units).
+`CHARACTER_TARGET_H` (currently 3.1 world units). The iPhone CPU-skinned draw path
+explicitly restores unit texture coordinates for each imported character instead of
+inheriting the shared lighting shader's previous world-material state. This keeps a
+cold-launch menu preview textured even before the arena has drawn.
 
 ## Standard animation set
 
@@ -299,8 +302,9 @@ against the loaded model again before accepting the character.
    The log line to look for is `CHARACTER <KIT>: <verts> verts, <bones> bones, <clips>
    clips, posed height <H>, scale <s>` — posed height should be a sane skeleton-space
    number (tens to hundreds), not thousands.
-7. Look at the menu podium. The model must stand on the disc, facing the camera,
-   idle-animating. If it's a spike-ball or invisible, re-read this document.
+7. Look at the menu podium on a cold launch and again after returning from a match. The
+   model must stand on the disc, facing the camera, fully textured, and idle-animating.
+   If it is a flat gray/tan silhouette, spike-ball, or invisible, re-read this document.
 
 Hard limits: ≤128 bones (`MAX_BONE_NUM` in the skinned shader), one skin per file,
 LINEAR/STEP keyframes, embedded PNG textures at exactly 1024×1024, ≤65,535 vertices

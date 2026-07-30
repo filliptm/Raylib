@@ -1,6 +1,6 @@
 # Brawl Arena development guide
 
-Last code-verified: 2026-07-29
+Last code-verified: 2026-07-30
 
 ## Build targets
 
@@ -220,13 +220,16 @@ matrix. At minimum, after changes to runtime/presentation:
   launch (`BRAWL_IOS_SMOKE_MATCH=1`) at a notched safe area. Confirm the desktop-only
   Studio, Quit, and command center controls are absent, the backdrop fills the display,
   home/roster/overlays/results occupy the safe landscape width, imported CPU-skinned
-  characters are stable, the closer match framing is readable, and every touch control
-  stays clear of the objective and pause.
+  characters are stable and fully textured on a cold Home launch and after a match, the
+  closer match framing is readable, the full authored post stack and render scale match
+  desktop without affecting the native-resolution HUD, and every touch control stays
+  clear of the objective and pause.
 - On a physical iPhone, install and launch the signed bundle, then exercise simultaneous
   full-speed-or-stopped move/aim, preview-free tap auto-aim, directed attack release,
   exterior Super/Skill progress rings and ready lighting, Super release, each kit's
   Skill interaction, pause/background/resume, rotation lock, and sustained-play
-  responsiveness.
+  responsiveness, frame pacing, and thermal behavior with the tracked 1.5× world scale
+  and full post-processing pass.
 
 Report when the graphical checklist was not run; passing headless tests does not compile
 GPU shaders or validate visual alignment.

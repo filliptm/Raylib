@@ -191,8 +191,7 @@ static void BankResult(App *w)
 
 static float RuntimeRenderScale(void)
 {
-    return AppPlatformIsMobile() ? fminf(world.tune.renderScale, 1.0f)
-                                 : world.tune.renderScale;
+    return world.tune.renderScale;
 }
 
 static void AppReady(void)
@@ -417,8 +416,7 @@ static void AppFrame(bool viewSizeChanged)
         //--- Present -------------------------------------------------------------
         if (world.flow.screen == SCREEN_MATCH || world.flow.screen == SCREEN_STUDIO)
         {
-            bool usePost = !AppPlatformIsMobile() &&
-                           world.tune.postFx && assets.postOk &&
+            bool usePost = world.tune.postFx && assets.postOk &&
                            assets.sceneTarget.texture.id > 0 &&
                            assets.sceneOutputWidth == GetRenderWidth() &&
                            assets.sceneOutputHeight == GetRenderHeight() &&

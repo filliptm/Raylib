@@ -155,11 +155,15 @@ screens:
 - Navigation, activation, brawler selection, deploy, ultimate-ready, victory, and defeat
   cues play at the configured level; mute and missing-device startup remain silent.
 - Helios-9 and Training Court render with and without post effects.
-- On iPhone, confirm the OpenGL ES 3 shader variants compile, post effects stay disabled,
-  the effective world scale remains 1.0×, and the HUD remains native-resolution.
+- On iPhone, confirm the OpenGL ES 3 shader variants compile, the complete authored post
+  stack matches desktop, the world target uses each authored 1.0×, 1.5×, and 2.0× scale
+  without stretching, stale edges, or screen-space effect drift, and the HUD remains
+  native-resolution.
 - On iPhone, Scrapper, Longshot, Tank, and Guardian use their imported rigged GLBs with
-  stable CPU-skinned animation in both the launch deck and world; missing assets still
-  fall back to primitives. Desktop GPU-skinned behavior must remain unchanged.
+  stable CPU-skinned animation and complete authored textures in both the launch deck
+  and world. Repeat a cold app launch, roster changes, and a match-to-Home return; no
+  preview may collapse to a flat gray/tan material. Missing assets still fall back to
+  primitives. Desktop GPU-skinned behavior must remain unchanged.
 - Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
   shallow-angle side textures remain stable without flashing, crawling, or coplanar
   flicker at the default 1.5× render scale. Inspect the complete floor-to-cap vertical

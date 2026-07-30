@@ -1068,11 +1068,15 @@ The presentation layer owns:
   rather than logical UI coordinates before the native-resolution HUD. This preserves
   the intended world sampling ratio when those dimensions differ on a HiDPI platform.
 - The iOS target compiles the same shader programs as OpenGL ES 3 sources through
-  ANGLE/Metal. Its runtime caps world scale at 1.0×, disables the desktop post pass, and
-  retains the MSAA direct path. Its match camera uses the presentation-only closer
-  distance above. Imported character animations use raylib CPU skinning before the
-  ordinary ES 3 lighting pass because the pinned fork's GPU-bone path produces invalid
-  vertex positions on ANGLE. Desktop retains GPU skinning.
+  ANGLE/Metal and applies the same authored 1.0×–2.0× world render scale and complete
+  post-processing pass as desktop. Its HUD remains native-resolution, its direct and
+  allocation-fallback path retains MSAA, and its match camera uses the
+  presentation-only closer distance above. Imported character animations use raylib
+  CPU skinning before the ordinary ES 3 lighting pass because the pinned fork's
+  GPU-bone path produces invalid vertex positions on ANGLE. Every mobile character
+  draw also restores the imported material's unit UV scale explicitly, so a cold menu
+  preview never depends on a preceding world-material draw to sample its texture.
+  Desktop retains GPU skinning.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
@@ -1116,7 +1120,8 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
   validation remains a manual release matrix.
 - iOS depends on a pinned third-party raylib fork rather than an official raylib 5.5
   mobile release. Device/simulator builds must be revalidated when its revision changes,
-  including sustained-play performance of the iOS CPU-skinned imported characters.
+  including sustained-play performance and thermal behavior with CPU-skinned imported
+  characters, the tracked 1.5× world scale, and the full post-processing pass.
 
 ## Local documentation
 

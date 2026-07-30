@@ -83,14 +83,18 @@ read-only resource root. Personal state is written under the app's Application S
 directory as `tuning.local.cfg`, `profile.cfg`, and the legacy-import path `tuning.cfg`.
 Backgrounding resets captured touches and flushes dirty configuration.
 
-iOS uses OpenGL ES 3 shader sources through ANGLE/Metal, caps world rendering at native
-logical scale, disables the desktop post-processing pass, and retains 4× MSAA. Imported
-rigged GLBs are animated with raylib CPU skinning on iOS and drawn through the ordinary
-OpenGL ES 3 lighting shader; this avoids invalid vertex positions from the pinned ANGLE
-GPU-bone path while preserving the packaged models and animations. Desktop retains GPU
-skinning. The command center and VFX Studio are desktop authoring tools and are not
-exposed in the mobile shell. Home, roster, Controls, Settings, downed, and result screens
-use a dedicated safe-width landscape composition. The match camera preserves the
+iOS uses OpenGL ES 3 shader sources through ANGLE/Metal and applies the same complete
+post-processing stack and project-authored 1.0×–2.0× world render scale as desktop. The
+HUD remains native-resolution. A failed scaled scene-target allocation retries at native
+scale before direct rendering, whose backbuffer retains 4× MSAA. Imported rigged GLBs
+are animated with raylib CPU skinning on iOS and drawn through the ordinary OpenGL ES 3
+lighting shader; this avoids invalid vertex positions from the pinned ANGLE GPU-bone
+path while preserving the packaged models and animations. Each mobile character draw
+restores the imported material's unit UV state, including the first cold-launch Home
+preview before any world geometry has rendered. Desktop retains GPU skinning. The
+command center and VFX Studio are desktop authoring tools and are not exposed in the
+mobile shell. Home, roster, Controls, Settings, downed, and result screens use a
+dedicated safe-width landscape composition. The match camera preserves the
 project-authored distance but renders at 80% of it, with a 20-unit floor, for closer
 phone framing.
 
@@ -104,9 +108,12 @@ Compilation does not validate touch feel or GPU output. Before distribution:
 
 1. Build and launch the menu in an iPhone simulator.
 2. Launch a match and inspect the arena and all touch controls in both landscape
-   orientations.
+   orientations. Confirm that the authored render scale and the complete color grade,
+   bloom, outline, stylization, vignette, grain, and fringe settings match desktop while
+   the HUD remains native-resolution.
 3. On a physical iPhone, verify simultaneous movement/aim, attack release, Super,
-   every secondary behavior, pause/background/resume, and profile persistence.
+   every secondary behavior, pause/background/resume, profile persistence, sustained
+   frame pacing, and thermal behavior with the full rendering stack.
 4. Run the desktop architecture, UI, config, test, and sanitizer targets.
 
 The current raylib iOS dependency is a pinned third-party fork rather than an official

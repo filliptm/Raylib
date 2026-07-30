@@ -14,6 +14,5 @@ typedef struct AppSafeInsets {
 // Desktop keeps the caller's working directory and existing environment overrides.
 bool AppPlatformPreparePaths(void);
 AppSafeInsets AppPlatformSafeInsets(void);
-bool AppPlatformIsMobile(void);
 
 #endif

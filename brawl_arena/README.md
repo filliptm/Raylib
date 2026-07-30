@@ -443,14 +443,16 @@ the drawable framebuffer rather than logical UI coordinates, preserving that rat
 the two differ on a HiDPI platform. The shader receives separate source- and
 output-resolution uniforms, so resize and scale changes preserve both scene sampling
 and authored screen-space effect sizes.
-The iPhone build uses the same authored gameplay and shaders through OpenGL ES 3, but
-caps world rendering at native resolution and disables the post-processing pass to keep
-touch response and thermal cost predictable. Imported character animation is CPU-skinned
-on iPhone before the normal lighting pass; desktop retains GPU skinning. The HUD remains
-at native resolution, and the launch backdrop fills the display behind the safe-area
-edges while controls remain inset. The iPhone match camera renders at 80% of the authored
-distance, clamped to a 20-unit minimum, so combat subjects are about 25% larger without
-forking the project tuning.
+The iPhone build uses the same authored gameplay and shaders through OpenGL ES 3,
+including the complete post-processing stack and the project-authored 1.0×–2.0× world
+render scale. Imported character animation is CPU-skinned on iPhone before the normal
+lighting pass, with its authored unit UV/material state restored for every menu and
+world draw; desktop retains GPU skinning. The HUD remains at native resolution, and the
+launch backdrop fills the display behind the safe-area edges while controls remain
+inset. If the scaled scene target cannot be allocated, iPhone follows the same
+native-scale retry and direct-render fallback as desktop. The iPhone match camera
+renders at 80% of the authored distance, clamped to a 20-unit minimum, so combat
+subjects are about 25% larger without forking the project tuning.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. The tracked project value is 31.999340. The compiled 38.013156 recovery value is
 the length of the original `{0, 31, -22}` follow offset, and changing the authored value
@@ -689,8 +691,9 @@ sandbox it started as, with the static training bots.
 - The iPhone target depends on a pinned community raylib-iOS fork plus a tracked
   compatibility patch. Its ANGLE GPU-bone path is not used; iPhone applies the imported
   rigs on the CPU and draws their updated meshes through the ordinary lighting shader.
-  Sustained-play performance and thermal behavior still require physical-device release
-  validation.
+  Sustained-play performance and thermal behavior with CPU-skinned characters, the
+  tracked 1.5× world scale, and the full post-processing pass still require
+  physical-device release validation.
 - The pinned iOS shell still uses the AppDelegate lifecycle and produces a UIKit warning
   that UIScene lifecycle adoption will be required by a future iOS release.
 - Headless tests cover version-3 configuration plus v1/v2 migration, Guardian behavior,

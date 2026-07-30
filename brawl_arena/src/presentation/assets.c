@@ -1325,26 +1325,30 @@ bool AssetsResizeViewport(Assets *a, int outputW, int outputH, float renderScale
 }
 
 //------------------------------------------------------------------------------------
+static void SetLitMaterialState(Assets *a, Vector2 uvScale, float emissive)
+{
+    if (!a->lightingOk) return;
+
+    // Hundreds of lit draws per frame pass the identical {1,1}/0 values;
+    // uploading them every call was pure uniform churn.
+    if (!a->litStateValid ||
+        uvScale.x != a->litUvScale.x || uvScale.y != a->litUvScale.y)
+    {
+        SetShaderValue(a->lighting, a->locUvScale, &uvScale, SHADER_UNIFORM_VEC2);
+        a->litUvScale = uvScale;
+    }
+    if (!a->litStateValid || emissive != a->litEmissive)
+    {
+        SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
+        a->litEmissive = emissive;
+    }
+    a->litStateValid = true;
+}
+
 void DrawLit(Assets *a, Mesh mesh, Matrix transform, Texture2D tex, Color tint,
              Vector2 uvScale, float emissive)
 {
-    if (a->lightingOk)
-    {
-        // Hundreds of lit draws per frame pass the identical {1,1}/0 values;
-        // uploading them every call was pure uniform churn.
-        if (!a->litStateValid ||
-            uvScale.x != a->litUvScale.x || uvScale.y != a->litUvScale.y)
-        {
-            SetShaderValue(a->lighting, a->locUvScale, &uvScale, SHADER_UNIFORM_VEC2);
-            a->litUvScale = uvScale;
-        }
-        if (!a->litStateValid || emissive != a->litEmissive)
-        {
-            SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
-            a->litEmissive = emissive;
-        }
-        a->litStateValid = true;
-    }
+    SetLitMaterialState(a, uvScale, emissive);
 
     a->mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
     a->mat.maps[MATERIAL_MAP_DIFFUSE].color = tint;
@@ -1824,8 +1828,12 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
 #if defined(BRAWL_MOBILE)
     if (a->lightingOk)
     {
+        // Menu previews can be the first lit mesh drawn after launch. GLSL uniforms
+        // default to zero, so relying on a previous arena DrawLit() call left
+        // uvScale at {0,0} and collapsed the whole character material to one flat
+        // gray/tan texel. Imported characters always use their authored unit UVs.
+        SetLitMaterialState(a, (Vector2){ 1.0f, 1.0f }, emissive);
         SetShaderValue(a->lighting, a->locDither, &dither, SHADER_UNIFORM_FLOAT);
-        SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
     }
 #endif
 
