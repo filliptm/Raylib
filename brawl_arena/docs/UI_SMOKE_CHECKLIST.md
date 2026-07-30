@@ -63,14 +63,18 @@ At every size verify:
   tutorials; no duplicate bottom-left vitals panel.
 - World bars: health values are centered inside every health bar, Scrapper charge or
   broken lockout is centered inside its shield bar, and the player's ammo remains below
-  the body-anchored health bar as a paper-keylined gold/empty-cell rail that stays
-  distinct over both floors.
+  the body-anchored health bar at the same height as that health bar, as a paper-keylined
+  gold/empty-cell rail that stays distinct over both floors.
 - Team readability: the player and allied bots remain green at every health level,
   enemies remain red at every health level, and ally/enemy shape cues remain visible.
 - Combat-text relevance: damage dealt to or received by the player, healing given or
   received by the player, self-healing, and player-involved shield absorption remain
   visible. Damage, healing, regeneration, and shield exchanges involving bots alone do
-  not produce numbers; gem and class-change labels remain available.
+  not produce numbers; gem and class-change labels remain available. Incoming damage
+  and shield loss occupy the player's left lane, healing occupies the recipient's right
+  lane, and outgoing damage remains over its target. Trigger rapid and simultaneous
+  values to confirm that each lane stacks upward no more than three deep, retains every
+  displayed value without aggregation, and stays inside the viewport.
 - Result: Continue returns home, Rematch rebuilds the same selection/mode, Change Brawler
   opens the roster, banking occurs once, and timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay

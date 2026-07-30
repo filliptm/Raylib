@@ -172,6 +172,10 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
   targets. Their charge/cooldown grows as an exterior status ring; the muted face and
   completed halo light only when ready.
 - Body bars use the shared ink-framed progress primitive.
+- The player's health and ammo rails share one height. Typed combat values use
+  target-aware ticker lanes: incoming damage and shield loss left, healing right, and
+  outgoing damage over its target. Each lane keeps the newest value nearest the actor
+  and moves older values upward, capped at three visible entries without aggregation.
 - KO/readiness/break/downed/team-lock reactions are brief comic stamps; Gem Grab lock
   also escalates the objective container.
 - Tutorials use ink/paper/yellow rails without obscuring play.
@@ -230,6 +234,11 @@ On 2026-07-30:
 
 - the optimized desktop build, architecture policy, UI policy, canonical configuration,
   full normal suite, and maintained Darwin UBSan suite passed;
+- a full-screen desktop `BRAWL_MOBILE` direct-match capture verified matching
+  11-reference-unit player health and ammo rails. A temporary debugger-injected burst
+  through the real combat-event API showed incoming damage, healing, and outgoing
+  damage in separate outlined lanes, with three same-lane values remaining legible
+  instead of drawing over one another;
 - an iPhone 17 Pro simulator build launched directly into a match, and its capture
   verified the lower-density Move/Attack artwork plus the 25%-smaller Skill/Super
   artwork with exterior progress rings intact;

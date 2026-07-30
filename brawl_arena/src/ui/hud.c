@@ -194,7 +194,7 @@ void HudDrawBars(App *w)
 
         bool mine = b->isPlayer;
         float width = UiScale(mine ? 76.0f : 62.0f);
-        float height = UiScale(mine ? 12.0f : 10.5f);
+        float height = UiScale(mine ? 11.0f : 10.5f);
         Rectangle bar = { screen.x - width*0.5f, screen.y, width, height };
         float health = b->maxHealth > 0 ? (float)b->health/b->maxHealth : 0.0f;
         const AbilityDefinition *shield =
@@ -268,6 +268,68 @@ void HudDrawBars(App *w)
                              (Vector2){ screen.x, bar.y + bar.height +
                                         UiScale(mine ? 18 : 8) }, t->paper);
         }
+    }
+}
+
+void HudDrawCombatText(App *w)
+{
+    for (int i = 0; i < MAX_FLOATTEXTS; i++)
+    {
+        FloatText *f = &w->presentation.texts[i];
+        if (!f->active) continue;
+
+        Vector3 world = f->world;
+        world.y += 1.6f + f->rise;
+
+        Vector2 screen = GetWorldToScreen(world, w->presentation.camera);
+        if (screen.x < -100 || screen.x > GetScreenWidth() + 100) continue;
+        if (screen.y < -100 || screen.y > GetScreenHeight() + 100) continue;
+
+        float baseSize = 26.0f;
+        if (f->style == FLOAT_TEXT_INCOMING_DAMAGE) baseSize = 30.0f;
+        else if (f->style == FLOAT_TEXT_HEALING) baseSize = 28.0f;
+        else if (f->style == FLOAT_TEXT_SHIELD) baseSize = 25.0f;
+        else if (f->style == FLOAT_TEXT_KNOCKOUT) baseSize = 32.0f;
+
+        float viewportScale =
+            Clamp(GetScreenHeight()/800.0f, 0.82f, 1.0f);
+        float preferenceScale =
+            Clamp(w->uiPreferences.scale, 0.75f, 1.50f);
+        float displayScale = viewportScale*preferenceScale;
+        float fontSize = baseSize*displayScale*f->scale;
+        if (fontSize < 1.0f) continue;
+
+        float laneOffset = 0.0f;
+        if (f->lane == FLOAT_TEXT_LANE_INCOMING)
+            laneOffset = -40.0f*displayScale;
+        else if (f->lane == FLOAT_TEXT_LANE_HEALING)
+            laneOffset = 40.0f*displayScale;
+        screen.x += laneOffset;
+        screen.y -= f->stackOffset*30.0f*displayScale;
+
+        Color color = f->color;
+        float fade = f->life/f->maxLife;
+        color.a =
+            (unsigned char)(255*(fade > 0.5f ? 1.0f : fade*2.0f));
+
+        UiTextRole textRole = f->style == FLOAT_TEXT_GENERIC
+                            ? UI_TEXT_DATA : UI_TEXT_HEADING;
+        Vector2 measure =
+            UiMeasureTextAtSize(textRole, f->text, fontSize);
+        float margin = 4.0f*displayScale;
+        screen.x = Clamp(screen.x, margin + measure.x*0.5f,
+                         GetScreenWidth() - margin - measure.x*0.5f);
+        screen.y = Clamp(screen.y, margin + measure.y*0.5f,
+                         GetScreenHeight() - margin - measure.y*0.5f);
+
+        Vector2 textPosition = {
+            screen.x - measure.x*0.5f,
+            screen.y - measure.y*0.5f
+        };
+        Color outline = { 7, 16, 25, color.a };
+        UiDrawTextOutlineAtSize(
+            textRole, f->text, textPosition, fontSize, color, outline,
+            fmaxf(2.0f, 2.0f*displayScale));
     }
 }
 

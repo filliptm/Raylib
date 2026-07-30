@@ -237,6 +237,14 @@ typedef enum {
     GAME_EVENT_ATTACK_MARK_TICK
 } GameEventType;
 
+typedef enum {
+    COMBAT_TEXT_NONE = 0,
+    COMBAT_TEXT_DAMAGE,
+    COMBAT_TEXT_HEALING,
+    COMBAT_TEXT_SHIELD,
+    COMBAT_TEXT_KNOCKOUT
+} CombatTextKind;
+
 typedef struct GameEvent {
     GameEventType type;
     Vector3 position;
@@ -253,6 +261,7 @@ typedef struct GameEvent {
     VfxSocket startSocket;
     VfxSocket endSocket;
     CharacterActionId characterAction;
+    CombatTextKind combatTextKind;
     int sourceBrawler;
     int targetBrawler;
     int abilityIndex;       // -1 unless the event is bound to an ability document

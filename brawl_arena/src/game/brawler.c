@@ -116,7 +116,8 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         char shieldText[16];
         snprintf(shieldText, sizeof(shieldText), "SH -%d",
                  result.shieldAbsorbed);
-        GameEmitCombatText(w.session, attacker, idx, hitPos, shieldText,
+        GameEmitCombatText(w.session, attacker, idx, COMBAT_TEXT_SHIELD,
+                           hitPos, shieldText,
                            (Color){ 112, 232, 255, 255 });
         GameEmitImpact(w.session, hitPos, (Color){ 104, 226, 255, 255 }, 10);
         GameEmitVfxAttached(
@@ -167,7 +168,7 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         char buf[16];
         snprintf(buf, sizeof(buf), "%d", result.healthRemoved);
         GameEmitCombatText(
-            w.session, attacker, idx, hitPos, buf,
+            w.session, attacker, idx, COMBAT_TEXT_DAMAGE, hitPos, buf,
             (attacker == w.session->playerIdx)
                 ? (Color){ 255, 235, 140, 255 }
                 : (Color){ 255, 150, 150, 255 });
@@ -193,7 +194,8 @@ BrawlerDamageResult BrawlerApplyDamageDetailed(
         if (attacker == w.session->playerIdx && !b->isPlayer)
         {
             w.session->kills++;
-            GameEmitCombatText(w.session, attacker, idx, b->position, "KO!",
+            GameEmitCombatText(w.session, attacker, idx, COMBAT_TEXT_KNOCKOUT,
+                               b->position, "KO!",
                                (Color){ 255, 210, 80, 255 });
             // A takedown tops up the killer's super, the way a finished fight should feel.
             BrawlerAwardSuper(w, attacker, 0.20f);
@@ -224,7 +226,8 @@ int BrawlerApplyHealing(GameContext w, int idx, int amount, int healer, Vector3 
 
     char buf[16];
     snprintf(buf, sizeof(buf), "+%d", restored);
-    GameEmitCombatText(w.session, healer, idx, hitPos, buf,
+    GameEmitCombatText(w.session, healer, idx, COMBAT_TEXT_HEALING,
+                       hitPos, buf,
                        (Color){ 112, 255, 174, 255 });
     GameEmitImpact(w.session, hitPos, (Color){ 70, 244, 166, 255 }, 7);
     GameEmitLight(w.session, (Vector3){ hitPos.x, hitPos.y + 0.7f, hitPos.z },

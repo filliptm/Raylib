@@ -943,7 +943,12 @@ when the local player index is their source or target. The player therefore sees
 dealt and received, healing given and received, self-healing, and shield absorption
 involving their attacks or body. Bot-only combat values are suppressed before they can
 consume float-text presentation slots. Generic non-combat labels, including class-change
-and gem feedback, use a separate unfiltered event path.
+and gem feedback, use a separate unfiltered event path. Combat events retain an explicit
+damage, healing, shield, or knockout meaning plus their source and target. Presentation
+uses that metadata for separate screen-space ticker lanes: incoming damage and shield
+loss sit left of the local player, healing sits right of its recipient, and outgoing
+damage stays over its target. New entries push older values upward, with no more than
+three values in one target lane; values are not aggregated.
 
 Tank's tracked main projectiles restore about 49.9% of enemy health actually removed, so
 overkill, blocked damage, crates, Charge, and overheal do not create extra sustain.
@@ -1042,8 +1047,9 @@ The presentation layer owns:
 - Body-anchored health bars with their point values centered inside: the player team
   stays green and opponents stay red at every health level, reinforced by distinct
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
-  bar. The player ammo rail uses a paper keyline, gold loaded cells, and dark empty
-  cells over the floor; the redundant bottom-left vitals panel is not drawn.
+  bar. The player's health and ammo rails share the same 11-reference-unit height. The
+  ammo rail uses a paper keyline, gold loaded cells, and dark empty cells over the floor;
+  the redundant bottom-left vitals panel is not drawn.
 - External station-map rendering aligned with runtime collision. Wall collision keeps
   its full-tile footprint. Imported straight-wall variants discard their unused
   longitudinal end-cap triangles after loading, so perpendicular textured faces meet

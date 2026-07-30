@@ -76,7 +76,8 @@ void GameEmitFloatText(GameSession *session, Vector3 position, const char *text,
 }
 
 void GameEmitCombatText(GameSession *session, int sourceBrawler, int targetBrawler,
-                        Vector3 position, const char *text, Color color)
+                        CombatTextKind kind, Vector3 position,
+                        const char *text, Color color)
 {
     int player = session->playerIdx;
     if (player < 0 || player >= session->brawlerCount) return;
@@ -86,6 +87,7 @@ void GameEmitCombatText(GameSession *session, int sourceBrawler, int targetBrawl
     if (!event) return;
     event->position = position;
     event->color = color;
+    event->combatTextKind = kind;
     event->sourceBrawler = sourceBrawler;
     event->targetBrawler = targetBrawler;
     snprintf(event->text, sizeof(event->text), "%s", text ? text : "");

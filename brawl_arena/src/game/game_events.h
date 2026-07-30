@@ -11,7 +11,8 @@ void GameEmitDeath(GameSession *session, Vector3 position, Color color);
 void GameEmitCrateBreak(GameSession *session, Vector3 position);
 void GameEmitFloatText(GameSession *session, Vector3 position, const char *text, Color color);
 void GameEmitCombatText(GameSession *session, int sourceBrawler, int targetBrawler,
-                        Vector3 position, const char *text, Color color);
+                        CombatTextKind kind, Vector3 position,
+                        const char *text, Color color);
 void GameEmitLight(GameSession *session, Vector3 position, Color color, float radius, float life);
 void GameEmitShockwave(GameSession *session, Vector3 position, float radius, float life, Color color);
 void GameEmitParticle(GameSession *session, Vector3 position, Vector3 velocity, Color color,

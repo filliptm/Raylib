@@ -148,19 +148,89 @@ void FxCrateBreak(App *w, Vector3 pos)
     FxSpawnLight(w, pos, (Color){ 255, 210, 150, 255 }, 2.0f, 0.25f);
 }
 
-void FxFloatText(App *w, Vector3 pos, const char *text, Color color)
+static FloatTextStyle FloatTextStyleForEvent(const App *w,
+                                             const GameEvent *event)
 {
+    switch (event->combatTextKind)
+    {
+        case COMBAT_TEXT_DAMAGE:
+            return event->targetBrawler == w->session.playerIdx
+                 ? FLOAT_TEXT_INCOMING_DAMAGE
+                 : FLOAT_TEXT_OUTGOING_DAMAGE;
+        case COMBAT_TEXT_HEALING:
+            return FLOAT_TEXT_HEALING;
+        case COMBAT_TEXT_SHIELD:
+            return FLOAT_TEXT_SHIELD;
+        case COMBAT_TEXT_KNOCKOUT:
+            return FLOAT_TEXT_KNOCKOUT;
+        case COMBAT_TEXT_NONE:
+        default:
+            return FLOAT_TEXT_GENERIC;
+    }
+}
+
+static FloatTextLane FloatTextLaneForEvent(const App *w,
+                                           const GameEvent *event,
+                                           FloatTextStyle style)
+{
+    if (style == FLOAT_TEXT_HEALING) return FLOAT_TEXT_LANE_HEALING;
+    if (style == FLOAT_TEXT_INCOMING_DAMAGE)
+        return FLOAT_TEXT_LANE_INCOMING;
+    if (style == FLOAT_TEXT_OUTGOING_DAMAGE ||
+        style == FLOAT_TEXT_KNOCKOUT)
+        return FLOAT_TEXT_LANE_OUTGOING;
+    if (style == FLOAT_TEXT_SHIELD)
+        return event->targetBrawler == w->session.playerIdx
+             ? FLOAT_TEXT_LANE_INCOMING
+             : FLOAT_TEXT_LANE_OUTGOING;
+    return FLOAT_TEXT_LANE_NEUTRAL;
+}
+
+static bool FloatTextsShareStack(const FloatText *active,
+                                 FloatTextLane lane, int targetBrawler)
+{
+    return active->active &&
+           lane != FLOAT_TEXT_LANE_NEUTRAL &&
+           active->lane == lane &&
+           active->targetBrawler == targetBrawler;
+}
+
+void FxFloatText(App *w, const GameEvent *event)
+{
+    FloatTextStyle style = FloatTextStyleForEvent(w, event);
+    FloatTextLane lane = FloatTextLaneForEvent(w, event, style);
+
+    // New combat feedback owns the position closest to the target. Older entries
+    // climb one screen-space slot, keeping rapid pulses readable without changing
+    // or aggregating their values.
+    for (int i = 0; i < MAX_FLOATTEXTS; i++)
+    {
+        FloatText *active = &w->presentation.texts[i];
+        if (!FloatTextsShareStack(active, lane, event->targetBrawler)) continue;
+        active->stackDepth++;
+        if (active->stackDepth >= 3) active->active = false;
+    }
+
     for (int i = 0; i < MAX_FLOATTEXTS; i++)
     {
         FloatText *f = &w->presentation.texts[i];
         if (f->active) continue;
 
-        f->world = pos;
-        snprintf(f->text, sizeof(f->text), "%s", text);
-        f->color = color;
-        f->life = f->maxLife = 0.85f;
+        f->world = event->position;
+        if (style == FLOAT_TEXT_INCOMING_DAMAGE && event->text[0] != '-')
+            snprintf(f->text, sizeof(f->text), "-%s", event->text);
+        else
+            snprintf(f->text, sizeof(f->text), "%s", event->text);
+        f->color = event->color;
+        f->life = f->maxLife =
+            style == FLOAT_TEXT_GENERIC ? 0.85f : 1.0f;
         f->rise = 0.0f;
-        f->scale = 0.0f;
+        f->scale = w->uiPreferences.reducedMotion ? 1.0f : 0.0f;
+        f->stackOffset = 0.0f;
+        f->stackDepth = 0;
+        f->targetBrawler = event->targetBrawler;
+        f->style = style;
+        f->lane = lane;
         f->active = true;
         return;
     }
@@ -228,7 +298,7 @@ void FxConsumeGameEvents(App *w)
                 FxCrateBreak(w, event->position);
                 break;
             case GAME_EVENT_FLOAT_TEXT:
-                FxFloatText(w, event->position, event->text, event->color);
+                FxFloatText(w, event);
                 break;
             case GAME_EVENT_LIGHT:
                 FxSpawnLight(w, event->position, event->color, event->radius, event->life);
@@ -346,10 +416,21 @@ void FxUpdate(App *w, float dt)
         f->life -= dt;
         if (f->life <= 0.0f) { f->active = false; continue; }
 
-        f->rise += dt * 2.6f;
+        f->rise += dt * (f->style == FLOAT_TEXT_GENERIC ? 2.6f : 1.9f);
+
+        float stackTarget = (float)f->stackDepth;
+        if (w->uiPreferences.reducedMotion)
+            f->stackOffset = stackTarget;
+        else
+            f->stackOffset +=
+                (stackTarget - f->stackOffset)*fminf(1.0f, dt*18.0f);
 
         float age = 1.0f - (f->life / f->maxLife);
-        f->scale = (age < 0.25f) ? EaseOutBack(age / 0.25f) : 1.0f;
+        if (w->uiPreferences.reducedMotion)
+            f->scale = 1.0f;
+        else
+            f->scale =
+                (age < 0.20f) ? EaseOutBack(age / 0.20f) : 1.0f;
     }
 
     for (int i = 0; i < MAX_FX_LIGHTS; i++)
@@ -377,32 +458,5 @@ void FxUpdate(App *w, float dt)
     {
         w->presentation.shake -= dt * 6.0f;
         if (w->presentation.shake < 0.0f) w->presentation.shake = 0.0f;
-    }
-}
-
-void FxDrawScreen(App *w)
-{
-    for (int i = 0; i < MAX_FLOATTEXTS; i++)
-    {
-        FloatText *f = &w->presentation.texts[i];
-        if (!f->active) continue;
-
-        Vector3 world = f->world;
-        world.y += 1.6f + f->rise;
-
-        Vector2 sp = GetWorldToScreen(world, w->presentation.camera);
-        if (sp.x < -100 || sp.x > GetScreenWidth() + 100) continue;
-        if (sp.y < -100 || sp.y > GetScreenHeight() + 100) continue;
-
-        int fontSize = (int)(26 * f->scale);
-        if (fontSize < 1) continue;
-
-        Color c = f->color;
-        float fade = f->life / f->maxLife;
-        c.a = (unsigned char)(255 * (fade > 0.5f ? 1.0f : fade * 2.0f));
-
-        int tw = MeasureText(f->text, fontSize);
-        DrawText(f->text, (int)(sp.x - tw / 2) + 2, (int)(sp.y - fontSize / 2) + 2, fontSize, (Color){ 0, 0, 0, c.a / 2 });
-        DrawText(f->text, (int)(sp.x - tw / 2), (int)(sp.y - fontSize / 2), fontSize, c);
     }
 }

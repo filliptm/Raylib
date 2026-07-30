@@ -593,7 +593,12 @@ is sufficient; repeated animation exports are not required):
 Health and damage use Brawl Stars' numeric scale, so the damage numbers read familiarly.
 Floating combat numbers appear only when the local player deals or receives damage,
 provides or receives healing, self-heals, or participates in a shield absorption.
-Bot-only damage, healing, regeneration, and shield exchanges stay hidden.
+Bot-only damage, healing, regeneration, and shield exchanges stay hidden. Incoming
+damage and shield loss use the player's left-side ticker lane, healing uses the
+recipient's right-side lane, and outgoing damage remains over its target. Rapid values
+stack upward three deep rather than drawing on the same pixels, while Arena Ink type and
+an ink outline keep them readable over either floor. The player's body-anchored health
+and ammo rails also share one height.
 
 ## Architecture
 

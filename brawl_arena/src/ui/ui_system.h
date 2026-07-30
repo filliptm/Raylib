@@ -82,6 +82,7 @@ const char *UiBindingLabel(const char *keyboardMouse, const char *gamepad,
 
 float UiTextSize(UiTextRole role);
 Vector2 UiMeasureText(UiTextRole role, const char *text);
+Vector2 UiMeasureTextAtSize(UiTextRole role, const char *text, float size);
 void UiDrawText(UiTextRole role, const char *text, Vector2 position, Color color);
 void UiDrawTextAligned(UiTextRole role, const char *text, Rectangle bounds,
                        UiAlign align, Color color);
@@ -90,6 +91,9 @@ void UiDrawTextFit(UiTextRole role, const char *text, Rectangle bounds,
 void UiDrawTextShadow(UiTextRole role, const char *text, Vector2 position, Color color);
 void UiDrawTextOutline(UiTextRole role, const char *text, Vector2 position,
                        Color fill, Color outline, float thickness);
+void UiDrawTextOutlineAtSize(UiTextRole role, const char *text, Vector2 position,
+                             float size, Color fill, Color outline,
+                             float thickness);
 
 void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised);
 void UiDrawFeaturePanel(Rectangle bounds, Color fill, Color edge, bool raised);

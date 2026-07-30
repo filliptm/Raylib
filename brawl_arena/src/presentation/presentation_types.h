@@ -32,6 +32,22 @@ typedef struct FxLight {
     bool active;
 } FxLight;
 
+typedef enum {
+    FLOAT_TEXT_GENERIC = 0,
+    FLOAT_TEXT_OUTGOING_DAMAGE,
+    FLOAT_TEXT_INCOMING_DAMAGE,
+    FLOAT_TEXT_HEALING,
+    FLOAT_TEXT_SHIELD,
+    FLOAT_TEXT_KNOCKOUT
+} FloatTextStyle;
+
+typedef enum {
+    FLOAT_TEXT_LANE_NEUTRAL = 0,
+    FLOAT_TEXT_LANE_OUTGOING,
+    FLOAT_TEXT_LANE_INCOMING,
+    FLOAT_TEXT_LANE_HEALING
+} FloatTextLane;
+
 typedef struct FloatText {
     Vector3 world;
     char text[16];
@@ -40,6 +56,11 @@ typedef struct FloatText {
     float maxLife;
     float rise;
     float scale;
+    float stackOffset;
+    int stackDepth;
+    int targetBrawler;
+    FloatTextStyle style;
+    FloatTextLane lane;
     bool active;
 } FloatText;
 

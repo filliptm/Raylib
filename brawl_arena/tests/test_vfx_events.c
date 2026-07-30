@@ -97,7 +97,8 @@ static int CountFloatText(const GameSession *session)
 }
 
 static bool HasFloatText(const GameSession *session, const char *text,
-                         int sourceBrawler, int targetBrawler)
+                         int sourceBrawler, int targetBrawler,
+                         CombatTextKind kind)
 {
     for (int i = 0; i < session->events.count; i++)
     {
@@ -105,6 +106,7 @@ static bool HasFloatText(const GameSession *session, const char *text,
         if (event->type == GAME_EVENT_FLOAT_TEXT &&
             event->sourceBrawler == sourceBrawler &&
             event->targetBrawler == targetBrawler &&
+            event->combatTextKind == kind &&
             strcmp(event->text, text) == 0)
             return true;
     }
@@ -335,34 +337,34 @@ int main(void)
     GameEventsClear(&session);
     BrawlerApplyDamage(game, 2, 123, 0, session.brawlers[2].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "123", 0, 2),
-          "player damage did not retain its outgoing combat number");
+          HasFloatText(&session, "123", 0, 2, COMBAT_TEXT_DAMAGE),
+          "player damage did not retain its outgoing combat semantics");
 
     GameEventsClear(&session);
     BrawlerApplyDamage(game, 0, 124, 2, session.brawlers[0].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "124", 2, 0),
-          "incoming player damage did not retain its combat number");
+          HasFloatText(&session, "124", 2, 0, COMBAT_TEXT_DAMAGE),
+          "incoming player damage did not retain its combat semantics");
 
     GameEventsClear(&session);
     BrawlerApplyDamage(game, 0, 125, -1, session.brawlers[0].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "125", -1, 0),
-          "environmental player damage did not retain its combat number");
+          HasFloatText(&session, "125", -1, 0, COMBAT_TEXT_DAMAGE),
+          "environmental player damage did not retain its combat semantics");
 
     session.brawlers[1].health -= 200;
     GameEventsClear(&session);
     BrawlerApplyHealing(game, 1, 126, 0, session.brawlers[1].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "+126", 0, 1),
-          "player-provided healing did not retain its combat number");
+          HasFloatText(&session, "+126", 0, 1, COMBAT_TEXT_HEALING),
+          "player-provided healing did not retain its combat semantics");
 
     session.brawlers[0].health -= 200;
     GameEventsClear(&session);
     BrawlerApplyHealing(game, 0, 127, 1, session.brawlers[0].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "+127", 1, 0),
-          "healing received by the player did not retain its combat number");
+          HasFloatText(&session, "+127", 1, 0, COMBAT_TEXT_HEALING),
+          "healing received by the player did not retain its combat semantics");
 
     SetupBrawler(&content, &session.brawlers[1], TEAM_PLAYER,
                  CLASS_SHOTGUNNER, (Vector3){ -2.0f, 0.0f, 1.0f });
@@ -381,8 +383,8 @@ int main(void)
     GameEventsClear(&session);
     BrawlerApplyDamage(game, 0, 100, 2, session.brawlers[0].position);
     CHECK(CountFloatText(&session) == 2 &&
-          HasFloatText(&session, "SH -100", 2, 0) &&
-          HasFloatText(&session, "+30", 0, 0),
+          HasFloatText(&session, "SH -100", 2, 0, COMBAT_TEXT_SHIELD) &&
+          HasFloatText(&session, "+30", 0, 0, COMBAT_TEXT_HEALING),
           "the player's shield did not retain absorb and self-heal text");
 
     SetupBrawler(&content, &session.brawlers[2], TEAM_ENEMY,
@@ -392,13 +394,13 @@ int main(void)
     GameEventsClear(&session);
     BrawlerApplyDamage(game, 2, 100, 0, session.brawlers[2].position);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "SH -100", 0, 2),
+          HasFloatText(&session, "SH -100", 0, 2, COMBAT_TEXT_SHIELD),
           "the player's shield damage lost its absorb number or exposed AI healing");
 
     GameEventsClear(&session);
     GameEmitFloatText(&session, session.brawlers[0].position, "READY", WHITE);
     CHECK(CountFloatText(&session) == 1 &&
-          HasFloatText(&session, "READY", -1, -1),
+          HasFloatText(&session, "READY", -1, -1, COMBAT_TEXT_NONE),
           "combat filtering changed generic floating labels");
 
     printf("VFX event tests passed: kit effects and player-relevant combat text are mapped\n");

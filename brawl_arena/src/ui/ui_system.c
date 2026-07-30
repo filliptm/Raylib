@@ -381,6 +381,12 @@ Vector2 UiMeasureText(UiTextRole role, const char *text)
     return MeasureTextEx(FontForRole(role), text, size, size*0.025f);
 }
 
+Vector2 UiMeasureTextAtSize(UiTextRole role, const char *text, float size)
+{
+    if (size < 1.0f) size = 1.0f;
+    return MeasureTextEx(FontForRole(role), text, size, size*0.025f);
+}
+
 void UiDrawText(UiTextRole role, const char *text, Vector2 position, Color color)
 {
     float size = UiTextSize(role);
@@ -456,6 +462,15 @@ void UiDrawTextOutline(UiTextRole role, const char *text, Vector2 position,
     float size = UiTextSize(role);
     DrawTextOutlineRaw(FontForRole(role), text, position, size, size*0.025f,
                        fill, outline, UiScale(thickness));
+}
+
+void UiDrawTextOutlineAtSize(UiTextRole role, const char *text, Vector2 position,
+                             float size, Color fill, Color outline,
+                             float thickness)
+{
+    if (size < 1.0f) return;
+    DrawTextOutlineRaw(FontForRole(role), text, position, size, size*0.025f,
+                       fill, outline, thickness);
 }
 
 static void ChamferPoints(Rectangle r, float cut, Vector2 points[6])

@@ -22,6 +22,7 @@ static inline Color HudHealthBarColor(const UiTheme *theme, Team team,
 
 // Health bars floating over each brawler, drawn in screen space after the 3D pass.
 void HudDrawBars(App *w);
+void HudDrawCombatText(App *w);
 
 // Objective/ability broadcast, respawn/result overlays, and control hints.
 void HudDrawPanel(App *w);
