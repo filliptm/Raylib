@@ -79,8 +79,10 @@ focus, modality, skin, and preferences.
 During a match, health and Scrapper shield points are centered inside the bars above
 each brawler. The player and allied bots always use green health fills; opponents always
 use red, even at low health, with ally/enemy shape icons retained as a second cue. The
-player's ammo pips remain beneath the body-anchored bar. There is no duplicate
-bottom-left health/ammo panel. Short comic stamps call out player KOs, ultimate ready,
+player's ammo remains beneath the body-anchored bar as a paper-keylined, gold segmented
+rail with dark empty cells, so both loaded and recharging pips remain distinct from the
+arena floor. There is no duplicate bottom-left health/ammo panel. Short comic stamps
+call out player KOs, ultimate ready,
 Scrapper shell break, downed state, and Gem Grab team lock; the objective panel pulses
 only for the high-priority countdown transition. The result is a full poster with
 **Continue**, **Rematch**, and **Change Brawler** actions plus the existing timeout.
@@ -113,7 +115,9 @@ indicator; drag and release **SUPER** to aim and cast; and hold, drag, or releas
 top-right. Move and Attack visuals stay at the same low translucency while idle, held,
 or dragged. Super and Skill artwork is 25% smaller without shrinking its touch targets;
 charge and cooldown still grow as exterior rings, and the button face lights when the
-action is usable. Touch contacts keep stable ownership, so moving and aiming work
+action is usable. Aim sticks use a curved 24%-to-full-range precision band plus light
+directional damping instead of jumping or jittering directly at the selected ability's
+maximum range. Touch contacts keep stable ownership, so moving and aiming work
 simultaneously. Physical gamepad movement uses the same full-speed-or-stopped rule.
 
 ## What's implemented
@@ -427,7 +431,9 @@ Generated cells bleed color beneath zero alpha and use transparent guards plus
 half-texel-inset runtime UVs, preventing black mattes and neighboring-frame edges under
 bilinear filtering. No-depth-write presentation passes flush raylib's immediate batch
 before changing and restoring the depth mask, so transparent billboard quads cannot
-become rectangular silhouettes in the depth-based ink outline.
+become rectangular silhouettes in the depth-based ink outline. Reduced motion removes
+decorative recipe-layer spin without lowering ability-effect opacity, preserving combat
+feedback on a phone-sized display.
 See [the VFX pipeline](docs/VFX_PIPELINE.md).
 
 **Post-processing** adds thresholded bloom, a vignette, a gentle contrast S-curve, and
@@ -451,8 +457,8 @@ world draw; desktop retains GPU skinning. The HUD remains at native resolution, 
 launch backdrop fills the display behind the safe-area edges while controls remain
 inset. If the scaled scene target cannot be allocated, iPhone follows the same
 native-scale retry and direct-render fallback as desktop. The iPhone match camera
-renders at 80% of the authored distance, clamped to a 20-unit minimum, so combat
-subjects are about 25% larger without forking the project tuning.
+renders at 72% of the authored distance, clamped to a 20-unit minimum, so combat
+subjects are about 39% larger without forking the project tuning.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. The tracked project value is 31.999340. The compiled 38.013156 recovery value is
 the length of the original `{0, 31, -22}` follow offset, and changing the authored value

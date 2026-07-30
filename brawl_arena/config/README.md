@@ -62,7 +62,7 @@ Global out-of-combat recovery is authored with
 match camera to its smoothed player/aim focus. It scales the established camera offset
 without changing its pitch. The tracked project value is 31.999340; the compiled
 38.013156 recovery value reproduces the original `{0, 31, -22}` offset. iPhone keeps
-the project value intact and applies a presentation-only 0.80 multiplier with a
+the project value intact and applies a presentation-only 0.72 multiplier with a
 20-unit effective floor.
 Each kit declares `main.self_heal_ratio`, `main.return_speed`, a complete
 `secondary.*` block, and returning-super speed/pull/knockback fields. The shared

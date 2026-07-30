@@ -18,6 +18,8 @@ typedef struct MobileControlLayout {
 MobileControlLayout PlayerTouchLayout(int width, int height, AppSafeInsets insets);
 Vector3 PlayerTouchCameraIntent(Camera3D camera, Vector2 stick);
 Vector3 PlayerFullSpeedMoveIntent(Vector3 intent, float deadZone);
+Vector2 PlayerTouchAimResponse(Vector2 stick);
+Vector2 PlayerTouchAimFilter(Vector2 previous, Vector2 target, float dt);
 void PlayerTouchApplyAttackInput(const MobileStickState *stick,
                                  PlayerInput *input);
 void PlayerTouchReset(App *app);

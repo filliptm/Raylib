@@ -38,10 +38,45 @@ static void DrawBarText(Rectangle bounds, const char *text, Color color)
     UiDrawTextFit(UI_TEXT_CAPTION, text, bounds, UI_ALIGN_CENTER, color);
 }
 
-static void DrawAmmo(Rectangle bounds, float ammo, int maxAmmo, Color fill)
+static void DrawAmmo(const App *w, Rectangle bounds, float ammo, int maxAmmo)
 {
     if (maxAmmo < 1) return;
-    UiDrawProgress(bounds, Clamp(ammo/maxAmmo, 0.0f, 1.0f), fill, true, maxAmmo);
+    const UiTheme *t = UiSystemActive()->theme;
+    float shell = UiScale(2.0f);
+    float gap = UiScale(2.0f);
+    float radius = 0.34f;
+    Color loaded = CueColor(w, t->yellow);
+    Color empty = CueColor(w, t->surfaceMuted);
+
+    Rectangle shadow = {
+        bounds.x + UiScale(2.0f), bounds.y + UiScale(2.0f),
+        bounds.width, bounds.height
+    };
+    DrawRectangleRounded(shadow, radius, 6, t->shadow);
+    DrawRectangleRounded(bounds, radius, 6, t->paper);
+
+    Rectangle rail = {
+        bounds.x + shell, bounds.y + shell,
+        bounds.width - shell*2.0f, bounds.height - shell*2.0f
+    };
+    DrawRectangleRounded(rail, radius, 6, t->ink);
+
+    float cellWidth = (rail.width - gap*(maxAmmo - 1))/maxAmmo;
+    for (int i = 0; i < maxAmmo; i++)
+    {
+        Rectangle cell = {
+            rail.x + i*(cellWidth + gap), rail.y, cellWidth, rail.height
+        };
+        DrawRectangleRounded(cell, 0.28f, 5, empty);
+
+        float amount = Clamp(ammo - i, 0.0f, 1.0f);
+        if (amount > 0.001f)
+        {
+            Rectangle fill = cell;
+            fill.width *= amount;
+            DrawRectangleRounded(fill, 0.28f, 5, loaded);
+        }
+    }
 }
 
 void HudObservePlayerInput(App *w, const PlayerInput *input)
@@ -214,9 +249,11 @@ void HudDrawBars(App *w)
 
         if (mine)
         {
-            DrawAmmo((Rectangle){ bar.x, bar.y + bar.height + UiScale(6),
-                                  bar.width, UiScale(5) },
-                     b->ammo, ContentCharacter(&w->content, b->cls)->maxAmmo, t->blue);
+            DrawAmmo(w,
+                     (Rectangle){ bar.x, bar.y + bar.height + UiScale(5),
+                                  bar.width, UiScale(11) },
+                     b->ammo,
+                     ContentCharacter(&w->content, b->cls)->maxAmmo);
         }
 
         if (b->gems > 0)

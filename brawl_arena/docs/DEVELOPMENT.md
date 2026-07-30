@@ -174,7 +174,7 @@ test exist to keep simulation usable without a window.
 | `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
-| `test_ui` | desktop and safe-width phone home/roster/result layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping, full-speed stick normalization, tap/drag attack edges, touch language, and the shared showcase |
+| `test_ui` | desktop and safe-width phone home/roster/result layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping, full-speed stick normalization, curved/damped aim precision, tap/drag attack edges, touch language, and the shared showcase |
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
@@ -221,11 +221,13 @@ matrix. At minimum, after changes to runtime/presentation:
   Studio, Quit, and command center controls are absent, the backdrop fills the display,
   home/roster/overlays/results occupy the safe landscape width, imported CPU-skinned
   characters are stable and fully textured on a cold Home launch and after a match, the
-  closer match framing is readable, the full authored post stack and render scale match
-  desktop without affecting the native-resolution HUD, and every touch control stays
-  clear of the objective and pause.
+  closer match framing is readable, the gold/paper ammo rail remains distinct over both
+  floors, the full authored post stack and render scale match desktop without affecting
+  the native-resolution HUD, all seven ability-VFX atlases load, and every touch control
+  stays clear of the objective and pause.
 - On a physical iPhone, install and launch the signed bundle, then exercise simultaneous
-  full-speed-or-stopped move/aim, preview-free tap auto-aim, directed attack release,
+  full-speed-or-stopped movement, the aim-only precision curve, preview-free tap
+  auto-aim, directed attack release,
   exterior Super/Skill progress rings and ready lighting, Super release, each kit's
   Skill interaction, pause/background/resume, rotation lock, and sustained-play
   responsiveness, frame pacing, and thermal behavior with the tracked 1.5× world scale

@@ -9,6 +9,8 @@
 #define TOUCH_NONE (-1)
 #define TOUCH_DEAD_ZONE 0.14f
 #define TOUCH_AIM_ACTIVATION 0.22f
+#define TOUCH_AIM_MIN_RANGE 0.24f
+#define TOUCH_AIM_FILTER_SPEED 10.0f
 
 static float ClampMinimum(float value, float minimum)
 {
@@ -99,6 +101,8 @@ static void BeginStick(MobileStickState *stick, int touchId, Vector2 position,
     stick->origin = floating ? position : home;
     stick->position = position;
     stick->value = (Vector2){ 0 };
+    stick->filteredAim = (Vector2){ 0 };
+    stick->filteredAimValid = false;
 }
 
 static void UpdateStick(MobileStickState *stick, float radius)
@@ -168,6 +172,31 @@ Vector3 PlayerFullSpeedMoveIntent(Vector3 intent, float deadZone)
     return Vector3Scale(intent, 1.0f/length);
 }
 
+Vector2 PlayerTouchAimResponse(Vector2 stick)
+{
+    float length = Vector2Length(stick);
+    if (length <= TOUCH_DEAD_ZONE) return (Vector2){ 0 };
+
+    Vector2 direction = Vector2Scale(stick, 1.0f/length);
+    float normalized = Clamp(
+        (length - TOUCH_DEAD_ZONE)/(1.0f - TOUCH_DEAD_ZONE), 0.0f, 1.0f);
+    // Smoothstep gives the center of the aim stick a wide precision band instead
+    // of jumping every deliberate drag directly to the ability's full range.
+    float curved = normalized*normalized*(3.0f - 2.0f*normalized);
+    float response = Lerp(TOUCH_AIM_MIN_RANGE, 1.0f, curved);
+    return Vector2Scale(direction, response);
+}
+
+Vector2 PlayerTouchAimFilter(Vector2 previous, Vector2 target, float dt)
+{
+    if (Vector2Length(target) < 0.001f ||
+        Vector2Length(previous) < 0.001f)
+        return target;
+    float factor = 1.0f - expf(
+        -TOUCH_AIM_FILTER_SPEED*Clamp(dt, 0.0f, 0.05f));
+    return Vector2Lerp(previous, target, factor);
+}
+
 void PlayerTouchApplyAttackInput(const MobileStickState *stick,
                                  PlayerInput *input)
 {
@@ -180,20 +209,41 @@ void PlayerTouchApplyAttackInput(const MobileStickState *stick,
     else input->autoAttackPressed = true;
 }
 
-static void ApplyAim(const App *app, Vector2 stick, float range, PlayerInput *input)
+static Vector2 FilterAimStick(MobileStickState *stick, float dt)
+{
+    if (!stick->dragged)
+    {
+        stick->filteredAim = (Vector2){ 0 };
+        stick->filteredAimValid = false;
+        return (Vector2){ 0 };
+    }
+
+    Vector2 target = PlayerTouchAimResponse(stick->value);
+    stick->filteredAim = stick->filteredAimValid
+        ? PlayerTouchAimFilter(stick->filteredAim, target, dt)
+        : target;
+    stick->filteredAimValid = Vector2Length(stick->filteredAim) >= 0.001f;
+    return stick->filteredAim;
+}
+
+static void ApplyAim(const App *app, Vector2 response,
+                     float range, PlayerInput *input)
 {
     if (app->session.playerIdx < 0 ||
         app->session.playerIdx >= app->session.brawlerCount ||
-        Vector2Length(stick) < TOUCH_DEAD_ZONE)
+        Vector2Length(response) < 0.001f)
         return;
 
     const Brawler *player = &app->session.brawlers[app->session.playerIdx];
-    Vector3 direction = PlayerTouchCameraIntent(app->presentation.camera, stick);
-    if (Vector3Length(direction) < 0.001f) return;
+    Vector3 direction =
+        PlayerTouchCameraIntent(app->presentation.camera, response);
+    float responseLength = Vector3Length(direction);
+    if (responseLength < 0.001f) return;
     direction = Vector3Normalize(direction);
     input->aimPoint = Vector3Add(
         player->position,
-        Vector3Scale(direction, range > 0.1f ? range : 12.0f));
+        Vector3Scale(direction,
+                     (range > 0.1f ? range : 12.0f)*responseLength));
 }
 
 static void ClaimNewTouches(App *app, MobileControlLayout layout)
@@ -248,6 +298,10 @@ void PlayerTouchCapture(App *app, PlayerInput *input)
     UpdateStick(&controls->superAbility, layout.actionRadius);
     UpdateStick(&controls->secondary, layout.actionRadius);
     ClaimNewTouches(app, layout);
+    float frameDt = GetFrameTime();
+    Vector2 attackAim = FilterAimStick(&controls->attack, frameDt);
+    Vector2 superAim = FilterAimStick(&controls->superAbility, frameDt);
+    Vector2 secondaryAim = FilterAimStick(&controls->secondary, frameDt);
 
     // Newly claimed sticks have zero values until their first drag. Attack remains
     // preview-free until it crosses the aim threshold; release before that point is
@@ -277,13 +331,13 @@ void PlayerTouchCapture(App *app, PlayerInput *input)
     const AbilityDefinition *secondaryAbility =
         player ? ContentSecondaryAbility(&app->content, player->cls) : NULL;
     if (controls->secondary.active || controls->secondary.released)
-        ApplyAim(app, controls->secondary.value,
+        ApplyAim(app, secondaryAim,
                  secondaryAbility ? secondaryAbility->range : 12.0f, input);
     else if (controls->superAbility.active || controls->superAbility.released)
-        ApplyAim(app, controls->superAbility.value,
+        ApplyAim(app, superAim,
                  superAbility ? superAbility->range : 12.0f, input);
     else if (controls->attack.active || controls->attack.released)
-        ApplyAim(app, controls->attack.value,
+        ApplyAim(app, attackAim,
                  mainAbility ? mainAbility->range : 12.0f, input);
 
     bool active = controls->move.active || controls->attack.active ||

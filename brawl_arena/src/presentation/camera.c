@@ -9,7 +9,7 @@ static const Vector3 CAMERA_OFFSET = { 0.0f, 31.0f, -22.0f };
 float CameraEffectiveDistance(float authoredDistance, bool mobile)
 {
     if (!mobile) return authoredDistance;
-    return fmaxf(20.0f, authoredDistance*0.80f);
+    return fmaxf(20.0f, authoredDistance*0.72f);
 }
 
 static Vector3 MatchCameraOffset(const Tuning *tuning)

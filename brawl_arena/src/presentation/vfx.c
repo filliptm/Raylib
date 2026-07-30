@@ -149,11 +149,10 @@ static Vector3 ResolveSocket(const PresentationState *presentation, int brawler,
 
 static Color LayerColor(const VfxInstance *instance,
                         const VfxLayerDefinition *layer,
-                        float alpha, bool reducedMotion)
+                        float alpha)
 {
     Color color = layer->useEventColor ? instance->eventColor : layer->color;
-    float motionAlpha = reducedMotion ? 0.72f : 1.0f;
-    float scaled = color.a*Clamp(alpha*motionAlpha, 0.0f, 1.0f);
+    float scaled = color.a*Clamp(alpha, 0.0f, 1.0f);
     color.a = (unsigned char)Clamp(scaled, 0.0f, 255.0f);
     return color;
 }
@@ -262,13 +261,16 @@ static void DrawInstance(const VfxInstance *sourceInstance,
     float scale = Lerp(layer->startScale, layer->endScale, progress)*
                   instance->size*VFX_RENDER_SCALE;
     float alpha = Lerp(layer->startAlpha, layer->endAlpha, progress);
-    float rotation = layer->rotationDegrees + layer->rotationSpeed*localAge;
+    // Reduced motion removes decorative spin without reducing combat-feedback
+    // opacity. Dimming the layer made ability reads disappear on a phone-sized view.
+    float rotation = layer->rotationDegrees +
+                     (reducedMotion ? 0.0f : layer->rotationSpeed*localAge);
     int frame = VfxFrameForLayer(layer, instance->age);
     if (frame < 0 || scale <= 0.001f || alpha <= 0.001f) return;
 
     Texture2D texture = assets->vfxAtlases[layer->atlas];
     Rectangle source = FrameRectangle(texture, layer->atlas, frame);
-    Color color = LayerColor(instance, layer, alpha, reducedMotion);
+    Color color = LayerColor(instance, layer, alpha);
 
     Vector3 anchor = layer->anchor == VFX_ANCHOR_END
                    ? instance->endPosition : instance->position;

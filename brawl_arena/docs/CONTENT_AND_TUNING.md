@@ -39,7 +39,7 @@ Its 20–60-unit range scales the complete follow-camera offset, preserving the 
 pitch, aim lead, and smoothing. The tracked project value is 31.999340 units. The
 compiled 38.013156 recovery value reproduces the original `{0, 31, -22}` offset. The
 iPhone runtime leaves the project value unchanged and uses an effective distance equal
-to 80% of it, clamped to 20 units, for phone-readable framing.
+to 72% of it, clamped to 20 units, for phone-readable framing.
 
 The VISUAL tab's `presentation.render_scale` is also project-scoped and applies after a
 short target-recreation debounce. Its 1.0×–2.0× range scales the world color/depth

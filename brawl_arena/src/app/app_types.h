@@ -42,6 +42,8 @@ typedef struct MobileStickState {
     Vector2 origin;
     Vector2 position;
     Vector2 value;
+    Vector2 filteredAim;
+    bool filteredAimValid;
 } MobileStickState;
 
 // Process-lifetime touch identities belong to the application input layer. Keeping

@@ -63,7 +63,8 @@ At every size verify:
   tutorials; no duplicate bottom-left vitals panel.
 - World bars: health values are centered inside every health bar, Scrapper charge or
   broken lockout is centered inside its shield bar, and the player's ammo remains below
-  the body-anchored health bar.
+  the body-anchored health bar as a paper-keylined gold/empty-cell rail that stays
+  distinct over both floors.
 - Team readability: the player and allied bots remain green at every health level,
   enemies remain red at every health level, and ally/enemy shape cues remain visible.
 - Combat-text relevance: damage dealt to or received by the player, healing given or
@@ -88,7 +89,8 @@ At every size verify:
   closer phone framing, Move/Attack stay at the same low translucency before and during
   a drag, and the 25%-smaller Super/Skill artwork remains legible. Its progress grows
   outside the paper edge before the face and completed halo light at readiness, while
-  the unchanged larger touch regions remain easy to acquire.
+  the unchanged larger touch regions remain easy to acquire. Ability VFX retain full
+  combat-readable opacity even when reduced motion removes decorative layer spin.
 
 ## Input matrix
 
@@ -105,7 +107,9 @@ At every size verify:
 - iPhone touch: one finger selects a movement direction while a second finger aims;
   movement is stopped inside the dead zone and full speed outside it, releasing Attack
   fires in the displayed direction, and a tap fires with auto-aim without flashing the
-  skill-shot indicator. A quick deliberate flick must still use the displayed direction.
+  skill-shot indicator. A deliberate drag should traverse the curved precision band
+  with visibly damped thumb jitter before reaching the ability's full range, and a quick
+  deliberate flick must still use the displayed direction.
 - Drag/release Super and hold/drag/release Skill for each kit. Contacts must retain their
   original control when fingers cross or other contacts begin/end.
 - Pause, background, and resume must clear held contacts; returning to play must not move

@@ -129,12 +129,16 @@ floating aim/fire stick, **SUPER**, **SKILL**, and pause. It converts stick disp
 through the current camera basis, then writes the same move, aim, preview, release,
 secondary, and pause fields used by the desktop controller. Movement normalizes to a
 unit vector after the dead zone, so touch and physical-gamepad sticks select direction
-but never a slower walking speed; aim magnitude remains analog. Attack touch-down alone
-does not enter charging. Crossing the drag threshold emits the deliberate press edge,
-while release without crossing emits the direct auto-aim edge, so tap-to-shoot cannot
-render a preview. An explicit aimed marker prevents a fast drag/release from being
-misclassified by the desktop time-based tap rule. The mapping, gesture classification,
-full-speed normalization, and layout are pure functions covered without a window;
+but never a slower walking speed. Aim remains analog through an app-layer smoothstep
+response that maps the post-dead-zone stick into a 24%-to-full-range precision band;
+an app-owned low-pass filter then damps abrupt direction changes without delaying the
+first deliberate direction. These operations change only the aim point, not movement
+speed. Attack touch-down alone does not enter charging. Crossing the drag threshold
+emits the deliberate press edge, while
+release without crossing emits the direct auto-aim edge, so tap-to-shoot cannot render
+a preview. An explicit aimed marker prevents a fast drag/release from being misclassified
+by the desktop time-based tap rule. The mapping, gesture classification, full-speed
+normalization, aim curve, and layout are pure functions covered without a window;
 game/core code never sees touch IDs, UIKit, or virtual-control rectangles.
 
 The command center uses `GameCommandExecute()` for actions such as changing a roster,
@@ -211,7 +215,7 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   plinths remain inset to prevent adjacent coplanar geometry.
 - `camera.c`: camera initialization, project-tuned distance, lead, follow, and permitted
   shake. Distance scales the fixed-pitch offset and never enters deterministic
-  simulation state. iPhone applies a presentation-only 0.80 effective-distance
+  simulation state. iPhone applies a presentation-only 0.72 effective-distance
   multiplier with a 20-unit floor.
 - `effects.c`: game-event consumption and transient visual pools.
 - `vfx_catalog.c`: stable, kit-specific effect recipes.
@@ -269,9 +273,9 @@ The player-facing shell is split by responsibility:
 - `menu.c`: launch deck, mechanic-derived character motifs, orchestrated entrance,
   roster candidate/commit behavior, Controls, and Settings.
 - `phone_layout.c`: pure safe-width iPhone frames and home/roster/result geometry.
-- `hud.c`: body-anchored numeric health/shield bars and player ammo, objective/ability
-  broadcast, resettable impact-stamp detection, action-retired tutorials, downed state,
-  and the Continue/Rematch/Change Brawler result poster.
+- `hud.c`: body-anchored numeric health/shield bars and the high-contrast player ammo
+  rail, objective/ability broadcast, resettable impact-stamp detection, action-retired
+  tutorials, downed state, and the Continue/Rematch/Change Brawler result poster.
 - `mobile_controls.c`: native-resolution, safe-area-aware translucent movement/attack
   sticks with opacity independent of touch state, 75%-scale Super/Skill artwork over
   unchanged touch regions, exterior charge/cooldown rings, ready-face/halo feedback,
@@ -350,8 +354,8 @@ presentation state remains untouched.
 distinct character motifs, result actions, contrast, procedural-skin lifetime, and
 presentation-profile behavior without opening a window. It also covers notched safe
 areas, dedicated phone compositions, 44-point touch expansion, non-overlapping mobile
-controls, camera-relative stick mapping, binary full-speed movement, tap/drag attack
-classification, and touch binding language.
+controls, camera-relative stick mapping, binary full-speed movement, curved/damped aim
+response, tap/drag attack classification, and touch binding language.
 `check-ui` prevents migrated player UI from bypassing shared text/skin ownership and
 verifies shipped fonts, procedural ownership, retained reference provenance, and archive
 policy. Graphical checks remain documented in

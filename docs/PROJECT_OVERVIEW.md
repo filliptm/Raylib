@@ -644,9 +644,10 @@ The headless suite covers:
 - UI layout/focus at four desktop viewports plus a notched iPhone safe area, dedicated
   phone home/roster/result compositions, physical touch-target expansion, non-overlapping
   mobile-control placement, camera-relative mapping, full-speed stick normalization,
-  tap-versus-drag attack intent, touch glyph language, contrast, easing/reduced motion,
-  distinct character motifs, result actions, procedural-skin lifetime/policy, profile
-  preference round trips, and the shared character-showcase contract.
+  curved/damped aim precision, tap-versus-drag attack intent, touch glyph language,
+  contrast, easing/reduced motion, distinct character motifs, result actions,
+  procedural-skin lifetime/policy, profile preference round trips, and the shared
+  character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -810,7 +811,9 @@ On iPhone, the player uses independent stable touch IDs:
 - Left floating stick: camera-relative direction with binary full-speed movement after
   the dead zone.
 - Right floating stick: drag to aim the main attack and release to fire; a quick tap
-  fires through nearest-target auto-aim without opening the skill-shot preview.
+  fires through nearest-target auto-aim without opening the skill-shot preview. Drag
+  magnitude follows a curved 24%-to-full-range precision band, and light app-layer
+  damping stabilizes deliberate direction changes.
 - `SUPER`: drag/release ultimate aiming and activation.
 - `SKILL`: press instant secondaries, hold Scrapper's shield, or drag/release Longshot's
   grapple.
@@ -1007,7 +1010,7 @@ The presentation layer owns:
   The tracked project value is 31.999340 units; the compiled recovery value of
   38.013156 reproduces the original `{0, 31, -22}` offset. Live distance edits scale
   that vector without changing pitch. iPhone preserves the authored value but renders
-  at 80% of it, with a 20-unit floor, for closer phone-readable framing.
+  at 72% of it, with a 20-unit floor, for closer phone-readable framing.
 - Imported/fallback brawler drawing and movement-owned animation selection. Stationary
   casts retain idle as their base and cannot be changed by the independent bush-reveal
   timer. Successful actions emit an explicit presentation-only one-shot that blends an
@@ -1039,7 +1042,8 @@ The presentation layer owns:
 - Body-anchored health bars with their point values centered inside: the player team
   stays green and opponents stay red at every health level, reinforced by distinct
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
-  bar, and the redundant bottom-left vitals panel is not drawn.
+  bar. The player ammo rail uses a paper keyline, gold loaded cells, and dark empty
+  cells over the floor; the redundant bottom-left vitals panel is not drawn.
 - External station-map rendering aligned with runtime collision. Wall collision keeps
   its full-tile footprint. Imported straight-wall variants discard their unused
   longitudinal end-cap triangles after loading, so perpendicular textured faces meet
@@ -1060,7 +1064,8 @@ The presentation layer owns:
   shoulder, chest, foot, or center sockets from the final animated pose; primitive and
   incomplete rigs retain approximate socket positions. Imported recipe layers use a
   shared `4.0×` presentation scale for match-camera readability without changing
-  gameplay dimensions or authoritative telegraphs.
+  gameplay dimensions or authoritative telegraphs. Reduced motion removes decorative
+  layer spin without lowering combat-feedback opacity.
 - Optional toon/post-processing controls, including outline, bloom, painterly,
   pixelation, halftone, posterization, grade, vignette, temporally stable screen-space
   grain, and chromatic fringe. The project-scoped `presentation.render_scale` ranges

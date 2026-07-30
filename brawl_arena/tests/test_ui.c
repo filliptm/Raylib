@@ -198,6 +198,27 @@ int main(void)
     CHECK(Near(Vector3Length(stopped), 0.0f),
           "movement dead zone no longer resolves to a full stop");
 
+    Vector2 quietAim = PlayerTouchAimResponse((Vector2){ 0.10f, 0.0f });
+    Vector2 precisionAim = PlayerTouchAimResponse((Vector2){ 0.50f, 0.0f });
+    Vector2 fullAim = PlayerTouchAimResponse((Vector2){ 0.0f, -1.0f });
+    CHECK(Near(Vector2Length(quietAim), 0.0f),
+          "aim response escaped its center dead zone");
+    CHECK(Vector2Length(precisionAim) >= 0.24f &&
+          Vector2Length(precisionAim) < 0.60f &&
+          precisionAim.x > 0.0f && Near(precisionAim.y, 0.0f),
+          "aim response lost its deliberate mid-stick precision band");
+    CHECK(Near(Vector2Length(fullAim), 1.0f) && fullAim.y < -0.99f,
+          "aim response no longer reaches full range or preserves direction");
+    Vector2 filteredAim = PlayerTouchAimFilter(
+        (Vector2){ 0.0f, -0.50f }, (Vector2){ 0.50f, 0.0f }, 1.0f/60.0f);
+    CHECK(filteredAim.x > 0.0f && filteredAim.x < 0.20f &&
+          filteredAim.y < -0.30f,
+          "aim filter no longer damps abrupt thumb-direction changes");
+    Vector2 initialAim = PlayerTouchAimFilter(
+        (Vector2){ 0 }, (Vector2){ 0.38f, -0.22f }, 1.0f/60.0f);
+    CHECK(Near(initialAim.x, 0.38f) && Near(initialAim.y, -0.22f),
+          "aim filter added latency to the first deliberate direction");
+
     PlayerInput tapInput = { 0 };
     MobileStickState tapRelease = { .released = true };
     PlayerTouchApplyAttackInput(&tapRelease, &tapInput);

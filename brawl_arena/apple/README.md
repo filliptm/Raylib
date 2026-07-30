@@ -63,7 +63,8 @@ left/right orientations.
   zone and full speed outside it.
 - Right floating stick: hold and drag to aim the main attack; release to fire. A quick
   tap fires through nearest-target auto-aim without entering or flashing the skill-shot
-  preview.
+  preview. Deliberate drags use a curved 24%-to-full-range precision band plus light
+  directional damping rather than jumping or jittering directly at maximum range.
 - `SUPER`: hold and drag to aim; release to activate when charged.
 - `SKILL`: press for instant secondaries, hold for shields, or drag/release Longshot's
   grapple.
@@ -95,7 +96,7 @@ preview before any world geometry has rendered. Desktop retains GPU skinning. Th
 command center and VFX Studio are desktop authoring tools and are not exposed in the
 mobile shell. Home, roster, Controls, Settings, downed, and result screens use a
 dedicated safe-width landscape composition. The match camera preserves the
-project-authored distance but renders at 80% of it, with a 20-unit floor, for closer
+project-authored distance but renders at 72% of it, with a 20-unit floor, for closer
 phone framing.
 
 For automated graphical smoke checks, launching with
