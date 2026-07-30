@@ -20,7 +20,7 @@ void UiSkinUnload(UiSkin *skin);
 bool UiSkinDrawPanel(const UiSkin *skin, Rectangle bounds, Color fill,
                      Color edge, bool raised, bool feature);
 bool UiSkinDrawButton(const UiSkin *skin, Rectangle bounds, Color fill,
-                      Color edge, bool raised);
+                      Color contour, Color edge, bool raised);
 bool UiSkinDrawProgress(const UiSkin *skin, Rectangle bounds, float value,
                         Color track, Color fill, bool segmented, int segments,
                         float gap);

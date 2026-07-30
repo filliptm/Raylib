@@ -13,7 +13,8 @@ Arena Ink treats the UI as a playable comic poster:
 - vivid blue, red, and yellow fields;
 - heavy near-black contours;
 - warm paper text and keylines;
-- clipped polygon corners and offset hard shadows;
+- clipped polygon panels with continuous border bands, matched rounded button
+  faces/keylines, and offset hard shadows;
 - halftone, ink flecks, bursts, and speed lines;
 - one loud hero/action moment per screen;
 - quieter surfaces wherever values or tools need sustained reading.
@@ -58,6 +59,8 @@ every surface with motion:
 
 - Draws reusable comic panels, controls, progress frames, halftone, bursts, speed lines,
   and the full-screen poster backdrop.
+- Builds panel borders as closed filled bands and buttons as nested ink, paper, and color
+  silhouettes, preventing open joins and color leakage around the keyline.
 - Owns no GPU texture resources; `UiSkin.ready` enables the procedural path and the
   existing geometry fallback remains callable.
 
@@ -125,11 +128,11 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 
 ### Launch deck
 
-- Burst wordmark and deployment strip at upper left.
+- Burst wordmark at upper left without a secondary deployment tag.
 - Yellow Studio and Settings, blue Controls, red Quit.
 - Centered sticker brawler on a blue arena stage.
-- Bottom rail with blue brawler switcher, yellow mode choice, blue Practice, and the
-  dominant red Deploy action.
+- Uninterrupted bottom rail with a blue brawler switcher, centered yellow mode choice,
+  blue Practice, and the dominant red Deploy action.
 
 ### Roster
 
@@ -164,7 +167,12 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 - Layout scales from the 1280×800 reference canvas with a 960×600 minimum.
 - Player targets retain a 44-reference-pixel minimum.
 - Keyboard/gamepad focus uses an ink outer and paper inner ring, independent of hue.
-- Button state changes retain shape, edge, and position cues.
+- Pointer hover deepens the button face and lifts it two pixels without adding a
+  perimeter shape; press moves it down and deepens it further. Keyboard/gamepad focus
+  keeps its independent high-contrast ring, and labels stay centered independently of
+  their leading icons.
+- Panel border joins remain closed at every chamfer, and button color stays entirely
+  inside its rounded paper keyline.
 - Reduced motion disables hover/press displacement and decorative timing while keeping
   state transitions visible; menu entrance and stamp pop resolve immediately.
 - High-contrast combat cues preserve distinct ally/enemy colors and icons.
@@ -197,6 +205,11 @@ On 2026-07-29:
 - a 1280×800 launch-only smoke check on an Apple M5 Max loaded all four imported
   characters, allocated the sticker target, and compiled the updated sticker fragment
   shader without an error.
+- a subsequent 1280×800 launch-deck capture verified the caption and side-marker cleanup,
+  centered mode placement and button labels, and rounded button keylines without clipping
+  or icon overlap.
+- a hidden 1280-pixel launch-rail render verified continuous panel corners and matched
+  button keyline/fill paths without exposed background wedges.
 
 Earlier first-pass 1280×800 captures covered the launch deck, roster, Controls, match HUD,
 and Scrapper sticker. The enhancement pass did not use desktop input automation and did

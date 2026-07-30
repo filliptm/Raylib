@@ -119,7 +119,8 @@ int main(void)
     CHECK(!UiSkinDrawPanel(&missingSkin, skinBounds, theme->surface, theme->border,
                            true, false),
           "missing panel texture did not request the geometry fallback");
-    CHECK(!UiSkinDrawButton(&missingSkin, skinBounds, theme->surface, theme->border, false),
+    CHECK(!UiSkinDrawButton(&missingSkin, skinBounds, theme->surface,
+                            theme->ink, theme->border, false),
           "missing button texture did not request the geometry fallback");
     CHECK(!UiSkinDrawProgress(&missingSkin, skinBounds, 0.5f, theme->surfaceMuted,
                               theme->blue, false, 0, 3.0f),

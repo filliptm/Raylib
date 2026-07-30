@@ -464,7 +464,8 @@ void UiDrawFeaturePanel(Rectangle bounds, Color fill, Color edge, bool raised)
 void UiDrawControlSurface(Rectangle bounds, Color fill, Color edge, bool raised)
 {
     fill = OpaqueSurface(fill);
-    if (g_ui && UiSkinDrawButton(&g_ui->skin, bounds, fill, edge, raised))
+    if (g_ui && UiSkinDrawButton(&g_ui->skin, bounds, fill, g_ui->theme->ink,
+                                 edge, raised))
         return;
     DrawPanelGeometry(bounds, fill, edge, raised);
 }
@@ -684,7 +685,7 @@ static void DrawLogoWord(const char *text, Rectangle bounds, Color fill)
                        fill, g_ui->theme->ink, black);
 }
 
-void UiDrawArenaLogo(Rectangle bounds, const char *tagline)
+void UiDrawArenaLogo(Rectangle bounds)
 {
     if (!g_ui) return;
     Vector2 center = {
@@ -716,15 +717,6 @@ void UiDrawArenaLogo(Rectangle bounds, const char *tagline)
                               bounds.y + bounds.height*0.30f,
                               bounds.width*0.88f, bounds.height*0.47f },
                  g_ui->theme->yellow);
-
-    Rectangle strip = {
-        bounds.x + bounds.width*0.13f,
-        bounds.y + bounds.height*0.79f,
-        bounds.width*0.76f,
-        bounds.height*0.17f
-    };
-    UiDrawControlSurface(strip, g_ui->theme->yellow, g_ui->theme->ink, true);
-    UiDrawTextFit(UI_TEXT_CAPTION, tagline, strip, UI_ALIGN_CENTER, g_ui->theme->ink);
 }
 
 static bool MouseIn(Rectangle bounds)
@@ -794,13 +786,15 @@ UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
         fill = t->purple;
     else if (style == UI_BUTTON_UTILITY)
         fill = t->surface;
-    if (r.hovered || (r.focused && g_ui && g_ui->focusVisible))
-        edge = t->paper;
+    if (r.held)
+        fill = ColorLerp(fill, t->ink, 0.14f);
+    else if (r.hovered)
+        fill = ColorLerp(fill, t->ink, 0.07f);
 
     Rectangle visual = bounds;
     bool animated = !g_ui || !g_ui->reducedMotion;
     if (r.held && animated) visual.y += UiScale(3);
-    else if (r.hovered && animated) visual.y -= UiScale(1);
+    else if (r.hovered && animated) visual.y -= UiScale(2);
     UiDrawControlSurface(visual, fill, edge,
                          !r.held && style != UI_BUTTON_UTILITY);
     if (r.focused && g_ui && g_ui->focusVisible)
@@ -818,11 +812,8 @@ UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
             visual.x + UiScale(24), visual.y + visual.height*0.5f
         };
         UiIconDraw(icon, center, UiScale(18), text);
-        Rectangle textBounds = visual;
-        textBounds.x += UiScale(42);
-        textBounds.width -= UiScale(52);
         UiDrawTextFit(style == UI_BUTTON_PRIMARY ? UI_TEXT_HEADING : UI_TEXT_LABEL,
-                      label, textBounds, UI_ALIGN_LEFT, text);
+                      label, visual, UI_ALIGN_CENTER, text);
     }
     else
         UiDrawTextFit(style == UI_BUTTON_PRIMARY ? UI_TEXT_HEADING : UI_TEXT_LABEL,
@@ -835,12 +826,18 @@ UiResponse UiIconButton(UiId id, Rectangle bounds, UiIcon icon, const char *acce
     (void)accessibleLabel;
     UiResponse r = Register(id, bounds, true);
     const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
-    UiDrawControlSurface(bounds, r.hovered ? t->blue : t->surface,
+    Color fill = r.hovered ? ColorLerp(t->blue, t->ink, r.held ? 0.14f : 0.07f)
+                           : t->surface;
+    Rectangle visual = bounds;
+    bool animated = !g_ui || !g_ui->reducedMotion;
+    if (r.held && animated) visual.y += UiScale(3);
+    else if (r.hovered && animated) visual.y -= UiScale(2);
+    UiDrawControlSurface(visual, fill,
                          (r.focused && g_ui && g_ui->focusVisible) ? t->yellow :
-                         (r.hovered ? t->paper : t->ink), r.hovered);
-    UiIconDraw(icon, (Vector2){ bounds.x + bounds.width*0.5f,
-                               bounds.y + bounds.height*0.5f },
-               fminf(bounds.width, bounds.height)*0.42f, t->paper);
+                         t->ink, r.hovered && !r.held);
+    UiIconDraw(icon, (Vector2){ visual.x + visual.width*0.5f,
+                               visual.y + visual.height*0.5f },
+               fminf(visual.width, visual.height)*0.42f, t->paper);
     return r;
 }
 

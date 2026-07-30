@@ -44,9 +44,9 @@ At every size verify:
 ## Screen pass
 
 - Launch deck: Brawl Arena burst wordmark, open character stage, active-brawler switcher,
-  mode arrows,
-  Practice, Controls, Settings, Deploy, and Quit; combat stats remain exclusive to the
-  roster bay.
+  centered mode selector and arrows, Practice, Controls, Settings, Deploy, and Quit;
+  redundant deployment/brawler/mode captions and the bottom rail's side marker remain
+  absent, while combat stats remain exclusive to the roster bay.
 - Roster bay: all five candidates, candidate preview, explicit Select, cancel without
   committing, and selected state after returning home.
 - Controls: correct keyboard/mouse and gamepad bindings; Back restores prior focus.
@@ -77,6 +77,8 @@ At every size verify:
 ## Input matrix
 
 - Pointer: hover, press, release, wheel, and no click-through into the world.
+- Button hover uses only a slightly deeper face plus lift—no extra hexagonal perimeter;
+  press moves down, and reduced motion retains the face-tone change without displacement.
 - Keyboard: arrows/WASD focus movement, Enter/Space activation, Escape hierarchy, and
   Shift fine slider adjustment.
 - Gamepad: D-pad/left-stick focus, A activation, B back, bumpers/category movement,
@@ -115,8 +117,10 @@ screens:
 ## Rendering and fallback
 
 - Local Barlow/IBM Plex fonts load; temporarily missing fonts fall back without crashing.
-- Procedural panels/buttons/bars stay opaque and preserve clipped corners, ink contours,
-  paper keylines, hard shadows, focus rings, and pointer bounds at every viewport.
+- Procedural panels/buttons/bars stay opaque and preserve clipped panel corners, rounded
+  button paper keylines, ink contours, hard shadows, focus rings, centered labels, and
+  pointer bounds at every viewport. Panel borders form uninterrupted bands through every
+  chamfer; button color stays inside the matching rounded keyline without corner wedges.
 - Halftone, bursts, and speed lines remain restrained behind characters/data and never
   obscure text or silhouettes.
 - The sticker shader produces a continuous black inner contour and rounded paper outer

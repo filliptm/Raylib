@@ -61,13 +61,6 @@ static Rectangle RefRectOffsetY(float x, float y, float width, float height,
     return bounds;
 }
 
-static Vector2 RefPointOffsetY(float x, float y, float referenceOffset)
-{
-    Vector2 point = UiRefPoint(x, y);
-    point.y += UiScale(referenceOffset);
-    return point;
-}
-
 static void DrawBackdrop(void)
 {
     UiDrawComicBackdrop();
@@ -82,8 +75,6 @@ static void DrawStationHeader(const App *w, const char *section)
 
     UiDrawTextOutline(UI_TEXT_HEADING, "BRAWL ARENA", UiRefPoint(50, 29),
                       t->yellow, t->ink, 2.0f);
-    UiDrawText(UI_TEXT_CAPTION, "HELIOS-9 // LIVE DEPLOYMENT",
-               UiRefPoint(50, 61), t->textSecondary);
 
     Rectangle sectionRect = UiRefRect(490, 28, 300, 42);
     UiDrawControlSurface(sectionRect, t->yellow, t->ink, false);
@@ -202,12 +193,10 @@ static void DrawHome(App *w, float logoScale, float railOffset)
     const UiTheme *t = g_ui->theme;
     BrawlerClass selected = (BrawlerClass)w->tune.selectedKit;
     const CharacterDefinition *character = ContentCharacter(&w->content, selected);
-    Color accent = CharacterAccent(w, selected);
 
     // The logo and sticker-like brawler are the authored signature; utility
     // controls and launch choices stay on a disciplined poster grid.
-    UiDrawArenaLogo(ScaleRectCentered(UiRefRect(22, 12, 330, 174), logoScale),
-                    "HELIOS-9 // LIVE DEPLOYMENT");
+    UiDrawArenaLogo(ScaleRectCentered(UiRefRect(22, 12, 330, 174), logoScale));
 
     // Sits in the free strip between the title block and the utility cluster; the
     // bottom row is fully occupied by the roster/mode/deploy panels.
@@ -227,10 +216,6 @@ static void DrawHome(App *w, float logoScale, float railOffset)
 
     Rectangle launch = RefRectOffsetY(24, 646, 1232, 130, railOffset);
     UiDrawFeaturePanel(launch, t->ink, t->paper, true);
-    UiDrawSignalRail(launch, t->yellow, false);
-
-    UiDrawText(UI_TEXT_CAPTION, "ACTIVE BRAWLER // CHANGE",
-               RefPointOffsetY(48, 658, railOffset), accent);
 
     UiResponse roster = UiButton(UiHash("home.roster"),
                                  RefRectOffsetY(46, 678, 276, 72, railOffset),
@@ -241,22 +226,19 @@ static void DrawHome(App *w, float logoScale, float railOffset)
     }
     Rectangle mode = RefRectOffsetY(344, 660, 398, 92, railOffset);
     UiDrawPanel(mode, t->ink, t->paper, false);
-    UiDrawTextAligned(UI_TEXT_CAPTION, "ACTIVE GAME MODE",
-                      RefRectOffsetY(410, 666, 266, 20, railOffset),
-                      UI_ALIGN_CENTER, t->paper);
     UiResponse previous = UiIconButton(UiHash("home.mode.previous"),
-                                       RefRectOffsetY(358, 692, 48, 48, railOffset),
+                                       RefRectOffsetY(358, 682, 48, 48, railOffset),
                                        UI_ICON_PREVIOUS, "Previous mode");
     UiResponse next = UiIconButton(UiHash("home.mode.next"),
-                                   RefRectOffsetY(680, 692, 48, 48, railOffset),
+                                   RefRectOffsetY(680, 682, 48, 48, railOffset),
                                    UI_ICON_NEXT, "Next mode");
     const char *modeName = w->tune.gemGrab ? "GEM GRAB" : "SKIRMISH";
-    Rectangle modeSlab = RefRectOffsetY(414, 688, 260, 56, railOffset);
+    Rectangle modeSlab = RefRectOffsetY(414, 678, 260, 56, railOffset);
     UiDrawControlSurface(modeSlab,
                          w->tune.gemGrab ? t->yellow : t->blue,
                          t->ink, true);
     UiDrawTextFit(UI_TEXT_HEADING, modeName,
-                  RefRectOffsetY(418, 688, 252, 56, railOffset),
+                  RefRectOffsetY(418, 678, 252, 56, railOffset),
                   UI_ALIGN_CENTER, w->tune.gemGrab ? t->ink : t->paper);
     if (previous.activated || next.activated || g_ui->previousPressed || g_ui->nextPressed)
     {

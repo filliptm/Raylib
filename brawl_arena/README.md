@@ -24,7 +24,8 @@ Requires raylib 5.5+ (`brew install raylib`).
 The **launch deck** is a deliberately quiet deployment screen: the game title and
 utilities sit above an open character stage, while the bottom rail contains the active
 brawler switcher, active mode, Practice, and the single primary **DEPLOY** action. Combat
-stats and ability copy stay out of this screen so choosing a session remains the focus.
+stats, deployment tags, and redundant rail captions stay out of this screen so choosing
+a session remains the focus.
 
 **BRAWLERS** opens the roster bay. Navigation changes a candidate preview; **SELECT**
 commits that candidate to the profile, while Back leaves the previous selection intact.
@@ -40,8 +41,13 @@ result screen, and tuning controls support pointer and keyboard focus; player-fa
 screens also support gamepad focus.
 
 The shell and HUD use the **Arena Ink** skin: saturated blue, red, and yellow poster
-fields; heavy black contours; paper keylines; clipped corners; hard shadows; halftone;
-and code-drawn bursts and speed lines. The Brawl Arena wordmark and all UI geometry are
+fields; heavy black contours; rounded button paper keylines; clipped panel corners; hard
+shadows; halftone; and code-drawn bursts and speed lines. Button labels remain centered
+independently of their leading icons. Panel borders are closed filled bands rather than
+disconnected edge segments, and button color is contained by the same rounded path as
+its paper keyline. Pointer hover deepens and lifts the face without drawing another
+polygon around it; keyboard/gamepad focus remains a separate high-contrast ring. The
+Brawl Arena wordmark and all UI geometry are
 drawn procedurally, so they scale cleanly without a runtime UI texture atlas. Each
 brawler adds a mechanic-derived saw, crosshair, blast, shield, or growth motif around
 the shared vector podium. The logo, character, and launch rail use one short orchestrated

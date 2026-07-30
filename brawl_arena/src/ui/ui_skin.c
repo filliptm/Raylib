@@ -28,8 +28,38 @@ static void ComicPoints(Rectangle r, float cut, bool feature, Vector2 points[8])
     points[7] = (Vector2){ r.x + r.width - notch, r.y };
 }
 
-static void DrawComicShape(Rectangle bounds, Color fill, Color edge,
-                           bool raised, bool feature)
+static Rectangle InsetRect(Rectangle bounds, float amount)
+{
+    return (Rectangle){
+        bounds.x + amount,
+        bounds.y + amount,
+        fmaxf(0.0f, bounds.width - amount*2.0f),
+        fmaxf(0.0f, bounds.height - amount*2.0f)
+    };
+}
+
+static void DrawClosedStroke(const Vector2 *points, int count,
+                             float thickness, Color color)
+{
+    for (int i = 0; i < count; i++)
+        DrawLineEx(points[i], points[(i + 1)%count], thickness, color);
+
+    // DrawLineEx renders every edge independently. Capping each shared vertex closes
+    // the tiny wedges those segments otherwise leave at chamfer transitions.
+    float radius = thickness*0.5f;
+    for (int i = 0; i < count; i++)
+        DrawCircleV(points[i], radius, color);
+}
+
+static float RoundnessForRadius(Rectangle bounds, float radius)
+{
+    float diameter = fminf(bounds.width, bounds.height);
+    if (diameter <= 0.0f) return 0.0f;
+    return Clamp(radius*2.0f/diameter, 0.0f, 1.0f);
+}
+
+static void DrawComicShape(Rectangle bounds, Color fill, Color contour, Color edge,
+                           bool raised, bool feature, bool roundedKeyline)
 {
     float stroke = StrokeFor(bounds);
     float cut = CutFor(bounds, feature);
@@ -45,9 +75,37 @@ static void DrawComicShape(Rectangle bounds, Color fill, Color edge,
     }
 
     ComicPoints(bounds, cut, feature, points);
-    if (fill.a > 0) DrawTriangleFan(points, 8, fill);
-    for (int i = 0; i < 8; i++)
-        DrawLineEx(points[i], points[(i + 1)%8], stroke, edge);
+    if (roundedKeyline && fill.a > 0)
+    {
+        // The clipped ink silhouette remains the comic signature, while the colored
+        // face and paper border are two nested rounded fills. Sharing that path keeps
+        // color inside the keyline instead of leaking into its corner cutouts.
+        DrawTriangleFan(points, 8, contour);
+        Rectangle keyline = InsetRect(bounds, stroke*1.30f);
+        float lineWidth = fmaxf(1.25f, stroke*0.48f);
+        float radius = fminf(keyline.width, keyline.height)*0.17f;
+        DrawRectangleRounded(keyline, RoundnessForRadius(keyline, radius), 8,
+                             (Color){ 255, 247, 219, 220 });
+
+        Rectangle face = InsetRect(keyline, lineWidth);
+        DrawRectangleRounded(face,
+                             RoundnessForRadius(face, fmaxf(1.0f, radius - lineWidth)),
+                             8, fill);
+        DrawClosedStroke(points, 8, fmaxf(1.25f, stroke*0.45f), edge);
+        return;
+    }
+
+    if (fill.a > 0)
+    {
+        // A filled outer silhouette plus an inset face makes the border one closed
+        // band. The face uses the same chamfer family, so no background can peek
+        // through where independently drawn edge segments used to meet.
+        DrawTriangleFan(points, 8, edge);
+        Rectangle face = InsetRect(bounds, stroke);
+        ComicPoints(face, fmaxf(2.0f, cut - stroke), feature, points);
+        DrawTriangleFan(points, 8, fill);
+    }
+    else DrawClosedStroke(points, 8, stroke, edge);
 
     if (fill.a > 0 && (raised || feature) &&
         bounds.width > stroke*6.0f && bounds.height > stroke*6.0f)
@@ -58,10 +116,10 @@ static void DrawComicShape(Rectangle bounds, Color fill, Color edge,
             bounds.width - stroke*3.1f,
             bounds.height - stroke*3.1f
         };
-        ComicPoints(keyline, fmaxf(2.0f, cut - stroke), feature, points);
         Color line = { 255, 247, 219, feature ? 185 : 135 };
-        for (int i = 0; i < 8; i++)
-            DrawLineEx(points[i], points[(i + 1)%8], fmaxf(1.0f, stroke*0.42f), line);
+        float lineWidth = fmaxf(1.0f, stroke*0.42f);
+        ComicPoints(keyline, fmaxf(2.0f, cut - stroke), feature, points);
+        DrawClosedStroke(points, 8, lineWidth, line);
     }
 }
 
@@ -81,15 +139,15 @@ bool UiSkinDrawPanel(const UiSkin *skin, Rectangle bounds, Color fill,
                      Color edge, bool raised, bool feature)
 {
     if (!skin || !skin->ready) return false;
-    DrawComicShape(bounds, fill, edge, raised, feature);
+    DrawComicShape(bounds, fill, edge, edge, raised, feature, false);
     return true;
 }
 
 bool UiSkinDrawButton(const UiSkin *skin, Rectangle bounds, Color fill,
-                      Color edge, bool raised)
+                      Color contour, Color edge, bool raised)
 {
     if (!skin || !skin->ready) return false;
-    DrawComicShape(bounds, fill, edge, raised, true);
+    DrawComicShape(bounds, fill, contour, edge, raised, true, true);
     return true;
 }
 

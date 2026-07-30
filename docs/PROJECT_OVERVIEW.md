@@ -748,7 +748,8 @@ target before the backbuffer pass. `MenuDraw()` paints the procedural comic back
 typed mechanic motif, and flat vector podium; composites the rounded outlined sticker
 through its shader; then draws screen controls, overlays, and the transition fade at
 native UI resolution. The wordmark, sticker, and launch rail share one short entrance,
-with an immediate reduced-motion resolution.
+with an immediate reduced-motion resolution. The launch deck keeps the wordmark and
+bottom controls free of secondary deployment/brawler/mode captions and side markers.
 
 When Gem Grab ends, player/AI/projectile simulation freezes while effects and the camera
 finish presenting the result. The result is banked into the profile once. Continue
@@ -970,13 +971,17 @@ The presentation layer owns:
   the same exact showcase: 180° yaw, 0.90 scale, zero offset, camera
   `(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV. Swapping candidates
   replaces only the model; the stage clock and background continue uninterrupted.
-- The procedural Arena Ink interface: opaque chamfered shapes, thick ink contours,
-  paper keylines, offset shadows, bold blue/red/yellow fields, halftone, bursts, speed
-  lines, a code-drawn Brawl Arena wordmark, and mechanic-derived saw/crosshair/blast/
-  shield/growth character motifs. Short HUD stamps cover KO, ultimate-ready, Shell
+- The procedural Arena Ink interface: opaque chamfered panels, clipped button bodies,
+  continuous filled panel borders, matched rounded button faces/paper keylines, centered
+  button labels, thick ink contours, offset shadows, bold blue/red/yellow fields,
+  halftone, bursts, speed lines, a code-drawn Brawl Arena wordmark, and mechanic-derived
+  saw/crosshair/blast/shield/growth character motifs. Short HUD stamps cover
+  KO, ultimate-ready, Shell
   break, downed, and Gem Grab team-lock transitions; results use a full three-action
-  poster. The former Kenney/OpenGameArt UI packs remain licensed reference material but
-  are not loaded at runtime.
+  poster. Pointer hover uses face-tone and lift feedback without an added polygon
+  perimeter; keyboard/gamepad focus retains its independent contrast ring. The former
+  Kenney/OpenGameArt UI packs remain licensed reference material but are not loaded at
+  runtime.
 - Body-anchored health bars with their point values centered inside: the player team
   stays green and opponents stay red at every health level, reinforced by distinct
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate

@@ -94,7 +94,7 @@ void UiDrawDecoration(UiDecoration decoration, Rectangle bounds, Color tint, flo
 void UiDrawCharacterMotif(CharacterUiMotif motif, Rectangle bounds,
                           Color primary, Color secondary, float opacity);
 void UiDrawComicBackdrop(void);
-void UiDrawArenaLogo(Rectangle bounds, const char *tagline);
+void UiDrawArenaLogo(Rectangle bounds);
 UiResponse UiInteract(UiId id, Rectangle bounds, bool enabled);
 UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
                     UiButtonStyle style, UiIcon icon);
