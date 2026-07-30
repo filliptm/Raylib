@@ -15,6 +15,7 @@
 #include "weapons.h"
 #include "ai.h"
 #include "player.h"
+#include "player_touch.h"
 #include "render.h"
 #include "camera.h"
 #include "effects.h"
@@ -30,8 +31,11 @@
 #include "map_content.h"
 #include "game_random.h"
 #include "ui_system.h"
+#include "mobile_controls.h"
+#include "platform.h"
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 #include "raymath.h"
 
 #define SCREEN_WIDTH 1280
@@ -40,6 +44,9 @@
 static App world;
 static Assets assets;
 static UiSystem ui;
+static bool appReady;
+static float resizeSettle = -1.0f;
+static float requestedRenderScale = 1.0f;
 
 static const Color SKY_COLOR = { 22, 26, 38, 255 };
 
@@ -72,6 +79,7 @@ static void ResetMatch(App *w, BrawlerClass playerClass)
     memset(&w->session, 0, sizeof(w->session));
     memset(&w->controller, 0, sizeof(w->controller));
     memset(&w->presentation, 0, sizeof(w->presentation));
+    PlayerTouchReset(w);
     HudResetFeedback();
     w->session.sandbox = sandbox;
     GameRandomSeed(&w->session.random, 0xB4A71E5u);
@@ -161,7 +169,11 @@ static void DrawOverlays(App *w)
     HudDrawBars(w);
     FxDrawScreen(w);
     HudDrawPanel(w);
+#if defined(BRAWL_MOBILE)
+    MobileControlsDraw(w);
+#else
     CommandCenterDraw(w);
+#endif
 }
 
 // Banks a finished match into the profile exactly once.
@@ -177,12 +189,25 @@ static void BankResult(App *w)
     ConfigMarkDirty();
 }
 
-int main(void)
+static float RuntimeRenderScale(void)
+{
+    return AppPlatformIsMobile() ? fminf(world.tune.renderScale, 1.0f)
+                                 : world.tune.renderScale;
+}
+
+static void AppReady(void)
 {
     // The supersampled post target stabilizes the normal world path. Backbuffer MSAA
     // remains enabled for post-off rendering, resize settling, and target failures.
+    if (!AppPlatformPreparePaths()) return;
     ConfigInitialize(&world);
 
+#if defined(BRAWL_MOBILE)
+    unsigned int flags = FLAG_FULLSCREEN_MODE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT;
+    SetConfigFlags(flags);
+    InitWindow(0, 0, "Brawl Arena");
+    SetTargetFPS(60);
+#else
     unsigned int flags = FLAG_VSYNC_HINT | FLAG_WINDOW_RESIZABLE | FLAG_MSAA_4X_HINT;
     SetConfigFlags(flags);
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "Brawl Arena");
@@ -192,6 +217,7 @@ int main(void)
     // top of the blocking buffer swap made the two clocks beat against each other,
     // producing alternating short/long frames.
     SetTargetFPS(0);
+#endif
 
     // ESC must mean "back", not "quit", now that there are screens to back out of.
     SetExitKey(KEY_NULL);
@@ -204,7 +230,7 @@ int main(void)
         TraceLog(LOG_ERROR, "Map catalog: %s", mapStatus);
         UiSystemUnload(&ui);
         CloseWindow();
-        return 1;
+        return;
     }
 
     // Authored attack documents: tracked project truth first, then the local
@@ -222,29 +248,46 @@ int main(void)
     // World targets use drawable pixels. UI and input intentionally continue using
     // logical screen coordinates; keeping the two domains separate also remains
     // correct when a platform exposes a HiDPI framebuffer.
-    AssetsLoad(&assets, GetRenderWidth(), GetRenderHeight(), world.tune.renderScale);
+    AssetsLoad(&assets, GetRenderWidth(), GetRenderHeight(), RuntimeRenderScale());
     RenderSetAssets(&assets);
     MenuInit(&assets, &ui);
 
     ResetMatch(&world, (BrawlerClass)world.tune.selectedKit);
     world.flow.screen = SCREEN_MENU;
+#if defined(BRAWL_MOBILE)
+    // Read-only simulator/device smoke hook: launch directly into gameplay without
+    // adding a production-facing menu path or mutating any persisted configuration.
+    const char *smokeMatch = getenv("BRAWL_IOS_SMOKE_MATCH");
+    if (smokeMatch && strcmp(smokeMatch, "1") == 0)
+        world.flow.screen = SCREEN_MATCH;
+#endif
+    resizeSettle = -1.0f;
+    requestedRenderScale = RuntimeRenderScale();
+    appReady = true;
+}
 
-    float resizeSettle = -1.0f;
-    float requestedRenderScale = world.tune.renderScale;
-    while (!WindowShouldClose() && !world.flow.quitRequested)
-    {
+static void AppFrame(bool viewSizeChanged)
+{
+    if (!appReady) return;
         float realDt = GetFrameTime();
         if (realDt > 0.05f) realDt = 0.05f;
+        AppSafeInsets safeInsets = AppPlatformSafeInsets();
+        UiSystemSetViewportInsets(
+            &ui, (UiViewportInsets){
+                safeInsets.top, safeInsets.left,
+                safeInsets.bottom, safeInsets.right
+            });
         UiSystemBeginFrame(&ui, &world.uiPreferences,
                            GetScreenWidth(), GetScreenHeight(), realDt);
 
         // A live drag-resize reports a new size every frame; rebuilding the scene
         // framebuffer each time hitched the whole drag. The target is recreated once
         // the size has settled, with direct rendering (no post) covering the gap.
-        if (IsWindowResized()) resizeSettle = 0.15f;
-        if (fabsf(world.tune.renderScale - requestedRenderScale) > 0.0005f)
+        if (IsWindowResized() || viewSizeChanged) resizeSettle = 0.15f;
+        float renderScale = RuntimeRenderScale();
+        if (fabsf(renderScale - requestedRenderScale) > 0.0005f)
         {
-            requestedRenderScale = world.tune.renderScale;
+            requestedRenderScale = renderScale;
             resizeSettle = 0.15f;
         }
         if (resizeSettle >= 0.0f)
@@ -275,7 +318,9 @@ int main(void)
         {
             float dt = realDt*world.tune.timeScale;
 
+#if !defined(BRAWL_MOBILE)
             CommandCenterUpdate(&world);
+#endif
 
             GameContext game = AppGameContext(&world);
             bool decided = MatchIsOver(game);
@@ -295,8 +340,16 @@ int main(void)
             if (!locked && !decided)
             {
                 PlayerInput input = PlayerCaptureInput(&world);
-                HudObservePlayerInput(&world, &input);
-                PlayerUpdate(&world, &input, dt);
+                if (input.pausePressed)
+                {
+                    PlayerTouchReset(&world);
+                    ShellRequestScreen(&world, SCREEN_MENU);
+                }
+                else
+                {
+                    HudObservePlayerInput(&world, &input);
+                    PlayerUpdate(&world, &input, dt);
+                }
             }
 
             if (!decided)
@@ -337,6 +390,7 @@ int main(void)
                     ShellRequestScreen(&world, SCREEN_BRAWLERS);
             }
         }
+#if !defined(BRAWL_MOBILE)
         else if (world.flow.screen == SCREEN_STUDIO)
         {
             // The studio owns its own clock (slow motion, pause, stepping); the
@@ -350,6 +404,7 @@ int main(void)
                                       world.session.brawlerCount,
                                       world.tune.moveSpeed, studioDt);
         }
+#endif
         else
         {
             world.session.time += realDt;
@@ -362,7 +417,8 @@ int main(void)
         //--- Present -------------------------------------------------------------
         if (world.flow.screen == SCREEN_MATCH || world.flow.screen == SCREEN_STUDIO)
         {
-            bool usePost = world.tune.postFx && assets.postOk &&
+            bool usePost = !AppPlatformIsMobile() &&
+                           world.tune.postFx && assets.postOk &&
                            assets.sceneTarget.texture.id > 0 &&
                            assets.sceneOutputWidth == GetRenderWidth() &&
                            assets.sceneOutputHeight == GetRenderHeight() &&
@@ -416,12 +472,48 @@ int main(void)
             EndDrawing();
         }
         UiSystemEndFrame(&ui);
-    }
+}
 
+static void AppDestroy(void)
+{
+    if (!appReady) return;
     ConfigFlush(&world);
     MenuUnload();
     UiSystemUnload(&ui);
     AssetsUnload(&assets);
     CloseWindow();
+    appReady = false;
+}
+
+#if defined(PLATFORM_IOS)
+void ios_ready(void)
+{
+    AppReady();
+}
+
+void ios_update(bool viewSizeChanged)
+{
+    AppFrame(viewSizeChanged);
+}
+
+void ios_destroy(void)
+{
+    AppDestroy();
+}
+
+void ios_resign_active(void)
+{
+    if (!appReady) return;
+    PlayerTouchReset(&world);
+    ConfigFlush(&world);
+}
+#else
+int main(void)
+{
+    AppReady();
+    while (appReady && !WindowShouldClose() && !world.flow.quitRequested)
+        AppFrame(false);
+    AppDestroy();
     return 0;
 }
+#endif

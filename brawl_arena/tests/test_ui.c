@@ -1,6 +1,8 @@
 #include "ui_system.h"
 #include "content_catalog.h"
 #include "hud.h"
+#include "player_touch.h"
+#include "raymath.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -47,6 +49,58 @@ int main(void)
         CHECK(44.0f*scale >= 33.0f,
               "minimum player target became too small at a supported viewport");
     }
+
+    UiViewportInsets phoneInsets = { 0.0f, 59.0f, 21.0f, 59.0f };
+    Rectangle phoneSafe = UiReferenceSafeRectWithInsets(
+        874, 402, 1.0f, phoneInsets);
+    CHECK(phoneSafe.x >= phoneInsets.left &&
+          phoneSafe.y >= phoneInsets.top &&
+          phoneSafe.x + phoneSafe.width <= 874.0f - phoneInsets.right + 0.01f &&
+          phoneSafe.y + phoneSafe.height <= 402.0f - phoneInsets.bottom + 0.01f,
+          "notched-phone UI safe rectangle escaped its usable viewport");
+
+    Rectangle smallTarget = { 20, 30, 18, 24 };
+    Rectangle touchTarget = UiTouchTargetBounds(smallTarget, 44.0f);
+    CHECK(Near(touchTarget.width, 44.0f) && Near(touchTarget.height, 44.0f) &&
+          Near(touchTarget.x + touchTarget.width*0.5f,
+               smallTarget.x + smallTarget.width*0.5f) &&
+          Near(touchTarget.y + touchTarget.height*0.5f,
+               smallTarget.y + smallTarget.height*0.5f),
+          "touch target expansion changed the visual target center");
+
+    MobileControlLayout mobile = PlayerTouchLayout(
+        874, 402, (AppSafeInsets){ 0.0f, 59.0f, 21.0f, 59.0f });
+    CHECK(mobile.safe.x >= 59.0f &&
+          mobile.safe.x + mobile.safe.width <= 815.01f &&
+          mobile.safe.y + mobile.safe.height <= 381.01f,
+          "mobile controls escaped the iPhone safe area");
+    CHECK(mobile.mainRadius >= 54.0f && mobile.actionRadius >= 38.0f,
+          "mobile controls fell below their physical target floor");
+    CHECK(Vector2Distance(mobile.attackHome, mobile.secondaryHome) >
+              mobile.mainRadius + mobile.actionRadius,
+          "secondary control overlaps the attack stick");
+
+    Camera3D phoneCamera = {
+        .position = { 0.0f, 10.0f, 10.0f },
+        .target = { 0.0f, 0.0f, 0.0f },
+        .up = { 0.0f, 1.0f, 0.0f },
+        .fovy = 45.0f,
+        .projection = CAMERA_PERSPECTIVE
+    };
+    Vector3 touchRight = PlayerTouchCameraIntent(
+        phoneCamera, (Vector2){ 1.0f, 0.0f });
+    Vector3 touchForward = PlayerTouchCameraIntent(
+        phoneCamera, (Vector2){ 0.0f, -1.0f });
+    CHECK(touchRight.x > 0.99f && fabsf(touchRight.z) < 0.01f &&
+          touchForward.z < -0.99f && fabsf(touchForward.x) < 0.01f,
+          "touch stick directions no longer follow the arena camera");
+
+    UiSystem touchUi = { 0 };
+    touchUi.modality = UI_INPUT_TOUCH;
+    touchUi.glyphMode = UI_GLYPH_AUTO;
+    UiSystemSetActive(&touchUi);
+    CHECK(strcmp(UiBindingLabel("LMB", "RT", "ATTACK"), "ATTACK") == 0,
+          "automatic glyph mode did not select touch language");
 
     UiFocusNode nodes[] = {
         { 1, { 0, 0, 80, 50 }, true },

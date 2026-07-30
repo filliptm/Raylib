@@ -16,6 +16,8 @@ brawl_arena/tuning.cfg
 brawl_arena/tuning.local.cfg
 brawl_arena/profile.cfg
 brawl_arena/attacks.local.cfg
+brawl_arena/apple/ThirdParty/
+brawl_arena/apple/DerivedData/
 
 # Local logs
 logs/

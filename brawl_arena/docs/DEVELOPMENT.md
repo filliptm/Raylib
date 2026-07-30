@@ -16,11 +16,21 @@ make check-character-assets # validate rigs, clips, outputs, and 1K textures
 make validate-config    # validate tracked canonical project values
 make test               # Python asset-pipeline tests + seventeen C test executables
 make sanitize           # clean sanitizer headless run
+make ios-bootstrap      # fetch/verify the pinned raylib-iOS source and apply its patch
+make ios-project        # generate the Xcode project
+make ios-simulator      # build for the named simulator (default: iPhone 17 Pro)
+make ios-device         # signed device build; requires BRAWL_DEVELOPMENT_TEAM
 make clean
 ```
 
 Requires raylib 5.5 or newer. The current macOS build uses `pkg-config` plus OpenGL,
 Cocoa, IOKit, and CoreVideo frameworks.
+
+The iPhone target requires Xcode and CMake, targets iOS 15.6+, and uses a pinned
+raylib-iOS fork with a tracked compatibility patch. It packages project content into the
+app bundle and maps writable player files to Application Support. See
+[`../apple/README.md`](../apple/README.md) for bootstrap, signing, install, smoke launch,
+and pin-update procedures.
 
 On non-Darwin platforms the sanitizer target uses ASan and UBSan. The current Apple
 clang/macOS 26 ASan runtime deadlocks during its own process initialization, so Darwin
@@ -39,6 +49,7 @@ require adding its object to that target.
 | Designer values, character/ability definitions, map/config parsing | `src/content` |
 | Match rules, AI, actors, weapons, statuses, objective | `src/game` |
 | Main loop, local controller/input, authoring commands | `src/app` |
+| Touch contacts, virtual-stick mapping, safe areas, platform paths | `src/app` |
 | Camera, assets, shaders, effects, visuals, environment | `src/presentation` |
 | Menu or HUD | `src/ui` |
 | Shared comic geometry and decorative motifs | `src/ui/ui_skin.[ch]` |
@@ -49,6 +60,7 @@ require adding its object to that target.
 | Mesh-only characters and reusable clips | `resources/characters` |
 | Character import, retargeting, and validation | `tools/character_pipeline`, `tools/*.py` |
 | Canonical numeric defaults | `config/gameplay.cfg` |
+| iPhone bridge, bundle metadata, dependency patch, Xcode generator | `apple`, `tools/*ios*.sh` |
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before moving APIs between layers.
 
@@ -138,8 +150,12 @@ widget action → GameCommand → app command handler → GameContext API
 Captured player input:
 
 ```text
-raylib state → PlayerInput → PlayerUpdate → GameContext API
+raylib keyboard/mouse/gamepad/touch state → PlayerInput → PlayerUpdate → GameContext API
 ```
+
+Touch code belongs in the app layer. It may use camera orientation to map a virtual
+stick into world movement, but it must emit ordinary `PlayerInput`; deterministic
+simulation cannot read platform contacts or UI geometry.
 
 Do not bypass these routes for convenience; the dependency check and headless replay
 test exist to keep simulation usable without a window.
@@ -158,7 +174,7 @@ test exist to keep simulation usable without a window.
 | `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
-| `test_ui` | four viewport layouts, minimum targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, and the shared showcase |
+| `test_ui` | viewport/safe-area layouts, 44-point targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, mobile-control placement/camera mapping/touch language, and the shared showcase |
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
@@ -200,6 +216,14 @@ matrix. At minimum, after changes to runtime/presentation:
 - On separate fresh launches, confirm Play and Practice each begin with the command
   center closed, `TAB` opens it, and the WORLD match-camera slider changes framing live
   without changing pitch or clipping the arena at either endpoint.
+- In the iPhone simulator, check the landscape launch deck and a direct match smoke
+  launch (`BRAWL_IOS_SMOKE_MATCH=1`) at a notched safe area. Confirm the desktop-only
+  Studio, Quit, and command center controls are absent, the backdrop fills the display,
+  imported CPU-skinned characters are stable, and every touch control stays clear of
+  the objective and pause.
+- On a physical iPhone, install and launch the signed bundle, then exercise simultaneous
+  move/aim, tap auto-aim, attack release, Super release, each kit's Skill interaction,
+  pause/background/resume, rotation lock, and sustained-play responsiveness.
 
 Report when the graphical checklist was not run; passing headless tests does not compile
 GPU shaders or validate visual alignment.

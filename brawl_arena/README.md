@@ -12,12 +12,25 @@ a real opponent.
 
 ## Quick Start
 
+Desktop:
+
 ```bash
 cd brawl_arena
 make run
 ```
 
 Requires raylib 5.5+ (`brew install raylib`).
+
+iPhone simulator:
+
+```bash
+cd brawl_arena
+make ios-simulator
+```
+
+The iPhone build uses the pinned raylib-iOS fork rather than Homebrew raylib. For
+one-time setup, physical-device signing, installation, runtime policy, and current
+limitations, see [the iPhone build guide](apple/README.md).
 
 ## Screens
 
@@ -86,6 +99,13 @@ is disabled so this navigation remains explicit.
 | `TAB` | Open / close the command center |
 | `ESC` | Back a screen — select to menu, match to menu, menu quits |
 | `R` | Reset the match (keeps your tuning) |
+
+On iPhone, play in landscape with four safe-area-aware touch controls: drag the left
+stick to move; drag and release the right stick to aim and fire; tap the right stick for
+auto-aim; drag and release **SUPER** to aim and cast; and hold, drag, or release
+**SKILL** according to the selected brawler's secondary. The pause button is at the
+top-right. Touch contacts keep stable ownership, so moving and aiming work
+simultaneously.
 
 ## What's implemented
 
@@ -413,6 +433,12 @@ the drawable framebuffer rather than logical UI coordinates, preserving that rat
 the two differ on a HiDPI platform. The shader receives separate source- and
 output-resolution uniforms, so resize and scale changes preserve both scene sampling
 and authored screen-space effect sizes.
+The iPhone build uses the same authored gameplay and shaders through OpenGL ES 3, but
+caps world rendering at native resolution and disables the post-processing pass to keep
+touch response and thermal cost predictable. Imported character animation is CPU-skinned
+on iPhone before the normal lighting pass; desktop retains GPU skinning. The HUD remains
+at native resolution, and the launch backdrop fills the display behind the safe-area
+edges while controls remain inset.
 The WORLD tab also authors `presentation.match_camera_distance` from 20 to 60 world
 units. Its tracked default is 38.013156—the length of the original `{0, 31, -22}`
 follow offset—so changing it moves the camera along the established pitch without
@@ -566,11 +592,14 @@ src/
 
 Reusable asset libraries live outside `src/`: character models/animations under
 `resources/characters/`, interface art under `resources/ui/`, ability art under
-`resources/vfx/`, and generated runtime outputs under `build/assets/`.
+`resources/vfx/`, generated runtime outputs under `build/assets/`, and the iPhone bridge,
+bundle metadata, pinned dependency patch, and Xcode generator under `apple/`.
 
 `App` separately owns match simulation, local controller state, presentation state,
 screen flow, effective tuning, typed content, and configuration provenance. Match reset
-clears only the match/controller/presentation regions.
+clears only the match/controller/presentation regions. The app layer also captures
+platform touch contacts into `PlayerInput`; simulation remains unaware of UIKit, raylib
+touch APIs, safe areas, and virtual-control geometry.
 
 Game systems receive only a `GameContext` containing session, tuning, and content. They
 cannot see the camera or UI, do not read devices, and emit `GameEvent` records instead of
@@ -594,6 +623,7 @@ See:
   styling and screen references, plus the historical pre-implementation audit
 - [Arena Ink implementation record](docs/visual-design/IMPLEMENTATION_PLAN.md) —
   implementation record, architecture, milestones, and acceptance gates
+- [iPhone build and device guide](apple/README.md)
 
 ## Gem Grab
 
@@ -644,6 +674,13 @@ sandbox it started as, with the static training bots.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
 - Locomotion clips switch without crossfading; explicit action overlays blend in and out.
 - Mortar still uses the primitive fallback character.
+- The iPhone target depends on a pinned community raylib-iOS fork plus a tracked
+  compatibility patch. Its ANGLE GPU-bone path is not used; iPhone applies the imported
+  rigs on the CPU and draws their updated meshes through the ordinary lighting shader.
+  Sustained-play performance and thermal behavior still require physical-device release
+  validation.
+- The pinned iOS shell still uses the AppDelegate lifecycle and produces a UIKit warning
+  that UIScene lifecycle adoption will be required by a future iOS release.
 - Headless tests cover version-3 configuration plus v1/v2 migration, Guardian behavior,
   Tank sustain/mobility/Charge, Scrapper returning discs/Shell lifecycle/AI/cover/ownership,
   Longshot twin-shot damage/spacing/trajectory/charge and Grapple

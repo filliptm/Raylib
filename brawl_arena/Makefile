@@ -170,11 +170,13 @@ $(SECONDARIES_TEST_TARGET): tests/test_secondaries.c $(GAME_CORE_OBJECTS)
 
 $(UI_TEST_TARGET): tests/test_ui.c $(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o \
 	$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/ui/ui_skin.o \
-	$(OBJ_DIR)/content/content_catalog.o
+	$(OBJ_DIR)/content/content_catalog.o $(OBJ_DIR)/app/player_touch.o \
+	$(OBJ_DIR)/app/platform.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_ui.c \
-		$(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o $(OBJ_DIR)/ui/ui_icons.o \
-		$(OBJ_DIR)/ui/ui_skin.o \
-		$(OBJ_DIR)/content/content_catalog.o $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
+	$(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o $(OBJ_DIR)/ui/ui_icons.o \
+	$(OBJ_DIR)/ui/ui_skin.o \
+	$(OBJ_DIR)/content/content_catalog.o $(OBJ_DIR)/app/player_touch.o \
+	$(OBJ_DIR)/app/platform.o $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(CHARACTER_ANIMATION_TEST_TARGET): tests/test_character_animation.c \
 		$(OBJ_DIR)/presentation/character_animation.o
@@ -251,6 +253,29 @@ clean:
 
 rebuild: clean all
 
+ios-bootstrap:
+	sh tools/bootstrap_ios.sh
+	$(MAKE) character-assets vfx-assets
+
+ios-project:
+	sh tools/generate_ios_project.sh
+
+ios-simulator: ios-project
+	xcodebuild -project apple/build/BrawlArenaIOS.xcodeproj \
+		-scheme BrawlArena \
+		-destination 'platform=iOS Simulator,name=$(or $(IOS_SIMULATOR),iPhone 17 Pro)' \
+		CODE_SIGNING_ALLOWED=NO build
+
+ios-device: ios-project
+	@test -n "$(BRAWL_DEVELOPMENT_TEAM)" || \
+		{ echo "Set BRAWL_DEVELOPMENT_TEAM to an Apple team ID."; exit 1; }
+	xcodebuild -project apple/build/BrawlArenaIOS.xcodeproj \
+		-scheme BrawlArena \
+		-destination 'generic/platform=iOS' \
+		DEVELOPMENT_TEAM="$(BRAWL_DEVELOPMENT_TEAM)" \
+		CODE_SIGN_STYLE=Automatic \
+		-allowProvisioningUpdates build
+
 test: check-architecture check-ui check-character-assets check-vfx-assets $(TEST_TARGET) $(HEALER_TEST_TARGET) $(NO_SHAKE_TEST_TARGET) $(ARENA_TEST_TARGET) $(GAMEPLAY_TEST_TARGET) $(REGEN_TEST_TARGET) $(TANK_TEST_TARGET) $(LONGSHOT_TEST_TARGET) $(SCRAPPER_TEST_TARGET) $(SECONDARIES_TEST_TARGET) $(STUDIO_TEST_TARGET) $(ATTACKS_TEST_TARGET) $(UI_TEST_TARGET) $(CHARACTER_ANIMATION_TEST_TARGET) $(VFX_TEST_TARGET) $(VFX_EVENTS_TEST_TARGET) $(CAMERA_TEST_TARGET)
 	python3 tests/test_character_pipeline.py
 	python3 tests/test_vfx_pipeline.py
@@ -305,6 +330,10 @@ help:
 	@echo "  make vfx-assets - build the curated ability-VFX atlases"
 	@echo "  make check-vfx-assets - validate VFX atlas and license metadata"
 	@echo "  make validate-config - validate tracked project defaults"
+	@echo "  make ios-bootstrap - fetch the pinned raylib-iOS dependency and build assets"
+	@echo "  make ios-project - generate the local Xcode project"
+	@echo "  make ios-simulator - build for the iPhone 17 Pro simulator (override IOS_SIMULATOR)"
+	@echo "  make ios-device BRAWL_DEVELOPMENT_TEAM=TEAMID - signed generic iOS device build"
 	@echo "  make clean  - remove build artifacts"
 
-.PHONY: all run debug sanitize sanitize-run clean rebuild test validate-config check-architecture check-ui ui-assets character-assets check-character-assets vfx-assets check-vfx-assets help
+.PHONY: all run debug sanitize sanitize-run clean rebuild ios-bootstrap ios-project ios-simulator ios-device test validate-config check-architecture check-ui ui-assets character-assets check-character-assets vfx-assets check-vfx-assets help

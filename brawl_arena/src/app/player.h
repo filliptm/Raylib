@@ -19,6 +19,7 @@ typedef struct PlayerInput {
     // Legacy replay field: treated as a secondary press.
     bool mobilityPressed;
     bool actionsBlocked;        // UI owns the pointer this frame
+    bool pausePressed;          // mobile pause/back affordance
 } PlayerInput;
 
 PlayerInput PlayerCaptureInput(App *w);

@@ -67,8 +67,8 @@ every surface with motion:
 `src/ui/ui_system.[ch]`
 
 - Owns process-lifetime fonts, theme/skin services, reference-canvas layout, text roles,
-  input modality, focus, control interaction, reduced-motion state, shared easing, and
-  drawing helpers.
+  pointer/keyboard/gamepad/touch modality, safe-area-aware layout, focus, control
+  interaction, reduced-motion state, shared easing, and drawing helpers.
 - Draws the Brawl Arena wordmark, outlined text, panels, buttons, toggles, keycaps,
   progress bars, and focus rings.
 - Loads ASCII plus the em dash used by the player-facing copy.
@@ -99,6 +99,12 @@ every surface with motion:
 - Composes the objective, ability cards, impact stamps, tutorial, downed treatment, and
   three-action result poster.
 - Preserves body-anchored numeric health/shield bars and stable team colors.
+
+`src/ui/mobile_controls.[ch]`
+
+- Draws the floating Move and Attack sticks plus Super, Skill, and pause affordances.
+- Uses the Arena Ink palette, readiness/cooldown feedback, idle fade, native-resolution
+  placement, safe-area insets, and minimum 44-point touch targets.
 
 `src/devtools/command_center.c`, `command_widgets.c`, and `studio.c`
 
@@ -133,6 +139,8 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 - Centered sticker brawler on a blue arena stage.
 - Uninterrupted bottom rail with a blue brawler switcher, centered yellow mode choice,
   blue Practice, and the dominant red Deploy action.
+- On iPhone, the launch deck preserves the playable choices but omits desktop-only
+  Studio and Quit actions; app exit remains owned by iOS.
 
 ### Roster
 
@@ -148,6 +156,9 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 ### Match and results
 
 - Objective and ability surfaces use the comic geometry and stable semantic colors.
+- On iPhone, desktop ability/tutorial tiles yield to the two virtual sticks, separate
+  Super and Skill controls, and a safe-area pause action. The command center remains a
+  desktop authoring surface and is not shown.
 - Body bars use the shared ink-framed progress primitive.
 - KO/readiness/break/downed/team-lock reactions are brief comic stamps; Gem Grab lock
   also escalates the objective container.
@@ -166,6 +177,9 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
 
 - Layout scales from the 1280×800 reference canvas with a 960×600 minimum.
 - Player targets retain a 44-reference-pixel minimum.
+- iPhone layout first removes the platform safe-area insets, then scales the reference
+  canvas; the launch backdrop remains full-bleed behind those insets, and touch hit
+  regions expand to at least 44 points even when a visual is smaller.
 - Keyboard/gamepad focus uses an ink outer and paper inner ring, independent of hue.
 - Pointer hover deepens the button face and lifts it two pixels without adding a
   perimeter shape; press moves it down and deepens it further. Keyboard/gamepad focus
@@ -177,6 +191,8 @@ Secondary copy on the base surface meets the approved 3:1 large/supporting-text 
   state transitions visible; menu entrance and stamp pop resolve immediately.
 - High-contrast combat cues preserve distinct ally/enemy colors and icons.
 - Decorative patterns sit behind protected text and character regions.
+- Hover presentation is pointer-only. Touch uses pressed, held, readiness, and release
+  feedback without relying on hover or focus rings.
 
 ## Asset policy
 
@@ -210,6 +226,12 @@ On 2026-07-29:
   or icon overlap.
 - a hidden 1280-pixel launch-rail render verified continuous panel corners and matched
   button keyline/fill paths without exposed background wedges.
+- an iPhone 17 Pro simulator rendered the full-bleed landscape launch deck and a direct
+  match with correct notch-safe controls, stable imported CPU-skinned brawlers,
+  world/HUD composition, and all five mobile controls;
+- a signed arm64 bundle installed and launched on a physical iPhone 12 mini. Physical
+  multitouch feel and sustained-play thermal behavior were not exercised during this
+  verification.
 
 Earlier first-pass 1280×800 captures covered the launch deck, roster, Controls, match HUD,
 and Scrapper sticker. The enhancement pass did not use desktop input automation and did

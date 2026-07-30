@@ -361,6 +361,7 @@ static void DrawImpactStamp(const App *w)
     UiDrawTextFit(UI_TEXT_HEADING, label, panel, UI_ALIGN_CENTER, text);
 }
 
+#if !defined(BRAWL_MOBILE)
 static void DrawAbilityTile(Rectangle bounds, const char *eyebrow, const char *name,
                             const char *binding, float progress, bool ready,
                             Color accent)
@@ -398,7 +399,7 @@ static void DrawAbilities(App *w, const Brawler *player)
     float superProgress = Clamp(player->superCharge, 0.0f, 1.0f);
     bool superReady = superProgress >= 1.0f;
     DrawAbilityTile(UiRefRect(920, 666, 336, 110), "ULTIMATE", super->name,
-                    UiBindingLabel("RMB", "RB"), superProgress, superReady,
+                    UiBindingLabel("RMB", "RB", "SUPER"), superProgress, superReady,
                     CueColor(w, t->gold));
 
     if (secondary)
@@ -460,7 +461,7 @@ static void DrawAbilities(App *w, const Brawler *player)
         }
         DrawAbilityTile(UiRefRect(920, 548, 336, 104), "SECONDARY",
                         secondaryName,
-                        UiBindingLabel("SHIFT", "LB"), progress,
+                        UiBindingLabel("SHIFT", "LB", "SKILL"), progress,
                         ready,
                         CueColor(w, t->blue));
     }
@@ -472,38 +473,38 @@ static const char *NextTutorial(const App *w, const Brawler *player,
     int flags = w->uiPreferences.tutorialFlags;
     if (!(flags & TUTORIAL_MOVE))
     {
-        *binding = UiBindingLabel("WASD", "LEFT STICK");
+        *binding = UiBindingLabel("WASD", "LEFT STICK", "LEFT STICK");
         return "Move through the arena";
     }
     if (!(flags & TUTORIAL_AIM))
     {
-        *binding = UiBindingLabel("HOLD LMB", "HOLD RT");
+        *binding = UiBindingLabel("HOLD LMB", "HOLD RT", "DRAG ATTACK");
         return "Aim your main attack";
     }
     if (!(flags & TUTORIAL_FIRE))
     {
-        *binding = UiBindingLabel("RELEASE LMB", "RELEASE RT");
+        *binding = UiBindingLabel("RELEASE LMB", "RELEASE RT", "RELEASE");
         return "Release to fire";
     }
     if (!(flags & TUTORIAL_QUICK))
     {
-        *binding = UiBindingLabel("SPACE", "A");
+        *binding = UiBindingLabel("SPACE", "A", "TAP ATTACK");
         return "Try a quick auto-aim shot";
     }
     if (ContentSecondaryAbility(&w->content, player->cls) &&
         !(flags & TUTORIAL_MOBILITY))
     {
-        *binding = UiBindingLabel("SHIFT", "LB");
+        *binding = UiBindingLabel("SHIFT", "LB", "SKILL");
         return "Use your brawler ability";
     }
     if (player->superCharge >= 1.0f && !(flags & TUTORIAL_SUPER))
     {
-        *binding = UiBindingLabel("RMB", "RB");
+        *binding = UiBindingLabel("RMB", "RB", "SUPER");
         return "Your ultimate is ready";
     }
     if (w->session.sandbox && !(flags & TUTORIAL_COMMAND))
     {
-        *binding = UiBindingLabel("TAB", "VIEW");
+        *binding = UiBindingLabel("TAB", "VIEW", "PRACTICE TOOLS");
         return "Open the command center";
     }
     return NULL;
@@ -523,6 +524,7 @@ static void DrawTutorial(const App *w, const Brawler *player)
     UiDrawTextFit(UI_TEXT_BODY, prompt, UiRefRect(566, 710, 266, 38),
                   UI_ALIGN_LEFT, t->paper);
 }
+#endif
 
 static void DrawDowned(const Brawler *player, float respawnTotal)
 {
@@ -636,8 +638,10 @@ void HudDrawPanel(App *w)
     Brawler *player = &w->session.brawlers[w->session.playerIdx];
     DrawObjective(w);
     DrawImpactStamp(w);
+#if !defined(BRAWL_MOBILE)
     DrawAbilities(w, player);
     DrawTutorial(w, player);
+#endif
 
     if (!player->alive) DrawDowned(player, w->tune.playerRespawn);
     if (w->tune.gemGrab && !w->session.sandbox &&

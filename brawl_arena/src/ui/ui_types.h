@@ -13,7 +13,8 @@ typedef unsigned int UiId;
 typedef enum UiInputModality {
     UI_INPUT_POINTER = 0,
     UI_INPUT_KEYBOARD,
-    UI_INPUT_GAMEPAD
+    UI_INPUT_GAMEPAD,
+    UI_INPUT_TOUCH
 } UiInputModality;
 
 typedef enum UiGlyphMode {
@@ -69,6 +70,13 @@ typedef struct UiFrameLayout {
     Rectangle safe;
     Rectangle content;
 } UiFrameLayout;
+
+typedef struct UiViewportInsets {
+    float top;
+    float left;
+    float bottom;
+    float right;
+} UiViewportInsets;
 
 typedef struct UiFocusNode {
     UiId id;

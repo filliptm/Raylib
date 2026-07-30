@@ -511,8 +511,11 @@ static void DrawEditorPanel(App *w, Assets *assets)
     {
         // Runs the curated CC0 pipeline, then re-imports the textures without a
         // restart, so new source art shows up in the browser immediately.
-        int result = system("python3 tools/build_vfx_assets.py "
-                            "--manifest data/vfx/asset_manifest.json");
+        int result = -1;
+#if !defined(BRAWL_MOBILE)
+        result = system("python3 tools/build_vfx_assets.py "
+                        "--manifest data/vfx/asset_manifest.json");
+#endif
         AssetsReloadVfxAtlases(assets);
         SetStatus(result == 0 ? "Atlases rebuilt and reloaded."
                               : "Atlas rebuild failed; see console.");

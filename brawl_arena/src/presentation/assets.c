@@ -15,6 +15,15 @@
 #include <string.h>
 #include <math.h>
 
+#if defined(GRAPHICS_API_OPENGL_ES3)
+#define BRAWL_GLSL_HEADER \
+    "#version 300 es\n" \
+    "precision highp float;\n" \
+    "precision highp int;\n"
+#else
+#define BRAWL_GLSL_HEADER "#version 330\n"
+#endif
+
 // The arena and menu cameras never need raylib's 0.01..1000 default range. Moving the
 // near plane out is the important part: it concentrates depth precision where the
 // station's closely layered deck, panels, decals, and characters actually live.
@@ -109,7 +118,7 @@ void AssetsReloadVfxAtlases(Assets *assets)
 // silhouettes off the background, N point lights, and distance fog for depth.
 //------------------------------------------------------------------------------------
 static const char *VS_LIGHTING =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec3 vertexPosition;\n"
 "in vec2 vertexTexCoord;\n"
 "in vec3 vertexNormal;\n"
@@ -132,7 +141,7 @@ static const char *VS_LIGHTING =
 "}\n";
 
 static const char *FS_LIGHTING =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec3 fragPosition;\n"
 "in vec2 fragTexCoord;\n"
 "in vec4 fragColor;\n"
@@ -203,7 +212,7 @@ static const char *FS_LIGHTING =
 // vertexBoneWeights and boneMatrices by name, so a typo silently yields a T-pose.
 //------------------------------------------------------------------------------------
 static const char *VS_SKINNED =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "#define MAX_BONE_NUM 128\n"
 "in vec3 vertexPosition;\n"
 "in vec2 vertexTexCoord;\n"
@@ -247,7 +256,7 @@ static const char *VS_SKINNED =
 // Post pass: threshold-and-blur bloom plus a vignette and a gentle contrast lift.
 //------------------------------------------------------------------------------------
 static const char *FS_POST =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec2 fragTexCoord;\n"
 "in vec4 fragColor;\n"
 "uniform sampler2D texture0;\n"
@@ -435,7 +444,7 @@ static const char *FS_POST =
 // travel - that single detail is what separates grass that sways from grass that slides.
 //------------------------------------------------------------------------------------
 static const char *VS_GRASS =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec3 vertexPosition;\n"
 "in vec2 vertexTexCoord;\n"
 "in vec3 vertexNormal;\n"
@@ -490,7 +499,7 @@ static const char *VS_GRASS =
 "}\n";
 
 static const char *FS_GRASS =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec3 fragPosition;\n"
 "in vec2 fragTexCoord;\n"
 "in vec3 fragNormal;\n"
@@ -748,9 +757,17 @@ static void LoadRiggedCharacter(Assets *a, RiggedCharacter *character,
     character->scale = height > 0.000001f ? CHARACTER_TARGET_H/height : 1.0f;
     character->footOffset = -lo*character->scale;
 
-    if (a->skinnedOk)
-        for (int i = 0; i < character->model.materialCount; i++)
-            character->model.materials[i].shader = a->skinned;
+    for (int i = 0; i < character->model.materialCount; i++)
+    {
+#if defined(BRAWL_MOBILE)
+        // ANGLE's GPU bone path produces invalid positions for these imported GLBs.
+        // Mobile poses the same model on the CPU below and draws the updated position
+        // and normal VBOs through the ordinary lit shader.
+        if (a->lightingOk) character->model.materials[i].shader = a->lighting;
+#else
+        if (a->skinnedOk) character->model.materials[i].shader = a->skinned;
+#endif
+    }
 
     int vertexCount = 0;
     for (int i = 0; i < character->model.meshCount; i++)
@@ -1770,6 +1787,10 @@ void AssetsSkinnedFrame(Assets *a, const Vector3 *lightPos,
                         const Vector3 *lightColor, int lightCount,
                         Vector3 viewPos)
 {
+#if defined(BRAWL_MOBILE)
+    AssetsSetCamera(a, viewPos);
+    AssetsSetLights(a, lightPos, lightColor, lightCount);
+#else
     if (!a->skinnedOk) return;
     SetShaderValue(a->skinned, a->kViewPos, &viewPos, SHADER_UNIFORM_VEC3);
     if (lightCount > MAX_SHADER_LIGHTS) lightCount = MAX_SHADER_LIGHTS;
@@ -1779,6 +1800,7 @@ void AssetsSkinnedFrame(Assets *a, const Vector3 *lightPos,
         SetShaderValueV(a->skinned, a->kLightColor, lightColor, SHADER_UNIFORM_VEC3, lightCount);
     }
     SetShaderValue(a->skinned, a->kLightCount, &lightCount, SHADER_UNIFORM_INT);
+#endif
 }
 
 void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float yaw, float scaleMul,
@@ -1799,6 +1821,13 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
         SetShaderValue(a->skinned, a->kDither, &dither, SHADER_UNIFORM_FLOAT);
         SetShaderValue(a->skinned, a->kEmissive, &emissive, SHADER_UNIFORM_FLOAT);
     }
+#if defined(BRAWL_MOBILE)
+    if (a->lightingOk)
+    {
+        SetShaderValue(a->lighting, a->locDither, &dither, SHADER_UNIFORM_FLOAT);
+        SetShaderValue(a->lighting, a->locEmissive, &emissive, SHADER_UNIFORM_FLOAT);
+    }
+#endif
 
     float s = character->scale*scaleMul;
     Matrix m = MatrixScale(s, s, s);
@@ -1882,7 +1911,11 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                     .bones = anim.bones,
                     .framePoses = frames
                 };
+#if defined(BRAWL_MOBILE)
+                UpdateModelAnimation(character->model, composed, 0);
+#else
                 UpdateModelAnimationBones(character->model, composed, 0);
+#endif
                 StoreCharacterSockets(character, pose, m, socketPose);
             }
             else
@@ -1895,7 +1928,11 @@ void AssetsDrawCharacter(Assets *a, BrawlerClass cls, Vector3 position, float ya
                     if (f < 0) f += anim.frameCount;
                 }
                 else f = (f < 0) ? 0 : (f >= anim.frameCount ? anim.frameCount - 1 : f);
+#if defined(BRAWL_MOBILE)
+                UpdateModelAnimation(character->model, anim, f);
+#else
                 UpdateModelAnimationBones(character->model, anim, f);
+#endif
             }
         }
     }

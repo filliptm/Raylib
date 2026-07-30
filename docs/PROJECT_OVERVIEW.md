@@ -34,8 +34,11 @@ state, build path, and design goals.
 - Language: C99 for the applications and games.
 - Graphics/input/windowing: raylib.
 - Math: raylib vectors plus `raymath.h` where needed.
-- Build system: Makefiles for each game; a direct compiler command for the launcher.
-- Primary current platform: macOS with Homebrew raylib and Apple OpenGL frameworks.
+- Build system: Makefiles for each game; a direct compiler command for the launcher;
+  Brawl Arena also generates an Xcode iOS project through CMake.
+- Primary desktop platform: macOS with Homebrew raylib and Apple OpenGL frameworks.
+  Brawl Arena additionally has a landscape iPhone target using a pinned raylib-iOS fork
+  and ANGLE/Metal.
 - Checked raylib version: 5.5.0.
 
 All applications are real-time graphical executables. Build checks can run unattended,
@@ -48,7 +51,7 @@ but runtime checks open windows and should be performed deliberately.
 | Examples launcher | One 504-line C file plus a vendored examples tree | Global launcher state and on-demand shell compilation | Learning/reference browser |
 | Squad Runner | One 1,334-line C file | One global `GameState` with fixed arrays | Focused playable prototype |
 | Hearthstone | About 12,400 lines of C and headers across many modules | Central `GameState` plus partially integrated subsystems | Broad experimental platform |
-| Brawl Arena | About 11,000 lines across seven source subsystems | Owned `App` state plus deterministic fixed-pool simulation | Cohesive combat vertical slice |
+| Brawl Arena | About 23,000 lines of C/headers across seven source subsystems | Owned `App` state plus deterministic fixed-pool simulation | Cohesive combat vertical slice with desktop and iPhone shells |
 
 Line counts are descriptive, not contractual. Update them if a major reorganization makes
 them materially misleading.
@@ -538,7 +541,8 @@ smaller live game.
 `brawl_arena/` is a top-down 3D arena-brawler vertical slice. It combines a combat-feel
 sandbox with a menu shell, character selection, practice mode, Gem Grab, allied and enemy
 AI, concealment, destructible cover, live designer tuning, imported rigged characters,
-an external map format, and a stylized rendering pipeline.
+an external map format, a stylized rendering pipeline, and a landscape iPhone build with
+multitouch combat controls.
 
 The main launch deck is intentionally sparse: it presents the title, open character
 stage, active brawler and mode controls, Practice, settings utilities, and Deploy without
@@ -591,11 +595,25 @@ make -C brawl_arena check-character-assets
 make -C brawl_arena check-vfx-assets
 make -C brawl_arena test
 make -C brawl_arena sanitize
+make -C brawl_arena ios-bootstrap
+make -C brawl_arena ios-project
+make -C brawl_arena ios-simulator
+# Signed generic device build:
+make -C brawl_arena ios-device BRAWL_DEVELOPMENT_TEAM=YOUR_TEAM_ID
 ```
 
 The executable is `brawl_arena/build/brawl_arena`. The Makefile discovers C sources
 recursively, stores objects under matching `build/obj/<subsystem>/` paths, and generates
 header dependency files with `-MMD -MP`.
+
+The iOS bootstrap fetches `ghera/raylib-iOS` at
+`0fa3228e90c7f2717b6ad7858b3438326d957059`, applies the tracked compatibility patch,
+and builds the generated character/VFX assets. The generated
+`brawl_arena/apple/build/BrawlArenaIOS.xcodeproj`, fetched dependency, and DerivedData
+are ignored. The app targets iOS 15.6+, uses automatic signing with bundle identifier
+`com.filliptm.brawlarena`, and packages `config`, `data`, `resources`, and
+`build/assets` below the bundle's `BrawlAssets` resource root. See
+`brawl_arena/apple/README.md` for simulator, device, and installation commands.
 
 The headless suite covers:
 
@@ -621,9 +639,11 @@ The headless suite covers:
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
-- UI layout/focus at four viewports, minimum targets, contrast, easing/reduced motion,
-  distinct character motifs, result actions, procedural-skin lifetime/policy, profile
-  preference round trips, and the shared character-showcase contract.
+- UI layout/focus at four desktop viewports plus a notched iPhone safe area, physical
+  touch-target expansion, mobile-control placement/camera mapping, touch glyph language,
+  contrast, easing/reduced motion, distinct character motifs, result actions,
+  procedural-skin lifetime/policy, profile preference round trips, and the shared
+  character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -647,6 +667,7 @@ interactive run.
 
 ```text
 brawl_arena/
+├── apple/                   iOS CMake target, plist, bridge, dependency patch, guide
 ├── config/                  tracked canonical designer settings
 ├── data/maps/               versioned map catalog and map packages
 ├── data/characters/         character model/animation build manifest
@@ -697,7 +718,9 @@ function, or calling rendering/effect APIs.
 
 It also owns effective `Tuning`, the `ContentCatalog`, and configuration provenance.
 `UiPreferences` is an additional application-shell region for profile-only scale,
-reduced-motion, contrast, tutorial, and glyph choices.
+reduced-motion, contrast, tutorial, and glyph choices. `MobileControlsState` is
+application-owned transient touch identity/joystick state; it is reset with local input,
+never serialized, and never enters deterministic simulation.
 `Assets` has process lifetime in `main.c` and owns shaders, meshes, textures, character
 models, animations, station models, and the scene render target.
 The process-lifetime `UiSystem` owns local font handles, the procedural Arena Ink skin,
@@ -719,15 +742,17 @@ contain 64 decorative props.
 
 Startup:
 
-1. Seed compiled recovery tuning/content.
-2. Transactionally load required `config/gameplay.cfg`.
-3. Overlay an optional sparse `tuning.local.cfg`, then profile-only `profile.cfg`.
-4. Import legacy `tuning.cfg` once when the new local draft does not exist.
-5. Load and validate `data/maps/manifest.cfg` and every listed map.
-6. Generate procedural fallback assets, then load shaders, optional characters, station
+1. On iOS, change from the application bundle to its `BrawlAssets` resource root and
+   point draft/profile/legacy paths at the app's writable Application Support directory.
+2. Seed compiled recovery tuning/content.
+3. Transactionally load required `config/gameplay.cfg`.
+4. Overlay an optional sparse `tuning.local.cfg`, then profile-only `profile.cfg`.
+5. Import legacy `tuning.cfg` once when the new local draft does not exist.
+6. Load and validate `data/maps/manifest.cfg` and every listed map.
+7. Generate procedural fallback assets, then load shaders, optional characters, station
    models, build-generated ability-VFX atlases, local UI fonts, and the procedural Arena
    Ink skin.
-7. Build the initial match with the command center closed, then open the main menu.
+8. Build the initial match with the command center closed, then open the main menu.
 
 During an active match:
 
@@ -771,6 +796,20 @@ roster, and the configured hold still provides an automatic menu fallback.
 - Tab: open or close the command center.
 - `R`: rebuild the current match without losing tuning.
 - Escape: close an overlay, step back a screen, or quit from the main menu.
+
+On iPhone, the player uses independent stable touch IDs:
+
+- Left floating stick: camera-relative movement.
+- Right floating stick: drag to aim the main attack and release to fire; a quick tap
+  preserves the existing nearest-target auto-aim.
+- `SUPER`: drag/release ultimate aiming and activation.
+- `SKILL`: press instant secondaries, hold Scrapper's shield, or drag/release Longshot's
+  grapple.
+- Pause: clear captured touches and return to the launch deck.
+
+The mobile shell uses safe-area insets and expands touch hit targets to at least 44
+points. It hides desktop-only Quit, command-center, and VFX Studio actions. Backgrounding
+clears active touch IDs and flushes dirty profile/draft state.
 
 Play constructs Gem Grab when enabled. Team size is configurable from one to four per
 side; slot zero is the human and other player-side slots are allied bots. Teams race to
@@ -1013,6 +1052,11 @@ The presentation layer owns:
   from 1.0× to 2.0× and defaults to 1.5×, scaling from drawable framebuffer pixels
   rather than logical UI coordinates before the native-resolution HUD. This preserves
   the intended world sampling ratio when those dimensions differ on a HiDPI platform.
+- The iOS target compiles the same shader programs as OpenGL ES 3 sources through
+  ANGLE/Metal. Its runtime caps world scale at 1.0×, disables the desktop post pass, and
+  retains the MSAA direct path. Imported character animations use raylib CPU skinning
+  before the ordinary ES 3 lighting pass because the pinned fork's GPU-bone path
+  produces invalid vertex positions on ANGLE. Desktop retains GPU skinning.
 
 Procedural surface/grass generation is isolated in `generated_assets.c`; asset lifetime
 and shader/model loading remain in `assets.c`. Ability fields and previews are isolated
@@ -1054,6 +1098,9 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 - Shadows are blob decals; there is no shadow map.
 - Full cross-GPU, four-viewport, gamepad, post-effect-extreme, and forced-asset-fallback
   validation remains a manual release matrix.
+- iOS depends on a pinned third-party raylib fork rather than an official raylib 5.5
+  mobile release. Device/simulator builds must be revalidated when its revision changes,
+  including sustained-play performance of the iOS CPU-skinned imported characters.
 
 ## Local documentation
 
@@ -1063,6 +1110,8 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 - `brawl_arena/docs/MAPS.md`: map package schema and authoring.
 - `brawl_arena/docs/DEVELOPMENT.md`: source layout, adding features, and verification.
 - `brawl_arena/docs/CHARACTER_PIPELINE.md`: rigged model/animation conversion.
+- `brawl_arena/apple/README.md`: iPhone dependency, build, signing, controls, runtime
+  policy, and device verification.
 - `brawl_arena/docs/VFX_PIPELINE.md`: curated effect sources, atlas build, recipes,
   rendering rules, and verification.
 - `brawl_arena/docs/visual-design/index.html`: browser-ready Arena Ink runtime
@@ -1153,11 +1202,15 @@ turn changes, editor toggling, or a two-process server/client test.
 ```bash
 make -C brawl_arena
 make -C brawl_arena check-architecture
+make -C brawl_arena check-ui
 make -C brawl_arena character-assets
 make -C brawl_arena check-character-assets
 make -C brawl_arena validate-config
 make -C brawl_arena test
 make -C brawl_arena sanitize
+make -C brawl_arena ios-simulator
+# When signing/device access is available:
+make -C brawl_arena ios-device BRAWL_DEVELOPMENT_TEAM=YOUR_TEAM_ID
 ```
 
 For manual runtime/config probes, isolate every layer rather than touching the user's
@@ -1194,6 +1247,10 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
   contour while rapidly changing candidates, without resetting the comic stage.
 - Menu entrance/reduced-motion behavior and UI-cue volume/mute plus silent-device
   fallback.
+- On iPhone: both landscape orientations, notch/home-indicator clearance, simultaneous
+  move/aim touches, attack/Super/Skill release behavior, pause, background/resume, and
+  Application Support persistence. Exercise imported CPU-skinned characters in both the
+  launch deck and a live match, plus primitive fallback behavior for missing assets.
 
 # Documentation maintenance
 

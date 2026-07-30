@@ -1,6 +1,6 @@
 # Brawl Arena content and tuning
 
-Last code-verified: 2026-07-28
+Last code-verified: 2026-07-29
 
 This document explains which values are authoritative, how live tuning becomes a tracked
 change, and how authoring records become typed runtime content.
@@ -44,6 +44,9 @@ short target-recreation debounce. Its 1.0×–2.0× range scales the world color
 target from the drawable framebuffer independently of logical UI coordinates. The
 tracked 1.5× default leaves authored screen-space post-effect sizes unchanged and keeps
 the intended sampling ratio on platforms where drawable and logical dimensions differ.
+The iPhone runtime does not rewrite or fork this project value. It applies a platform
+policy that caps the effective scale at 1.0× and disables post-processing while the
+authored 1.5× value remains available to desktop and future mobile profiling.
 
 After 0.6 seconds of inactivity:
 
@@ -77,6 +80,12 @@ BRAWL_PROFILE=/tmp/brawl-profile.cfg \
 BRAWL_LEGACY_TUNING=/tmp/brawl-legacy.cfg \
 ./build/brawl_arena
 ```
+
+On iPhone, `config/gameplay.cfg` is read from the signed app's bundled `BrawlAssets`
+directory. The ignored draft, profile, and legacy-import paths live under the app's
+Application Support directory, where ordinary autosave remains writable. Environment
+path overrides still take precedence when explicitly supplied for a development smoke
+run.
 
 ## Legacy migration
 

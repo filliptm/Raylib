@@ -7,8 +7,17 @@
 #include <math.h>
 #include <stddef.h>
 
+#if defined(GRAPHICS_API_OPENGL_ES3)
+#define BRAWL_GLSL_HEADER \
+    "#version 300 es\n" \
+    "precision highp float;\n" \
+    "precision highp int;\n"
+#else
+#define BRAWL_GLSL_HEADER "#version 330\n"
+#endif
+
 static const char *FS_STICKER =
-"#version 330\n"
+BRAWL_GLSL_HEADER
 "in vec2 fragTexCoord;\n"
 "in vec4 fragColor;\n"
 "uniform sampler2D texture0;\n"
@@ -211,7 +220,8 @@ static void DrawBrawlerRaw(MenuScene *scene, const App *app,
 
     BeginMode3D(scene->camera);
         RiggedCharacter *character = &a->characters[candidate];
-        if (character->ok && app->tune.modelCharacter)
+        bool modelKit = character->ok && app->tune.modelCharacter;
+        if (modelKit)
         {
             AssetsSkinnedFrame(a, lightPos, lightCol, 2, scene->camera.position);
             AssetsDrawCharacter(a, candidate, scene->preview.position, yaw, scale,

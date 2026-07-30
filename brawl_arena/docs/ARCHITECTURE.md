@@ -1,6 +1,6 @@
 # Brawl Arena architecture
 
-Last code-verified: 2026-07-28
+Last code-verified: 2026-07-29
 
 This is the implemented ownership and dependency contract for Brawl Arena. The project is
 a modular C application with fixed-capacity simulation storage. It is not a reusable
@@ -26,7 +26,7 @@ Physical source ownership:
   external map loading and validation.
 - `src/game`: deterministic arena, actors, AI, weapons, objective, statuses, and events.
 - `src/app`: aggregate ownership, main loop, captured input/controller, application
-  gameplay commands.
+  gameplay commands, platform paths/safe areas, and touch-to-player-input mapping.
 - `src/presentation`: assets, shaders, environment, camera, effects, ability visuals,
   menu scene, and world rendering.
 - `src/ui`: shared UI system, player-facing menu, and HUD.
@@ -47,6 +47,7 @@ App
 ├── PlayerController    local interaction/aim state
 ├── PresentationState   camera, transient visual pools, and resettable HUD feedback
 ├── AppFlow             screens, fades, result banking, quit
+├── MobileControlsState stable touch IDs, virtual-stick anchors, and held actions
 ├── Tuning              effective project/local/profile settings
 ├── ContentCatalog      authoring records + typed content + maps
 ├── ConfigState         canonical project snapshot and load status
@@ -58,8 +59,8 @@ imported resource handles rather than simulation data.
 
 `UiSystem` also has process lifetime in `main.c`. It loads local fonts and the
 procedural UI skin once; builds a reference-canvas layout each frame; captures
-pointer/keyboard/gamepad UI navigation; and owns the current/previous focus graph. It
-is not part of deterministic simulation.
+pointer/keyboard/gamepad/touch UI navigation; applies platform safe-area insets; and owns
+the current/previous focus graph. It is not part of deterministic simulation.
 
 `GameSession` owns:
 
@@ -73,6 +74,8 @@ is not part of deterministic simulation.
 `ResetMatch()` clears only `GameSession`, `PlayerController`, and `PresentationState`.
 Content, project defaults, local draft, profile, and screen-flow state remain intact
 because their lifetime did not end.
+Touch ownership resets when a session or application-active lifetime ends, preventing a
+contact that began before a transition or background event from leaking into gameplay.
 
 ## Simulation boundary
 
@@ -120,6 +123,13 @@ and allocation-free through fixed stack arrays bounded by the arena capacities.
 Device state is captured once per rendered frame into `PlayerInput`. `PlayerUpdate()` is
 an app/controller system: it converts the input frame into simulation intent and invokes
 narrow game APIs. Tests can supply the same value without calling raylib input functions.
+
+On iPhone, `player_touch.c` assigns raylib touch IDs to one floating movement stick, one
+floating aim/fire stick, **SUPER**, **SKILL**, and pause. It converts stick displacement
+through the current camera basis, then writes the same move, aim, preview, release,
+secondary, and pause fields used by the desktop controller. The mapping and layout are
+pure functions covered without a window; game/core code never sees touch IDs, UIKit, or
+virtual-control rectangles.
 
 The command center uses `GameCommandExecute()` for actions such as changing a roster,
 respawning/killing/healing actors, spawning or clearing gems, changing class, and
@@ -216,6 +226,12 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
   can sit behind and around the composited silhouette without entering world rendering.
 - `render.c`: world-pass orchestration and brawler/projectile/grass drawing.
 
+Imported runtime character GLBs are used when available on both desktop and iPhone.
+Desktop uploads composed bone matrices to the skinned shader. The pinned iPhone ANGLE
+path instead applies the same animation poses to the model's position and normal buffers
+with raylib CPU skinning, then draws them through the OpenGL ES 3 lighting shader. The
+procedural characters remain asset-failure fallbacks on both platforms.
+
 The renderer reads simulation snapshots and presentation events. Ability VFX can name a
 source/target brawler and semantic rig socket; the final composed character pose supplies
 the mapped positions, with approximate fallbacks for primitives and missing bones. The
@@ -246,12 +262,18 @@ The player-facing shell is split by responsibility:
 - `hud.c`: body-anchored numeric health/shield bars and player ammo, objective/ability
   broadcast, resettable impact-stamp detection, action-retired tutorials, downed state,
   and the Continue/Rematch/Change Brawler result poster.
+- `mobile_controls.c`: native-resolution, safe-area-aware movement/attack sticks,
+  Super/Skill controls, cooldown/readiness feedback, and idle fade.
 - `menu_scene.c`: the vector arena podium, character preview, and rounded sticker
   compositing pass.
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
   body, provenance header, and persistent save/reset footer.
 
 The resizable window has a 960×600 minimum. Layout scales from the reference canvas.
+On iPhone, the reference canvas is inset by the platform safe area before scaling,
+while the launch-deck backdrop extends across the full viewport beneath the cutout and
+home-indicator regions. Touch targets expand to at least 44 points, and touch-specific
+binding labels are used when the current modality is touch.
 When post-processing is active, the world renders into a color/sampleable-depth target
 at `presentation.render_scale` (1.0×–2.0×, tracked default 1.5×) and downsamples before
 native-resolution UI. Scene-target sizing and post output resolution use drawable
@@ -262,6 +284,14 @@ resolution before direct world rendering. The backbuffer requests 4× MSAA for d
 post-disabled, resize, and failure-fallback frames. UI preference state is
 profile-scoped; presentation framing and render scale are project-scoped content and
 participate in transactional validation/promotion.
+The iPhone runtime keeps the authored project value intact but caps the effective render
+scale at 1.0× and disables the post pass. World shaders compile as OpenGL ES 3 variants,
+while the safe-area HUD remains native-resolution.
+
+`platform.c` is the only app-owned platform policy module. The iPhone bridge changes the
+working directory to the bundled `BrawlAssets` resource root before content load,
+reports UIKit safe-area insets, and redirects ignored draft/profile/legacy paths to
+Application Support. The packaged canonical project config remains read-only.
 
 ## Dependency-safe feature placement
 
@@ -273,6 +303,7 @@ Place a change according to the state it owns:
 | New map/layout/prop | `data/maps`, parsed by `content` |
 | New reusable attack/status rule | `game` |
 | Keyboard/mouse/controller mapping | `app` |
+| Touch ownership, virtual-stick mapping, or platform paths | `app` |
 | Developer mutation button | `devtools` + `app` command |
 | Particle/light/float text response | game event + `presentation/effects` |
 | Aim shape or field visualization | `presentation/ability_visuals` |
@@ -301,7 +332,9 @@ presentation state remains untouched.
 
 `test_ui` exercises pure layout, target size, focus-neighbor, ID, easing/reduced motion,
 distinct character motifs, result actions, contrast, procedural-skin lifetime, and
-presentation-profile behavior without opening a window.
+presentation-profile behavior without opening a window. It also covers notched safe
+areas, 44-point touch expansion, non-overlapping mobile controls, camera-relative stick
+mapping, and touch binding language.
 `check-ui` prevents migrated player UI from bypassing shared text/skin ownership and
 verifies shipped fonts, procedural ownership, retained reference provenance, and archive
 policy. Graphical checks remain documented in
@@ -313,6 +346,8 @@ UBSan instead.
 
 Interactive checks are still required for shader compilation, imported assets, animation
 selection, input feel, command-center interaction, and complete screen transitions.
+The iPhone build/install workflow and its separate simulator/device checks are documented
+in [`../apple/README.md`](../apple/README.md).
 
 ## Deliberate remaining seams
 

@@ -2,6 +2,7 @@
 
 #include "command_center.h"
 #include "content_catalog.h"
+#include "player_touch.h"
 #include "raymath.h"
 #include <math.h>
 
@@ -32,7 +33,21 @@ PlayerInput PlayerCaptureInput(App *w)
     PlayerController *controller = &w->controller;
     PlayerInput input = { 0 };
     input.selectedClass = -1;
+#if defined(BRAWL_MOBILE)
+    input.aimPoint = controller->aimPoint;
+    if (w->session.playerIdx >= 0 &&
+        w->session.playerIdx < w->session.brawlerCount &&
+        Vector3Length(input.aimPoint) < 0.001f)
+    {
+        const Brawler *player = &w->session.brawlers[w->session.playerIdx];
+        input.aimPoint = Vector3Add(
+            player->position,
+            (Vector3){ sinf(player->aimAngle)*12.0f, 0.0f,
+                       cosf(player->aimAngle)*12.0f });
+    }
+#else
     input.aimPoint = PlayerMouseGroundPoint(w);
+#endif
 
     Vector3 cameraForward = Vector3Subtract(w->presentation.camera.target,
                                             w->presentation.camera.position);
@@ -104,9 +119,11 @@ PlayerInput PlayerCaptureInput(App *w)
     for (int classId = 0; classId < CLASS_COUNT; classId++)
         if (IsKeyPressed(KEY_ONE + classId)) input.selectedClass = classId;
 
+#if !defined(BRAWL_MOBILE)
     input.attackPressed |= IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
     input.attackReleased |= IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
     input.superHeld |= IsMouseButtonDown(MOUSE_RIGHT_BUTTON);
+#endif
     input.autoAttackPressed |= IsKeyPressed(KEY_SPACE);
     input.secondaryPressed |= IsKeyPressed(KEY_LEFT_SHIFT) ||
                               IsKeyPressed(KEY_RIGHT_SHIFT);
@@ -115,6 +132,11 @@ PlayerInput PlayerCaptureInput(App *w)
     input.secondaryReleased |= IsKeyReleased(KEY_LEFT_SHIFT) ||
                                IsKeyReleased(KEY_RIGHT_SHIFT);
     input.mobilityPressed = input.secondaryPressed;
+#if defined(BRAWL_MOBILE)
+    input.actionsBlocked = false;
+    PlayerTouchCapture(w, &input);
+#else
     input.actionsBlocked = CommandCenterCapturesMouse();
+#endif
     return input;
 }

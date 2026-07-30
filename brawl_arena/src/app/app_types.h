@@ -32,6 +32,28 @@ typedef struct PlayerController {
     bool attackBufferTap;
 } PlayerController;
 
+typedef struct MobileStickState {
+    int touchId;
+    bool active;
+    bool pressed;
+    bool released;
+    Vector2 origin;
+    Vector2 position;
+    Vector2 value;
+} MobileStickState;
+
+// Process-lifetime touch identities belong to the application input layer. Keeping
+// them outside deterministic GameSession state lets the same simulation consume
+// touch, gamepad, keyboard, or replayed PlayerInput without platform dependencies.
+typedef struct MobileControlsState {
+    MobileStickState move;
+    MobileStickState attack;
+    MobileStickState superAbility;
+    MobileStickState secondary;
+    bool pausePressed;
+    float idleAge;
+} MobileControlsState;
+
 typedef struct AppFlow {
     AppScreen screen;
     AppScreen pending;
@@ -62,6 +84,7 @@ typedef struct App {
     ContentCatalog content;
     ConfigState config;
     UiPreferences uiPreferences;
+    MobileControlsState mobileControls;
     bool matchRestartPending;
 } App;
 

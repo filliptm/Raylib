@@ -27,6 +27,8 @@ Repeat the screen pass at:
 - 1280×800 reference composition.
 - 1920×1080.
 - 2560×1440.
+- A notched landscape iPhone simulator.
+- At least one physical landscape iPhone.
 
 At every size verify:
 
@@ -40,6 +42,9 @@ At every size verify:
   than logical UI coordinates.
 - Modal dimming, command-center scrolling, footer actions, and result actions remain
   reachable.
+- On iPhone, all player UI and touch controls remain inside the reported safe area. The
+  objective, pause, Move, Attack, Super, and Skill regions do not overlap. The launch
+  backdrop fills the physical display behind the cutout instead of exposing side bars.
 
 ## Screen pass
 
@@ -73,6 +78,10 @@ At every size verify:
   stale borders, or changing HUD scale.
 - WORLD match-camera distance applies live at 20 and 60 units without changing pitch,
   breaking aim lead, or clipping the playable arena.
+- iPhone launch deck: Studio and Quit are absent, the remaining actions are reachable,
+  and system-owned app exit/background behavior is not imitated by an in-game Quit.
+- iPhone match: desktop ability/tutorial tiles and the command center are absent; the
+  native-resolution touch HUD remains readable over both maps.
 
 ## Input matrix
 
@@ -86,6 +95,14 @@ At every size verify:
   bumper/secondary.
 - Switch between pointer, keyboard, and gamepad; focus visibility and binding glyphs
   should follow the active/forced modality without moving control bounds.
+- iPhone touch: one finger moves while a second finger aims; releasing Attack fires in
+  the displayed direction, while a tap requests auto-aim.
+- Drag/release Super and hold/drag/release Skill for each kit. Contacts must retain their
+  original control when fingers cross or other contacts begin/end.
+- Pause, background, and resume must clear held contacts; returning to play must not move
+  or fire until a new touch begins.
+- Touch-mode binding copy must use touch language and all interactive targets must remain
+  at least 44 points.
 
 ## Character and presentation matrix
 
@@ -129,6 +146,11 @@ screens:
 - Navigation, activation, brawler selection, deploy, ultimate-ready, victory, and defeat
   cues play at the configured level; mute and missing-device startup remain silent.
 - Helios-9 and Training Court render with and without post effects.
+- On iPhone, confirm the OpenGL ES 3 shader variants compile, post effects stay disabled,
+  the effective world scale remains 1.0×, and the HUD remains native-resolution.
+- On iPhone, Scrapper, Longshot, Tank, and Guardian use their imported rigged GLBs with
+  stable CPU-skinned animation in both the launch deck and world; missing assets still
+  fall back to primitives. Desktop GPU-skinned behavior must remain unchanged.
 - Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
   shallow-angle side textures remain stable without flashing, crawling, or coplanar
   flicker at the default 1.5× render scale. Inspect the complete floor-to-cap vertical

@@ -200,19 +200,22 @@ static void DrawHome(App *w, float logoScale, float railOffset)
 
     // Sits in the free strip between the title block and the utility cluster; the
     // bottom row is fully occupied by the roster/mode/deploy panels.
+#if !defined(BRAWL_MOBILE)
     UiResponse studio = UiButton(UiHash("home.studio"), UiRefRect(660, 34, 148, 52),
                                  "VFX Studio", UI_BUTTON_YELLOW, UI_ICON_STUDIO);
     if (studio.activated) ShellRequestScreen(w, SCREEN_STUDIO);
-
+#endif
     UiResponse controls = UiButton(UiHash("home.controls"), UiRefRect(824, 34, 132, 52),
                                    "Controls", UI_BUTTON_BLUE, UI_ICON_CONTROLS);
     if (controls.activated) OpenOverlay(MENU_OVERLAY_CONTROLS, UiHash("home.controls"));
     UiResponse settings = UiButton(UiHash("home.settings"), UiRefRect(968, 34, 132, 52),
                                    "Settings", UI_BUTTON_YELLOW, UI_ICON_SETTINGS);
     if (settings.activated) OpenOverlay(MENU_OVERLAY_SETTINGS, UiHash("home.settings"));
+#if !defined(BRAWL_MOBILE)
     UiResponse quit = UiButton(UiHash("home.quit"), UiRefRect(1112, 34, 120, 52),
                                "Quit", UI_BUTTON_DANGER, UI_ICON_QUIT);
     if (quit.activated) w->flow.quitRequested = true;
+#endif
 
     Rectangle launch = RefRectOffsetY(24, 646, 1232, 130, railOffset);
     UiDrawFeaturePanel(launch, t->ink, t->paper, true);
@@ -391,20 +394,36 @@ static void DrawControlsOverlay(App *w)
                UiRefPoint(232, 150), t->textMuted);
 
     UiDrawText(UI_TEXT_LABEL, "MOVEMENT", UiRefPoint(232, 192), t->blue);
-    DrawControlRow(232, 218, UiBindingLabel("WASD / ARROWS", "LEFT STICK"), "Move");
-    DrawControlRow(232, 264, UiBindingLabel("LEFT SHIFT", "LEFT BUMPER"),
+    DrawControlRow(232, 218,
+                   UiBindingLabel("WASD / ARROWS", "LEFT STICK", "LEFT STICK"),
+                   "Move");
+    DrawControlRow(232, 264,
+                   UiBindingLabel("LEFT SHIFT", "LEFT BUMPER", "SKILL"),
                    "Secondary — press dash / hold shield");
 
     UiDrawText(UI_TEXT_LABEL, "COMBAT", UiRefPoint(232, 326), t->yellow);
-    DrawControlRow(232, 352, UiBindingLabel("HOLD LMB", "HOLD RT"), "Aim main attack");
-    DrawControlRow(232, 398, UiBindingLabel("RELEASE LMB", "RELEASE RT"), "Fire");
-    DrawControlRow(232, 444, UiBindingLabel("RMB", "RIGHT BUMPER"), "Aim and use ultimate");
+    DrawControlRow(232, 352,
+                   UiBindingLabel("HOLD LMB", "HOLD RT", "DRAG ATTACK"),
+                   "Aim main attack");
+    DrawControlRow(232, 398,
+                   UiBindingLabel("RELEASE LMB", "RELEASE RT", "RELEASE"),
+                   "Fire");
+    DrawControlRow(232, 444,
+                   UiBindingLabel("RMB", "RIGHT BUMPER", "DRAG SUPER"),
+                   "Aim and use ultimate");
 
     UiDrawText(UI_TEXT_LABEL, "SYSTEM", UiRefPoint(680, 192), t->purple);
-    DrawControlRow(680, 218, UiBindingLabel("TAB", "KEYBOARD"), "Command center in practice");
-    DrawControlRow(680, 264, UiBindingLabel("R", "KEYBOARD"), "Restart match");
-    DrawControlRow(680, 310, UiBindingLabel("ESC", "B"), "Back or close");
-    DrawControlRow(680, 356, UiBindingLabel("1 - 5", "KEYBOARD"), "Swap active brawler");
+    DrawControlRow(680, 218,
+                   UiBindingLabel("TAB", "KEYBOARD", "DESKTOP ONLY"),
+                   "Command center in practice");
+    DrawControlRow(680, 264,
+                   UiBindingLabel("R", "KEYBOARD", "REMATCH"),
+                   "Restart match");
+    DrawControlRow(680, 310, UiBindingLabel("ESC", "B", "PAUSE"),
+                   "Back or close");
+    DrawControlRow(680, 356,
+                   UiBindingLabel("1 - 5", "KEYBOARD", "ROSTER"),
+                   "Swap active brawler");
 
     UiResponse close = UiButton(UiHash("controls.close"), UiRefRect(504, 644, 272, 56),
                                 "Close controls", UI_BUTTON_YELLOW, UI_ICON_CLOSE);

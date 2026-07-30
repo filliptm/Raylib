@@ -44,6 +44,11 @@ high-contrast combat cues, tutorial visibility/completion, and input-glyph prefe
 Cheats and the debug overlay are local-only values. Neither category is written into
 project defaults.
 
+The iPhone bundle treats `gameplay.cfg` as read-only packaged project truth. Writable
+`tuning.local.cfg`, `profile.cfg`, and legacy-import state are redirected to the app's
+Application Support directory before configuration load. Desktop continues to use the
+project-relative paths unless an environment override is supplied.
+
 ## Format and validation
 
 The canonical format is version 3 deterministic `key value` text with stable kit

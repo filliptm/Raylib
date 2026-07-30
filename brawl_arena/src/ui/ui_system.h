@@ -23,6 +23,7 @@ typedef struct UiSystem {
     UiResources resources;
     UiSkin skin;
     UiFrameLayout layout;
+    UiViewportInsets insets;
     UiInputModality modality;
     int glyphMode;
     Vector2 previousMouse;
@@ -51,6 +52,7 @@ bool UiSystemLoad(UiSystem *ui);
 void UiSystemUnload(UiSystem *ui);
 void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
                         int width, int height, float dt);
+void UiSystemSetViewportInsets(UiSystem *ui, UiViewportInsets insets);
 void UiSystemEndFrame(UiSystem *ui);
 void UiSystemSetActive(UiSystem *ui);
 UiSystem *UiSystemActive(void);
@@ -61,6 +63,10 @@ Vector2 UiRefPoint(float x, float y);
 float UiScale(float value);
 float UiReferenceScaleForViewport(int width, int height, float preferenceScale);
 Rectangle UiReferenceSafeRect(int width, int height, float preferenceScale);
+Rectangle UiReferenceSafeRectWithInsets(int width, int height,
+                                        float preferenceScale,
+                                        UiViewportInsets insets);
+Rectangle UiTouchTargetBounds(Rectangle bounds, float minimumSize);
 UiId UiFocusNeighbor(const UiFocusNode *nodes, int count, UiId current, int dx, int dy);
 float UiMotionDuration(float normalDuration, bool reducedMotion);
 float UiEaseOutCubic(float value);
@@ -71,7 +77,8 @@ UiId UiHash(const char *text);
 void UiFocus(UiId id);
 bool UiBackPressed(void);
 UiInputModality UiCurrentModality(void);
-const char *UiBindingLabel(const char *keyboardMouse, const char *gamepad);
+const char *UiBindingLabel(const char *keyboardMouse, const char *gamepad,
+                           const char *touch);
 
 float UiTextSize(UiTextRole role);
 Vector2 UiMeasureText(UiTextRole role, const char *text);

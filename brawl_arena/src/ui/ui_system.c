@@ -75,13 +75,37 @@ float UiReferenceScaleForViewport(int width, int height, float preferenceScale)
 
 Rectangle UiReferenceSafeRect(int width, int height, float preferenceScale)
 {
-    float scale = UiReferenceScaleForViewport(width, height, preferenceScale);
+    return UiReferenceSafeRectWithInsets(
+        width, height, preferenceScale, (UiViewportInsets){ 0 });
+}
+
+Rectangle UiReferenceSafeRectWithInsets(int width, int height,
+                                        float preferenceScale,
+                                        UiViewportInsets insets)
+{
+    float availableWidth = fmaxf(1.0f, width - fmaxf(0.0f, insets.left) -
+                                        fmaxf(0.0f, insets.right));
+    float availableHeight = fmaxf(1.0f, height - fmaxf(0.0f, insets.top) -
+                                         fmaxf(0.0f, insets.bottom));
+    float scale = UiReferenceScaleForViewport(
+        (int)availableWidth, (int)availableHeight, preferenceScale);
     float refW = UI_REFERENCE_WIDTH*scale;
     float refH = UI_REFERENCE_HEIGHT*scale;
-    float ox = (width - refW)*0.5f;
-    float oy = (height - refH)*0.5f;
+    float ox = fmaxf(0.0f, insets.left) + (availableWidth - refW)*0.5f;
+    float oy = fmaxf(0.0f, insets.top) + (availableHeight - refH)*0.5f;
     float pad = 24.0f*scale;
     return (Rectangle){ ox + pad, oy + pad, refW - pad*2.0f, refH - pad*2.0f };
+}
+
+Rectangle UiTouchTargetBounds(Rectangle bounds, float minimumSize)
+{
+    float width = fmaxf(bounds.width, minimumSize);
+    float height = fmaxf(bounds.height, minimumSize);
+    return (Rectangle){
+        bounds.x - (width - bounds.width)*0.5f,
+        bounds.y - (height - bounds.height)*0.5f,
+        width, height
+    };
 }
 
 static int AnyGamepadAvailable(void)
@@ -185,20 +209,37 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
     ui->glyphMode = preferences ? preferences->inputGlyphMode : UI_GLYPH_AUTO;
     ui->layout.viewportWidth = width;
     ui->layout.viewportHeight = height;
-    ui->layout.viewportScale = fminf(width/UI_REFERENCE_WIDTH, height/UI_REFERENCE_HEIGHT);
+    float availableWidth = fmaxf(
+        1.0f, width - fmaxf(0.0f, ui->insets.left) -
+                    fmaxf(0.0f, ui->insets.right));
+    float availableHeight = fmaxf(
+        1.0f, height - fmaxf(0.0f, ui->insets.top) -
+                    fmaxf(0.0f, ui->insets.bottom));
+    ui->layout.viewportScale = fminf(
+        availableWidth/UI_REFERENCE_WIDTH,
+        availableHeight/UI_REFERENCE_HEIGHT);
     ui->layout.preferenceScale = Clamp(prefScale, 0.75f, 1.50f);
-    ui->layout.scale = UiReferenceScaleForViewport(width, height, prefScale);
+    ui->layout.scale = ui->layout.viewportScale*
+        fminf(ui->layout.preferenceScale, 1.0f);
     ui->layout.origin = (Vector2){
-        (width - UI_REFERENCE_WIDTH*ui->layout.scale)*0.5f,
-        (height - UI_REFERENCE_HEIGHT*ui->layout.scale)*0.5f
+        fmaxf(0.0f, ui->insets.left) +
+            (availableWidth - UI_REFERENCE_WIDTH*ui->layout.scale)*0.5f,
+        fmaxf(0.0f, ui->insets.top) +
+            (availableHeight - UI_REFERENCE_HEIGHT*ui->layout.scale)*0.5f
     };
-    ui->layout.safe = UiReferenceSafeRect(width, height, prefScale);
+    ui->layout.safe = UiReferenceSafeRectWithInsets(
+        width, height, prefScale, ui->insets);
     ui->layout.content = (Rectangle){
         ui->layout.origin.x, ui->layout.origin.y,
         UI_REFERENCE_WIDTH*ui->layout.scale, UI_REFERENCE_HEIGHT*ui->layout.scale
     };
     ui->reducedMotion = preferences && preferences->reducedMotion;
 
+    int gamepad = AnyGamepadAvailable();
+#if defined(BRAWL_MOBILE)
+    ui->modality = UI_INPUT_TOUCH;
+    ui->focusVisible = false;
+#else
     Vector2 mouse = GetMousePosition();
     if (Vector2Distance(mouse, ui->previousMouse) > 1.5f || GetMouseWheelMove() != 0.0f)
     {
@@ -207,7 +248,6 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
     }
     ui->previousMouse = mouse;
 
-    int gamepad = AnyGamepadAvailable();
     bool keyNav = IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT) ||
                   IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN) ||
                   IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D) ||
@@ -221,6 +261,7 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
         ui->modality = padNav ? UI_INPUT_GAMEPAD : UI_INPUT_KEYBOARD;
         ui->focusVisible = true;
     }
+#endif
 
     ui->navigationX = ((IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) ||
                        GamepadPressed(gamepad, GAMEPAD_BUTTON_LEFT_FACE_RIGHT)) ? 1 : 0) -
@@ -240,6 +281,15 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
         GamepadPressed(gamepad, GAMEPAD_BUTTON_LEFT_TRIGGER_1);
     ui->nextPressed = IsKeyPressed(KEY_E) || IsKeyPressed(KEY_PAGE_DOWN) ||
         GamepadPressed(gamepad, GAMEPAD_BUTTON_RIGHT_TRIGGER_1);
+}
+
+void UiSystemSetViewportInsets(UiSystem *ui, UiViewportInsets insets)
+{
+    if (!ui) return;
+    ui->insets.top = fmaxf(0.0f, insets.top);
+    ui->insets.left = fmaxf(0.0f, insets.left);
+    ui->insets.bottom = fmaxf(0.0f, insets.bottom);
+    ui->insets.right = fmaxf(0.0f, insets.right);
 }
 
 void UiSystemEndFrame(UiSystem *ui)
@@ -292,11 +342,13 @@ void UiFocus(UiId id)
 bool UiBackPressed(void) { return g_ui && g_ui->backPressed; }
 UiInputModality UiCurrentModality(void) { return g_ui ? g_ui->modality : UI_INPUT_POINTER; }
 
-const char *UiBindingLabel(const char *keyboardMouse, const char *gamepad)
+const char *UiBindingLabel(const char *keyboardMouse, const char *gamepad,
+                           const char *touch)
 {
     if (!g_ui) return keyboardMouse;
     if (g_ui->glyphMode == UI_GLYPH_KEYBOARD_MOUSE) return keyboardMouse;
     if (g_ui->glyphMode == UI_GLYPH_GAMEPAD) return gamepad;
+    if (g_ui->modality == UI_INPUT_TOUCH) return touch;
     return g_ui->modality == UI_INPUT_GAMEPAD ? gamepad : keyboardMouse;
 }
 
@@ -649,12 +701,18 @@ void UiDrawComicBackdrop(void)
     Rectangle viewport = {
         0, 0, (float)g_ui->layout.viewportWidth, (float)g_ui->layout.viewportHeight
     };
-    if (UiSkinDrawBackdrop(&g_ui->skin, viewport, g_ui->layout.content,
+    Rectangle backdropCanvas = g_ui->layout.content;
+#if defined(BRAWL_MOBILE)
+    // Keep controls on the safe reference canvas, but let the poster field bleed
+    // beneath the notch and home-indicator edges instead of letterboxing the menu.
+    backdropCanvas = viewport;
+#endif
+    if (UiSkinDrawBackdrop(&g_ui->skin, viewport, backdropCanvas,
                            g_ui->theme->blue, g_ui->theme->ink,
                            g_ui->theme->yellow, g_ui->theme->enemy))
         return;
     DrawRectangleRec(viewport, g_ui->theme->ink);
-    DrawRectangleRec(g_ui->layout.content, g_ui->theme->blue);
+    DrawRectangleRec(backdropCanvas, g_ui->theme->blue);
 }
 
 static void DrawLogoWord(const char *text, Rectangle bounds, Color fill)
@@ -737,7 +795,9 @@ static UiResponse Register(UiId id, Rectangle bounds, bool enabled)
         return response;
     }
     if (g_ui->focused == 0) g_ui->focused = id;
-    response.hovered = MouseIn(bounds);
+    Rectangle pointerBounds = g_ui->modality == UI_INPUT_TOUCH
+        ? UiTouchTargetBounds(bounds, 44.0f) : bounds;
+    response.hovered = MouseIn(pointerBounds);
     response.focused = g_ui->focused == id;
     response.held = response.hovered && IsMouseButtonDown(MOUSE_LEFT_BUTTON);
     response.activated =
@@ -746,7 +806,11 @@ static UiResponse Register(UiId id, Rectangle bounds, bool enabled)
     if (response.hovered && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
         g_ui->focused = id;
+#if defined(BRAWL_MOBILE)
+        g_ui->modality = UI_INPUT_TOUCH;
+#else
         g_ui->modality = UI_INPUT_POINTER;
+#endif
     }
     return response;
 }
