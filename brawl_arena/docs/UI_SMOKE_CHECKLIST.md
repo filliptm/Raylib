@@ -1,6 +1,6 @@
-# Helios Broadcast UI smoke checklist
+# Arena Ink UI smoke checklist
 
-Last code-verified: 2026-07-28
+Last code-verified: 2026-07-29
 
 Use this checklist after UI, rendering, input, character, or configuration changes.
 Automated checks establish geometry and policy; this pass verifies the parts that need a
@@ -43,7 +43,8 @@ At every size verify:
 
 ## Screen pass
 
-- Launch deck: title, open character stage, active-brawler switcher, mode arrows,
+- Launch deck: Brawl Arena burst wordmark, open character stage, active-brawler switcher,
+  mode arrows,
   Practice, Controls, Settings, Deploy, and Quit; combat stats remain exclusive to the
   roster bay.
 - Roster bay: all five candidates, candidate preview, explicit Select, cancel without
@@ -62,7 +63,8 @@ At every size verify:
   received by the player, self-healing, and player-involved shield absorption remain
   visible. Damage, healing, regeneration, and shield exchanges involving bots alone do
   not produce numbers; gem and class-change labels remain available.
-- Result: explicit Continue works; timeout still returns safely.
+- Result: Continue returns home, Rematch rebuilds the same selection/mode, Change Brawler
+  opens the roster, banking occurs once, and timeout still returns safely.
 - Command center: all seven categories, scroll, slider fine adjustment, toggles, gameplay
   commands, provenance, Restore Project, Save All, and Preview / UI framing.
 - On separate fresh launches, Play and Practice each begin with the command center
@@ -90,9 +92,14 @@ screens:
 
 - Preview never rotates automatically.
 - Idle animation remains active unless reduced motion is enabled.
-- Feet remain on the podium and the full silhouette remains inside protected space.
+- Feet remain on the stage and the full silhouette plus paper keyline stays inside
+  protected space.
+- The saw, crosshair, blast, shield, and growth motifs match their kits and remain behind
+  the protected silhouette/text regions.
+- The logo, character, and launch rail settle as one short entrance. Reduced motion
+  resolves the composition immediately without hiding state.
 - Every model has identical yaw, scale, offset, camera, and target framing on home and
-  roster; rapidly changing candidates does not move/restart the hangar background.
+  roster; rapidly changing candidates does not move/restart the comic stage.
 - Tank's shield and every character's feet remain fully visible under that one framing.
 - Preview / UI edits apply live, Reset restores the project showcase, and Save Kit +
   Showcase produces a validated tracked `config/gameplay.cfg` change.
@@ -108,10 +115,15 @@ screens:
 ## Rendering and fallback
 
 - Local Barlow/IBM Plex fonts load; temporarily missing fonts fall back without crashing.
-- Kenney panels/buttons/bars stay opaque and preserve corners, screws, borders, focus
-  rings, and pointer bounds at every viewport.
-- Orbital/radar motifs remain restrained behind characters/data and never obscure text
-  or silhouettes.
+- Procedural panels/buttons/bars stay opaque and preserve clipped corners, ink contours,
+  paper keylines, hard shadows, focus rings, and pointer bounds at every viewport.
+- Halftone, bursts, and speed lines remain restrained behind characters/data and never
+  obscure text or silhouettes.
+- The sticker shader produces a continuous black inner contour and rounded paper outer
+  keyline without stair steps or pointed diagonal corners for every imported model and
+  the primitive Mortar fallback; shader failure still draws the unobscured raw preview.
+- Navigation, activation, brawler selection, deploy, ultimate-ready, victory, and defeat
+  cues play at the configured level; mute and missing-device startup remain silent.
 - Helios-9 and Training Court render with and without post effects.
 - Move parallel and diagonally past adjoining Helios-9 wall blocks; their base seams and
   shallow-angle side textures remain stable without flashing, crawling, or coplanar
@@ -125,8 +137,8 @@ screens:
 - Disable post effects and confirm direct world rendering remains antialiased through
   the 4× MSAA backbuffer path.
 - Temporarily missing station/character assets use coherent procedural fallbacks.
-- Temporarily missing individual UI skin textures fall back independently to the
-  code-drawn Helios geometry without changing layout or preventing startup.
+- Arena Ink starts without loading a UI texture atlas; retained legacy UI source packs
+  are not runtime dependencies.
 - Imported animation selection, grass, aim previews, Scrapper saw/Shell visuals,
   Longshot Grapple cable/pose phases, Mortar Mine body/rings/deploy pose, rain,
   Resonance, and result overlays remain aligned with the world.

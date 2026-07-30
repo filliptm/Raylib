@@ -1,6 +1,6 @@
 # Brawl Arena development guide
 
-Last code-verified: 2026-07-28
+Last code-verified: 2026-07-29
 
 ## Build targets
 
@@ -9,12 +9,12 @@ make                    # architecture check + optimized game
 make run                # build and launch
 make debug              # clean debug build
 make check-architecture # dependency-policy check
-make check-ui           # Helios UI ownership/font/asset policy check
-make ui-assets          # rebuild tracked tintable UI motifs from retained sources
+make check-ui           # Arena Ink ownership/font/procedural-resource policy check
+make ui-assets          # report the procedural UI asset policy
 make character-assets   # bake mesh library + shared animations into runtime GLBs
 make check-character-assets # validate rigs, clips, outputs, and 1K textures
 make validate-config    # validate tracked canonical project values
-make test               # Python asset-pipeline tests + twelve C test executables
+make test               # Python asset-pipeline tests + seventeen C test executables
 make sanitize           # clean sanitizer headless run
 make clean
 ```
@@ -41,8 +41,8 @@ require adding its object to that target.
 | Main loop, local controller/input, authoring commands | `src/app` |
 | Camera, assets, shaders, effects, visuals, environment | `src/presentation` |
 | Menu or HUD | `src/ui` |
-| Shared UI textures, slicing, and decorative motifs | `src/ui/ui_skin.[ch]`, `resources/ui` |
-| Menu hangar/podium/preview scene | `src/presentation/menu_scene.[ch]` |
+| Shared comic geometry and decorative motifs | `src/ui/ui_skin.[ch]` |
+| Menu stage/preview/sticker compositing | `src/presentation/menu_scene.[ch]` |
 | Command-center UI | `src/devtools` |
 | Map packages | `data/maps` |
 | Character asset manifest | `data/characters/asset_manifest.json` |
@@ -103,17 +103,23 @@ Every catalog entry is loaded at startup, so one invalid map rejects the catalog
 
 Keep world and UI resource ownership separate:
 
-1. Put curated, runtime-loaded interface art under `resources/ui/<pack>/runtime/`.
-2. Retain only the source files needed to reproduce it under the adjacent `source/`.
-3. Add `LICENSE.txt` and `SOURCE.md` with the upstream URL, version/author, license,
-   archive hash, included subset, and intentional exclusions.
-4. Generate derivatives through `tools/build_ui_assets.py`; do not hand-edit tracked
-   runtime crops.
-5. Load/unload textures only in `ui_skin.c`. Screen code calls shared panel, control,
-   progress, or decoration APIs and must preserve a geometry fallback.
-6. Do not import pack fonts, fake telemetry, or decorative charts into player data
-   surfaces. Barlow/IBM Plex and live catalog values remain authoritative.
-7. Update `tools/check_ui_assets.py`, run `make ui-assets`, then `make check-ui`.
+1. Extend semantic colors and shared control behavior in `ui_theme`/`ui_system`.
+2. Put reusable comic geometry—panels, buttons, bars, bursts, halftone, or speed
+   lines—in `ui_skin`; screen code should compose those primitives, not fork a second
+   style.
+3. Keep the black contour, paper keyline, and scale-aware shape contract at every
+   supported viewport. Preserve 44-reference-pixel targets and explicit focus rings.
+4. Keep decorative density around hero/action moments. Data-rich HUD and developer
+   panels use the same pigments with less ornament.
+5. Barlow/IBM Plex, code-drawn icons, and live catalog values remain authoritative.
+6. If a future UI texture is genuinely necessary, document its source and license under
+   `resources/ui/`, load it only through the owning UI/presentation module, and preserve
+   a procedural fallback.
+7. Update `tools/check_ui_assets.py`, run `make check-ui`, and complete the graphical
+   screen/viewport pass.
+
+Mechanic-derived character motifs and impact copy belong to immutable content metadata.
+Menu/HUD modules consume the typed style; they do not switch on character IDs.
 
 ## Event and command discipline
 
@@ -142,7 +148,7 @@ test exist to keep simulation usable without a window.
 
 | Executable | Coverage |
 |---|---|
-| `test_config` | source layering, validation, save/promotion/reset, profile, migration |
+| `test_config` | source layering, validation, save/promotion/reset, profile persistence, migration |
 | `test_healer` | typed Guardian content and rain/Resonance timing/outcomes |
 | `test_no_attack_shake` | every kit plus impact/damage/death camera isolation |
 | `test_arena` | catalog, two map packages, runtime dimensions/cover/reachability, circle clearance, swept wall/crate collision, and wall sliding |
@@ -152,7 +158,7 @@ test exist to keep simulation usable without a window.
 | `test_longshot` | twin-shot count, combined fallback damage/charge, tight parallel spacing, centered trajectory, and both-bolt hit behavior |
 | `test_scrapper` | Ripsaw/Wrecking Disc legs, cover, ownership, Shell absorption/healing/recharge/break/rearm, and Fight-bot prediction/release |
 | `test_secondaries` | Longshot Grapple timing/action lock/cover/cooldown/displacement cancellation and Mortar Mine arming/team/damage/knockback/replacement/line-of-sight/cleanup rules |
-| `test_ui` | four viewport layouts, minimum targets, focus, IDs, motion, contrast, nine-slice metadata, and the shared showcase |
+| `test_ui` | four viewport layouts, minimum targets, focus, IDs, easing/reduced motion, character motifs, result actions, contrast, procedural-skin lifetime, and the shared showcase |
 | `test_character_animation` | match clip direction/rate/death selection, stationary-fire isolation from bush reveal, and explicit main/Shell/Grapple/Mine action contracts and blend timing |
 | `test_vfx` | recipe catalog validation, flipbook timing, priority eviction, and reduced-motion behavior |
 | `test_vfx_events` | all-kit cast/action mappings, rig socket attachment, Scrapper saw/Shell, Longshot Grapple, Mortar Mine, Tank reclaim/jets, and Guardian rain feedback |
@@ -182,10 +188,11 @@ matrix. At minimum, after changes to runtime/presentation:
 - Guardian rain growth/pulses and Resonance ally/enemy statuses.
 - Three-second out-of-combat regeneration, one-second pulses, and attack/damage resets.
 - Static, Roam, and Fight bots.
-- Gem spawn, pickup, death drop, countdown, win/result return.
+- Gem spawn, pickup, death drop, countdown stamp/pulse, and all three result actions.
 - Command-center sliders, reset, project promotion, scrolling, and pointer capture.
 - Keyboard/gamepad menu focus, modal close/restore, and glyph switching.
-- Kenney control surfaces, orbital/radar staging, and forced UI-texture fallbacks.
+- Arena Ink controls, per-character motifs, rounded sticker contour, entrance motion,
+  and raw-preview fallback if sticker resources fail.
 - Resize at 960×600, 1280×800, 1920×1080, and 2560×1440.
 - Helios-9 and Training Court selection/rebuild.
 - Imported models, animation direction, grass, station props, shaders, post effects.

@@ -6,12 +6,16 @@
 #include "ui_system.h"
 
 void MenuInit(Assets *a, UiSystem *ui);
+void MenuUnload(void);
 
 // Lets an open menu overlay swallow ESC. Returns true when it did.
 bool MenuConsumeEscape(void);
 
-// Advances the podium camera and idle animation. Feed it unscaled real time.
+// Advances the arena-stage camera and idle animation. Feed it unscaled real time.
 void MenuUpdate(App *w, float dt);
+
+// Renders the isolated character sticker before the main backbuffer pass.
+void MenuPrepareDraw(App *w);
 
 // Draws whichever of the menu screens is current, 3D scene then interface.
 void MenuDraw(App *w);

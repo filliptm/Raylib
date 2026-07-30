@@ -135,6 +135,31 @@ typedef struct AttackTrail {
     float emitTimer;
 } AttackTrail;
 
+typedef enum PresentationUiStamp {
+    PRESENTATION_UI_STAMP_NONE = 0,
+    PRESENTATION_UI_STAMP_SUPER_READY,
+    PRESENTATION_UI_STAMP_SHIELD_BROKEN,
+    PRESENTATION_UI_STAMP_TEAM_LOCK,
+    PRESENTATION_UI_STAMP_KNOCKOUT,
+    PRESENTATION_UI_STAMP_DOWNED
+} PresentationUiStamp;
+
+// Short-lived HUD reactions belong to the resettable presentation region. Game state
+// remains unaware of their animation, copy, and semantic sound decisions.
+typedef struct UiFeedbackState {
+    PresentationUiStamp stamp;
+    float stampAge;
+    float stampDuration;
+    float objectivePulse;
+    float previousShieldBrokenTimer;
+    int previousMatchPhase;
+    int previousCountdownTeam;
+    int previousKills;
+    bool initialized;
+    bool wasSuperReady;
+    bool wasAlive;
+} UiFeedbackState;
+
 typedef struct PresentationState {
     Camera3D camera;
     Vector3 camFocus;
@@ -154,6 +179,7 @@ typedef struct PresentationState {
     VfxEffectId lastVfxEffect;
     float shake;
     float shakePhase;
+    UiFeedbackState uiFeedback;
 } PresentationState;
 
 #endif

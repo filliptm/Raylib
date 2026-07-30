@@ -3,6 +3,7 @@
 #include "hud.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 #define CHECK(condition, message) do { \
     if (!(condition)) { fprintf(stderr, "FAIL: %s\n", message); return 1; } \
@@ -66,14 +67,36 @@ int main(void)
           "normal motion duration changed");
     CHECK(Near(UiMotionDuration(0.22f, true), 0.0f),
           "reduced motion did not remove decorative duration");
+    CHECK(Near(UiEaseOutCubic(0.0f), 0.0f) &&
+          Near(UiEaseOutCubic(1.0f), 1.0f) &&
+          UiEaseOutCubic(0.5f) > 0.5f,
+          "shared cubic entrance easing changed");
+    CHECK(UiEaseOutBack(0.70f) > 1.0f &&
+          Near(UiEaseOutBack(1.0f), 1.0f),
+          "shared poster-pop easing lost its controlled overshoot");
+    CHECK(Near(UiMotionProgress(0.10f, 0.20f, 0.40f, false), 0.0f) &&
+          Near(UiMotionProgress(0.40f, 0.20f, 0.40f, false), 0.5f) &&
+          Near(UiMotionProgress(0.0f, 1.0f, 4.0f, true), 1.0f),
+          "delayed/reduced motion progress changed");
+    CHECK(HUD_RESULT_CONTINUE != HUD_RESULT_REMATCH &&
+          HUD_RESULT_REMATCH != HUD_RESULT_CHANGE_BRAWLER,
+          "result actions are no longer distinct");
 
-    const UiTheme *theme = UiThemeHelios();
-    CHECK(theme->deck.a == 255 && theme->deckRaised.a == 255,
+    const UiTheme *theme = UiThemeArenaInk();
+    CHECK(theme->surface.a == 255 && theme->surfaceRaised.a == 255,
           "structural UI surfaces became transparent");
-    CHECK(UiThemeContrastRatio(theme->paper, theme->deck) >= 4.5f,
+    CHECK(UiThemeContrastRatio(theme->paper, theme->surface) >= 4.5f,
           "primary text contrast fell below WCAG AA");
-    CHECK(UiThemeContrastRatio(theme->mist, theme->deck) >= 3.0f,
+    CHECK(UiThemeContrastRatio(theme->textSecondary, theme->surface) >= 3.0f,
           "secondary text contrast fell below the approved floor");
+    CHECK(UiThemeContrastRatio(theme->ink, theme->yellow) >= 4.5f,
+          "ink on the yellow action color fell below WCAG AA");
+    CHECK(UiThemeContrastRatio(theme->paper, theme->blue) >= 4.5f,
+          "paper on the blue action color fell below WCAG AA");
+    CHECK(UiThemeContrastRatio(theme->paper, theme->enemy) >= 4.5f,
+          "paper on the red action color fell below WCAG AA");
+    CHECK(UiThemeContrastRatio(theme->paper, theme->purple) >= 4.5f,
+          "paper on the purple action color fell below WCAG AA");
     CHECK(SameColor(HudHealthBarColor(theme, TEAM_PLAYER, false), theme->ally),
           "player-team health bars lost the stable ally color");
     CHECK(SameColor(HudHealthBarColor(theme, TEAM_ENEMY, false), theme->enemy),
@@ -84,27 +107,25 @@ int main(void)
           contrastedEnemy.r > contrastedEnemy.g,
           "high contrast mode obscured health-bar allegiance");
 
-    NPatchInfo patch = UiSkinNinePatchInfo(384, 128, 24, 20, 24, 20);
-    CHECK(Near(patch.source.width, 384.0f) && Near(patch.source.height, 128.0f),
-          "UI skin patch lost its source dimensions");
-    CHECK(patch.left == 24 && patch.top == 20 &&
-          patch.right == 24 && patch.bottom == 20,
-          "UI skin patch margins changed");
-    CHECK(patch.layout == NPATCH_NINE_PATCH,
-          "UI skin patch no longer scales from nine slices");
+    UiSkin proceduralSkin = { 0 };
+    CHECK(UiSkinLoad(&proceduralSkin) && proceduralSkin.ready,
+          "procedural Arena Ink skin did not become ready");
+    UiSkinUnload(&proceduralSkin);
+    CHECK(!proceduralSkin.ready,
+          "procedural Arena Ink skin retained state after unload");
 
     UiSkin missingSkin = { 0 };
     Rectangle skinBounds = { 0, 0, 240, 80 };
-    CHECK(!UiSkinDrawPanel(&missingSkin, skinBounds, theme->deck, theme->line,
+    CHECK(!UiSkinDrawPanel(&missingSkin, skinBounds, theme->surface, theme->border,
                            true, false),
           "missing panel texture did not request the geometry fallback");
-    CHECK(!UiSkinDrawButton(&missingSkin, skinBounds, theme->deck, theme->line, false),
+    CHECK(!UiSkinDrawButton(&missingSkin, skinBounds, theme->surface, theme->border, false),
           "missing button texture did not request the geometry fallback");
-    CHECK(!UiSkinDrawProgress(&missingSkin, skinBounds, 0.5f, theme->hull,
-                              theme->ion, false, 0, 3.0f),
+    CHECK(!UiSkinDrawProgress(&missingSkin, skinBounds, 0.5f, theme->surfaceMuted,
+                              theme->blue, false, 0, 3.0f),
           "missing progress texture did not request the geometry fallback");
-    CHECK(!UiSkinDrawDecoration(&missingSkin, UI_DECORATION_ORBITAL_RING,
-                                skinBounds, theme->ion),
+    CHECK(!UiSkinDrawDecoration(&missingSkin, UI_DECORATION_BURST,
+                                skinBounds, theme->blue),
           "missing decoration texture did not request the geometry fallback");
 
     ContentCatalog catalog = { 0 };
@@ -124,7 +145,21 @@ int main(void)
           Near(catalog.showcase.cameraTarget.z, 0.0f) &&
           Near(catalog.showcase.verticalFov, 40.0f),
           "shared showcase camera changed");
+    bool motifs[5] = { false };
+    for (int i = 0; i < CLASS_COUNT; i++)
+    {
+        const CharacterUiStyle *style = ContentCharacterUiStyle((BrawlerClass)i);
+        CHECK(style->motif >= CHARACTER_UI_SAW &&
+              style->motif <= CHARACTER_UI_GROWTH,
+              "character poster motif escaped its supported range");
+        CHECK(!motifs[style->motif],
+              "two characters lost their distinct poster motif");
+        motifs[style->motif] = true;
+        CHECK(style->primary.a == 255 && style->secondary.a == 255 &&
+              style->impactLabel && strlen(style->impactLabel) > 0,
+              "character UI identity is incomplete");
+    }
 
-    puts("UI layout, skin, focus, motion, team bars, and shared showcase passed");
+    puts("UI layout, skin, focus, motion, motifs, team bars, and result actions passed");
     return 0;
 }

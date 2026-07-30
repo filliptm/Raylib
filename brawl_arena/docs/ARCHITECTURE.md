@@ -45,7 +45,7 @@ or presentation calls.
 App
 ├── GameSession         match-lifetime deterministic state
 ├── PlayerController    local interaction/aim state
-├── PresentationState   camera and transient visual pools
+├── PresentationState   camera, transient visual pools, and resettable HUD feedback
 ├── AppFlow             screens, fades, result banking, quit
 ├── Tuning              effective project/local/profile settings
 ├── ContentCatalog      authoring records + typed content + maps
@@ -56,11 +56,10 @@ App
 `Assets` has process lifetime and is owned next to `App` in `main.c`. It contains GPU and
 imported resource handles rather than simulation data.
 
-`UiSystem` also has process lifetime in `main.c`. It loads local font and curated UI-skin
-textures once, builds a reference-canvas layout each frame, captures
-pointer/keyboard/gamepad UI navigation, and owns the current/previous focus graph. Each
-skin resource has an independent ready flag and a code-drawn fallback. It is not part of
-deterministic simulation.
+`UiSystem` also has process lifetime in `main.c`. It loads local fonts and the
+procedural UI skin once; builds a reference-canvas layout each frame; captures
+pointer/keyboard/gamepad UI navigation; and owns the current/previous focus graph. It
+is not part of deterministic simulation.
 
 `GameSession` owns:
 
@@ -209,11 +208,12 @@ the complete catalog before a match can use it. See [MAPS.md](MAPS.md).
 - `character_animation.c`: pure match clip selection from life, dash/grapple, velocity, and
   facing, plus presentation-only action-state timing/blend envelopes. Concealment reveal
   and attack cooldown timers never double as animation state.
-- `menu_scene.c`: hangar, podium, lights, non-rotating preview brawler, and application
-  of the shared showcase. Its stage clock is independent of model-preview time, so
-  candidate changes do not restart the background. Stage and brawler passes remain
-  separate so tintable 2D station motifs can sit behind the model without entering
-  world rendering.
+- `menu_scene.c`: flat vector arena podium, non-rotating preview brawler, transparent
+  sticker render target/shader, and application of the shared showcase. Its circular
+  multi-direction dilation and softened alpha thresholds produce a rounded ink/paper
+  contour. The stage clock is independent of model-preview time, so candidate changes
+  do not restart the stage. Stage and brawler passes remain separate so the UI layer
+  can sit behind and around the composited silhouette without entering world rendering.
 - `render.c`: world-pass orchestration and brawler/projectile/grass drawing.
 
 The renderer reads simulation snapshots and presentation events. Ability VFX can name a
@@ -227,19 +227,27 @@ every no-depth-write interval.
 ## UI ownership
 
 `ui_system.[ch]`, `ui_theme.[ch]`, `ui_skin.[ch]`, `ui_icons.[ch]`, and `ui_types.h`
-define the Helios Broadcast presentation contract: semantic colors, local fonts,
-curated texture lifetime, nine-slice controls, per-resource fallbacks, named text roles,
-1280×800 reference layout, focus IDs, input modality, controls, icons, and
-reduced-motion timing. Migrated UI draws text and imported UI textures only through this
-layer. `Assets` continues to own world models, shaders, textures, and render targets;
-UI skin textures never enter deterministic or world-presentation state.
+define the Arena Ink presentation contract: semantic colors, local fonts, procedural
+comic geometry, named text roles, 1280×800
+reference layout, focus IDs, input modality, controls, icons, easing, and reduced-motion
+timing. Migrated UI draws text and UI primitives only through this layer. `Assets`
+continues to own world models, shaders, textures, and scene render targets; the
+menu-specific transparent sticker target belongs to `MenuScene`, and no UI state enters
+deterministic simulation.
+
+`content_catalog.c` exposes one immutable `CharacterUiStyle` per stable kit—two colors,
+a mechanic-derived motif, and a short impact label. UI and presentation consume that
+typed identity without branching on character names.
 
 The player-facing shell is split by responsibility:
 
-- `menu.c`: launch deck, roster candidate/commit behavior, Controls and Settings.
+- `menu.c`: launch deck, mechanic-derived character motifs, orchestrated entrance,
+  roster candidate/commit behavior, Controls, and Settings.
 - `hud.c`: body-anchored numeric health/shield bars and player ammo, objective/ability
-  broadcast, action-retired tutorials, downed state, and explicit result Continue.
-- `menu_scene.c`: the 3D menu environment and character preview.
+  broadcast, resettable impact-stamp detection, action-retired tutorials, downed state,
+  and the Continue/Rematch/Change Brawler result poster.
+- `menu_scene.c`: the vector arena podium, character preview, and rounded sticker
+  compositing pass.
 - `command_center.c`: explicit developer-tool state with a category rail, scrollable
   body, provenance header, and persistent save/reset footer.
 
@@ -269,7 +277,7 @@ Place a change according to the state it owns:
 | Particle/light/float text response | game event + `presentation/effects` |
 | Aim shape or field visualization | `presentation/ability_visuals` |
 | Menu/HUD display | `ui` |
-| Menu podium/hangar/model framing | `presentation/menu_scene` + content showcase |
+| Menu stage/model/sticker framing | `presentation/menu_scene` + content showcase |
 | UI theme, text, focus, and components | `ui/ui_system` |
 | UI texture lifetime, slicing, and decoration | `ui/ui_skin` |
 | Shader/model/texture lifetime | `presentation/assets` |
@@ -291,10 +299,11 @@ The game test executable links core/content/game objects without presentation or
 The replay test additionally links the app controller but still verifies that
 presentation state remains untouched.
 
-`test_ui` exercises pure layout, target size, focus-neighbor, ID, motion, contrast,
-nine-slice metadata, and presentation-profile behavior without opening a window.
-`check-ui` prevents migrated player UI from bypassing shared text/texture ownership and
-verifies shipped font and UI-asset hashes, dimensions, licenses, sources, and archive
+`test_ui` exercises pure layout, target size, focus-neighbor, ID, easing/reduced motion,
+distinct character motifs, result actions, contrast, procedural-skin lifetime, and
+presentation-profile behavior without opening a window.
+`check-ui` prevents migrated player UI from bypassing shared text/skin ownership and
+verifies shipped fonts, procedural ownership, retained reference provenance, and archive
 policy. Graphical checks remain documented in
 [UI_SMOKE_CHECKLIST.md](UI_SMOKE_CHECKLIST.md).
 

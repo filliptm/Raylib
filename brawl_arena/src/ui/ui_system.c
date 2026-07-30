@@ -9,7 +9,10 @@ static UiSystem *g_ui = NULL;
 
 static Font LoadUiFont(const char *path, int size, bool *owned, bool *fallback)
 {
-    Font font = LoadFontEx(path, size, NULL, 0);
+    int codepoints[96];
+    for (int i = 0; i < 95; i++) codepoints[i] = 32 + i;
+    codepoints[95] = 0x2014;
+    Font font = LoadFontEx(path, size, codepoints, 96);
     if (font.texture.id > 0 && font.glyphCount > 0)
     {
         SetTextureFilter(font.texture, TEXTURE_FILTER_BILINEAR);
@@ -25,7 +28,7 @@ static Font LoadUiFont(const char *path, int size, bool *owned, bool *fallback)
 bool UiSystemLoad(UiSystem *ui)
 {
     memset(ui, 0, sizeof(*ui));
-    ui->theme = UiThemeHelios();
+    ui->theme = UiThemeArenaInk();
     ui->resources.display = LoadUiFont("resources/fonts/BarlowCondensed-Bold.ttf", 96,
                                        &ui->resources.displayOwned, &ui->fontFallback);
     ui->resources.body = LoadUiFont("resources/fonts/Barlow-Regular.ttf", 64,
@@ -35,7 +38,7 @@ bool UiSystemLoad(UiSystem *ui)
     ui->resources.data = LoadUiFont("resources/fonts/IBMPlexMono-Medium.ttf", 64,
                                     &ui->resources.dataOwned, &ui->fontFallback);
     if (!UiSkinLoad(&ui->skin))
-        TraceLog(LOG_WARNING, "UI: one or more skin resources are using safe fallbacks");
+        TraceLog(LOG_WARNING, "UI: procedural skin unavailable; using safe geometry");
     ui->modality = UI_INPUT_POINTER;
     ui->interactionsEnabled = true;
     ui->previousMouse = GetMousePosition();
@@ -136,7 +139,8 @@ static void MoveFocus(UiSystem *ui, int dx, int dy)
 {
     UiId next = UiFocusNeighbor(ui->previousNodes, ui->previousNodeCount,
                                 ui->focused, dx, dy);
-    if (next) ui->focused = next;
+    if (next && next != ui->focused)
+        ui->focused = next;
 }
 
 float UiMotionDuration(float normalDuration, bool reducedMotion)
@@ -144,10 +148,29 @@ float UiMotionDuration(float normalDuration, bool reducedMotion)
     return reducedMotion ? 0.0f : fmaxf(0.0f, normalDuration);
 }
 
+float UiEaseOutCubic(float value)
+{
+    float t = Clamp(value, 0.0f, 1.0f);
+    float inverse = 1.0f - t;
+    return 1.0f - inverse*inverse*inverse;
+}
+
+float UiEaseOutBack(float value)
+{
+    float t = Clamp(value, 0.0f, 1.0f) - 1.0f;
+    const float overshoot = 1.70158f;
+    return 1.0f + (overshoot + 1.0f)*t*t*t + overshoot*t*t;
+}
+
+float UiMotionProgress(float age, float delay, float duration, bool reducedMotion)
+{
+    if (reducedMotion || duration <= 0.0f) return 1.0f;
+    return Clamp((age - fmaxf(delay, 0.0f))/duration, 0.0f, 1.0f);
+}
+
 void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
                         int width, int height, float dt)
 {
-    (void)dt;
     UiSystemSetActive(ui);
     ui->previousNodeCount = ui->nodeCount;
     memcpy(ui->previousNodes, ui->nodes,
@@ -155,6 +178,8 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
     ui->nodeCount = 0;
     ui->interactionsEnabled = true;
     ui->focusOverflow = false;
+    ui->frameDt = fmaxf(0.0f, dt);
+    ui->elapsed += ui->frameDt;
 
     float prefScale = preferences ? preferences->scale : 1.0f;
     ui->glyphMode = preferences ? preferences->inputGlyphMode : UI_GLYPH_AUTO;
@@ -172,6 +197,7 @@ void UiSystemBeginFrame(UiSystem *ui, const UiPreferences *preferences,
         ui->layout.origin.x, ui->layout.origin.y,
         UI_REFERENCE_WIDTH*ui->layout.scale, UI_REFERENCE_HEIGHT*ui->layout.scale
     };
+    ui->reducedMotion = preferences && preferences->reducedMotion;
 
     Vector2 mouse = GetMousePosition();
     if (Vector2Distance(mouse, ui->previousMouse) > 1.5f || GetMouseWheelMove() != 0.0f)
@@ -352,6 +378,34 @@ void UiDrawTextShadow(UiTextRole role, const char *text, Vector2 position, Color
     UiDrawText(role, text, position, color);
 }
 
+static void DrawTextOutlineRaw(Font font, const char *text, Vector2 position,
+                               float size, float spacing, Color fill,
+                               Color outline, float thickness)
+{
+    static const Vector2 directions[] = {
+        { -1, -1 }, { 0, -1 }, { 1, -1 }, { -1, 0 },
+        { 1, 0 }, { -1, 1 }, { 0, 1 }, { 1, 1 }
+    };
+    for (int ring = (int)ceilf(thickness); ring >= 1; ring--)
+    {
+        float distance = fminf(thickness, (float)ring);
+        for (int i = 0; i < 8; i++)
+            DrawTextEx(font, text,
+                       (Vector2){ position.x + directions[i].x*distance,
+                                  position.y + directions[i].y*distance },
+                       size, spacing, outline);
+    }
+    DrawTextEx(font, text, position, size, spacing, fill);
+}
+
+void UiDrawTextOutline(UiTextRole role, const char *text, Vector2 position,
+                       Color fill, Color outline, float thickness)
+{
+    float size = UiTextSize(role);
+    DrawTextOutlineRaw(FontForRole(role), text, position, size, size*0.025f,
+                       fill, outline, UiScale(thickness));
+}
+
 static void ChamferPoints(Rectangle r, float cut, Vector2 points[6])
 {
     // raylib's triangle helpers require counter-clockwise screen-space points.
@@ -384,7 +438,7 @@ static void DrawPanelGeometry(Rectangle bounds, Color fill, Color edge, bool rai
 
 static Color OpaqueSurface(Color fill)
 {
-    // Panels are physical Helios-9 control surfaces, not glass. Keep explicit
+    // Arena Ink panels are opaque printed shapes, not glass. Keep explicit
     // zero-alpha fills for outline-only focus rings, but make every real surface
     // opaque even if a caller passes a legacy translucent color.
     if (fill.a > 0) fill.a = 255;
@@ -417,34 +471,37 @@ void UiDrawControlSurface(Rectangle bounds, Color fill, Color edge, bool raised)
 
 void UiDrawSignalRail(Rectangle bounds, Color color, bool rightSide)
 {
-    float x = rightSide ? bounds.x + bounds.width - UiScale(4) : bounds.x;
-    DrawRectangleRec((Rectangle){ x, bounds.y + UiScale(5), UiScale(4),
-                                  bounds.height - UiScale(10) }, color);
-    for (int i = 0; i < 3; i++)
+    float width = UiScale(7);
+    float x = rightSide ? bounds.x + bounds.width - width - UiScale(3)
+                        : bounds.x + UiScale(3);
+    DrawRectangleRec((Rectangle){ x, bounds.y + UiScale(7), width,
+                                  bounds.height - UiScale(14) }, color);
+    for (int i = 0; i < 2; i++)
     {
-        float y = bounds.y + bounds.height - UiScale(10 + i*6);
+        float y = bounds.y + bounds.height - UiScale(12 + i*8);
         DrawLineEx((Vector2){ x - UiScale(5), y },
-                   (Vector2){ x + UiScale(8), y - UiScale(5) }, UiScale(1), color);
+                   (Vector2){ x + width + UiScale(5), y - UiScale(5) },
+                   UiScale(2), g_ui ? g_ui->theme->ink : BLACK);
     }
 }
 
 void UiDrawKeycap(Rectangle bounds, const char *label, bool active)
 {
-    const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    UiDrawControlSurface(bounds, active ? t->hullBright : t->hull,
-                         active ? t->ion : t->line, false);
+    const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
+    UiDrawControlSurface(bounds, active ? t->yellow : t->surfaceMuted,
+                         active ? t->ink : t->border, active);
     UiDrawTextFit(UI_TEXT_CAPTION, label, bounds, UI_ALIGN_CENTER,
-                  active ? t->paper : t->mist);
+                  active ? t->ink : t->paper);
 }
 
 void UiDrawProgress(Rectangle bounds, float value, Color fill, bool segmented, int segments)
 {
-    const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
+    const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
     value = Clamp(value, 0.0f, 1.0f);
-    if (g_ui && UiSkinDrawProgress(&g_ui->skin, bounds, value, t->hull, fill,
+    if (g_ui && UiSkinDrawProgress(&g_ui->skin, bounds, value, t->ink, fill,
                                    segmented, segments, UiScale(3)))
         return;
-    DrawRectangleRec(bounds, t->hull);
+    DrawRectangleRec(bounds, t->ink);
     if (!segmented || segments <= 1)
     {
         Rectangle f = bounds;
@@ -468,15 +525,206 @@ void UiDrawDecoration(UiDecoration decoration, Rectangle bounds, Color tint, flo
     if (g_ui && UiSkinDrawDecoration(&g_ui->skin, decoration, bounds, tint))
         return;
 
-    // Decorative resources are optional. A restrained geometric fallback keeps
-    // the composition intentional when assets are missing without blocking play.
+    // Keep a small burst fallback so a missing skin never leaves an empty stage.
     Vector2 center = {
         bounds.x + bounds.width*0.5f, bounds.y + bounds.height*0.5f
     };
     float radius = fminf(bounds.width, bounds.height)*0.48f;
-    DrawCircleLines((int)center.x, (int)center.y, radius, tint);
-    DrawCircleLines((int)center.x, (int)center.y, radius*0.68f, tint);
-    DrawCircleLines((int)center.x, (int)center.y, radius*0.34f, tint);
+    for (int i = 0; i < 16; i++)
+    {
+        float angle = (float)i*2.0f*PI/16.0f;
+        Vector2 start = { center.x + cosf(angle)*radius*0.25f,
+                          center.y + sinf(angle)*radius*0.25f };
+        Vector2 end = { center.x + cosf(angle)*radius,
+                        center.y + sinf(angle)*radius };
+        DrawLineEx(start, end, UiScale(i%4 == 0 ? 4.0f : 2.0f), tint);
+    }
+}
+
+static Color MotifColor(Color color, float opacity)
+{
+    color.a = (unsigned char)roundf(255.0f*Clamp(opacity, 0.0f, 1.0f));
+    return color;
+}
+
+void UiDrawCharacterMotif(CharacterUiMotif motif, Rectangle bounds,
+                          Color primary, Color secondary, float opacity)
+{
+    Vector2 center = {
+        bounds.x + bounds.width*0.5f,
+        bounds.y + bounds.height*0.5f
+    };
+    float radius = fminf(bounds.width, bounds.height)*0.39f;
+    float stroke = fmaxf(2.0f, UiScale(4.0f));
+    Color p = MotifColor(primary, opacity);
+    Color s = MotifColor(secondary, opacity*0.88f);
+
+    if (motif == CHARACTER_UI_SAW)
+    {
+        DrawCircleLinesV(center, radius*0.70f, p);
+        DrawCircleLinesV(center, radius*0.48f, s);
+        for (int i = 0; i < 18; i++)
+        {
+            float angle = (float)i*2.0f*PI/18.0f;
+            float half = 0.060f;
+            Vector2 a = { center.x + cosf(angle - half)*radius*0.69f,
+                          center.y + sinf(angle - half)*radius*0.69f };
+            Vector2 b = { center.x + cosf(angle)*radius,
+                          center.y + sinf(angle)*radius };
+            Vector2 c = { center.x + cosf(angle + half)*radius*0.69f,
+                          center.y + sinf(angle + half)*radius*0.69f };
+            DrawTriangle(a, b, c, (i & 1) ? p : s);
+        }
+    }
+    else if (motif == CHARACTER_UI_CROSSHAIR)
+    {
+        DrawCircleLinesV(center, radius*0.74f, p);
+        DrawCircleLinesV(center, radius*0.40f, s);
+        for (int i = 0; i < 4; i++)
+        {
+            float angle = i*PI*0.5f;
+            Vector2 a = { center.x + cosf(angle)*radius*0.48f,
+                          center.y + sinf(angle)*radius*0.48f };
+            Vector2 b = { center.x + cosf(angle)*radius,
+                          center.y + sinf(angle)*radius };
+            DrawLineEx(a, b, stroke, p);
+        }
+        DrawCircleV(center, stroke*1.4f, s);
+    }
+    else if (motif == CHARACTER_UI_BLAST)
+    {
+        for (int ring = 1; ring <= 3; ring++)
+            DrawCircleLinesV(center, radius*(0.22f + ring*0.18f),
+                             ring == 2 ? s : p);
+        for (int i = 0; i < 12; i++)
+        {
+            float angle = (float)i*2.0f*PI/12.0f;
+            Vector2 a = { center.x + cosf(angle)*radius*0.70f,
+                          center.y + sinf(angle)*radius*0.70f };
+            Vector2 b = { center.x + cosf(angle)*radius,
+                          center.y + sinf(angle)*radius };
+            DrawLineEx(a, b, stroke*(i%3 == 0 ? 1.45f : 0.75f),
+                       (i & 1) ? s : p);
+        }
+    }
+    else if (motif == CHARACTER_UI_SHIELD)
+    {
+        Vector2 points[6];
+        for (int i = 0; i < 6; i++)
+        {
+            float angle = -PI*0.5f + (float)i*2.0f*PI/6.0f;
+            points[i] = (Vector2){ center.x + cosf(angle)*radius*0.82f,
+                                  center.y + sinf(angle)*radius*0.82f };
+        }
+        for (int i = 0; i < 6; i++)
+            DrawLineEx(points[i], points[(i + 1)%6], stroke*1.55f,
+                       (i & 1) ? p : s);
+        DrawLineEx((Vector2){ center.x - radius*0.62f, center.y },
+                   (Vector2){ center.x + radius*0.62f, center.y }, stroke, p);
+        DrawLineEx((Vector2){ center.x, center.y - radius*0.62f },
+                   (Vector2){ center.x, center.y + radius*0.62f }, stroke, s);
+    }
+    else
+    {
+        for (int i = 0; i < 8; i++)
+        {
+            float angle = -PI*0.80f + i*PI*1.60f/7.0f;
+            float branch = radius*(0.36f + 0.07f*(i%3));
+            Vector2 root = { center.x, center.y + radius*0.70f };
+            Vector2 tip = { center.x + cosf(angle)*branch,
+                            center.y + sinf(angle)*branch - radius*0.16f };
+            DrawLineEx(root, tip, stroke*0.70f, p);
+            Vector2 leaf = Vector2Lerp(root, tip, 0.72f);
+            DrawEllipse((int)leaf.x, (int)leaf.y,
+                        radius*0.10f, radius*0.055f, (i & 1) ? s : p);
+        }
+        DrawCircleLinesV(center, radius*0.70f, s);
+    }
+}
+
+void UiDrawComicBackdrop(void)
+{
+    if (!g_ui) return;
+    Rectangle viewport = {
+        0, 0, (float)g_ui->layout.viewportWidth, (float)g_ui->layout.viewportHeight
+    };
+    if (UiSkinDrawBackdrop(&g_ui->skin, viewport, g_ui->layout.content,
+                           g_ui->theme->blue, g_ui->theme->ink,
+                           g_ui->theme->yellow, g_ui->theme->enemy))
+        return;
+    DrawRectangleRec(viewport, g_ui->theme->ink);
+    DrawRectangleRec(g_ui->layout.content, g_ui->theme->blue);
+}
+
+static void DrawLogoWord(const char *text, Rectangle bounds, Color fill)
+{
+    Font font = FontForRole(UI_TEXT_DISPLAY);
+    float size = bounds.height;
+    float spacing = size*0.01f;
+    Vector2 measure = MeasureTextEx(font, text, size, spacing);
+    if (measure.x > bounds.width)
+    {
+        size *= bounds.width/measure.x;
+        spacing = size*0.01f;
+        measure = MeasureTextEx(font, text, size, spacing);
+    }
+    Vector2 position = {
+        bounds.x + (bounds.width - measure.x)*0.5f,
+        bounds.y + (bounds.height - measure.y)*0.5f
+    };
+    float white = fmaxf(2.0f, bounds.height*0.075f);
+    float black = fmaxf(1.5f, bounds.height*0.045f);
+    DrawTextOutlineRaw(font, text,
+                       (Vector2){ position.x + white*1.35f,
+                                  position.y + white*1.55f },
+                       size, spacing, g_ui->theme->ink, g_ui->theme->ink, black);
+    DrawTextOutlineRaw(font, text, position, size, spacing,
+                       g_ui->theme->ink, g_ui->theme->paper, white);
+    DrawTextOutlineRaw(font, text, position, size, spacing,
+                       fill, g_ui->theme->ink, black);
+}
+
+void UiDrawArenaLogo(Rectangle bounds, const char *tagline)
+{
+    if (!g_ui) return;
+    Vector2 center = {
+        bounds.x + bounds.width*0.47f,
+        bounds.y + bounds.height*0.43f
+    };
+    Vector2 burst[20];
+    Vector2 shadow[20];
+    for (int i = 0; i < 20; i++)
+    {
+        float angle = -PI*0.5f + (float)i*2.0f*PI/20.0f;
+        float radial = (i & 1) ? 0.40f : (0.49f + 0.05f*(float)((i*3)%5)/4.0f);
+        burst[i] = (Vector2){
+            center.x + cosf(angle)*bounds.width*radial,
+            center.y + sinf(angle)*bounds.height*radial
+        };
+        shadow[i] = Vector2Add(burst[i], (Vector2){ UiScale(6), UiScale(7) });
+    }
+    DrawTriangleFan(shadow, 20, g_ui->theme->ink);
+    DrawTriangleFan(burst, 20, g_ui->theme->paper);
+
+    DrawLogoWord("BRAWL",
+                 (Rectangle){ bounds.x + bounds.width*0.02f,
+                              bounds.y - bounds.height*0.03f,
+                              bounds.width*0.91f, bounds.height*0.45f },
+                 g_ui->theme->yellow);
+    DrawLogoWord("ARENA",
+                 (Rectangle){ bounds.x + bounds.width*0.10f,
+                              bounds.y + bounds.height*0.30f,
+                              bounds.width*0.88f, bounds.height*0.47f },
+                 g_ui->theme->yellow);
+
+    Rectangle strip = {
+        bounds.x + bounds.width*0.13f,
+        bounds.y + bounds.height*0.79f,
+        bounds.width*0.76f,
+        bounds.height*0.17f
+    };
+    UiDrawControlSurface(strip, g_ui->theme->yellow, g_ui->theme->ink, true);
+    UiDrawTextFit(UI_TEXT_CAPTION, tagline, strip, UI_ALIGN_CENTER, g_ui->theme->ink);
 }
 
 static bool MouseIn(Rectangle bounds)
@@ -520,33 +768,57 @@ UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
                     UiButtonStyle style, UiIcon icon)
 {
     UiResponse r = Register(id, bounds, true);
-    const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    Color fill = t->deckRaised;
-    Color edge = t->line;
+    const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
+    Color fill = t->surfaceRaised;
+    Color edge = t->ink;
     Color text = t->paper;
     if (style == UI_BUTTON_PRIMARY)
     {
-        fill = r.held ? (Color){ 174, 111, 40, 255 } : t->safety;
-        edge = t->ready;
-        text = t->voidBg;
+        fill = t->enemy;
+        edge = t->ink;
+        text = t->paper;
     }
-    else if (style == UI_BUTTON_DANGER) edge = t->enemy;
-    else if (style == UI_BUTTON_UTILITY) fill = t->deck;
+    else if (style == UI_BUTTON_DANGER)
+    {
+        fill = t->enemy;
+        edge = t->ink;
+    }
+    else if (style == UI_BUTTON_BLUE)
+        fill = t->blue;
+    else if (style == UI_BUTTON_YELLOW)
+    {
+        fill = t->yellow;
+        text = t->ink;
+    }
+    else if (style == UI_BUTTON_PURPLE)
+        fill = t->purple;
+    else if (style == UI_BUTTON_UTILITY)
+        fill = t->surface;
     if (r.hovered || (r.focused && g_ui && g_ui->focusVisible))
-        edge = style == UI_BUTTON_PRIMARY ? t->paper : t->ion;
+        edge = t->paper;
 
-    UiDrawControlSurface(bounds, fill, edge, style == UI_BUTTON_PRIMARY);
+    Rectangle visual = bounds;
+    bool animated = !g_ui || !g_ui->reducedMotion;
+    if (r.held && animated) visual.y += UiScale(3);
+    else if (r.hovered && animated) visual.y -= UiScale(1);
+    UiDrawControlSurface(visual, fill, edge,
+                         !r.held && style != UI_BUTTON_UTILITY);
     if (r.focused && g_ui && g_ui->focusVisible)
     {
-        Rectangle ring = { bounds.x - UiScale(3), bounds.y - UiScale(3),
-                           bounds.width + UiScale(6), bounds.height + UiScale(6) };
-        UiDrawPanel(ring, BLANK, t->paper, false);
+        Rectangle outer = { bounds.x - UiScale(5), bounds.y - UiScale(5),
+                            bounds.width + UiScale(10), bounds.height + UiScale(10) };
+        Rectangle inner = { bounds.x - UiScale(2), bounds.y - UiScale(2),
+                            bounds.width + UiScale(4), bounds.height + UiScale(4) };
+        UiDrawPanel(outer, BLANK, t->ink, false);
+        UiDrawPanel(inner, BLANK, t->paper, false);
     }
     if (icon >= 0)
     {
-        Vector2 center = { bounds.x + UiScale(24), bounds.y + bounds.height*0.5f };
+        Vector2 center = {
+            visual.x + UiScale(24), visual.y + visual.height*0.5f
+        };
         UiIconDraw(icon, center, UiScale(18), text);
-        Rectangle textBounds = bounds;
+        Rectangle textBounds = visual;
         textBounds.x += UiScale(42);
         textBounds.width -= UiScale(52);
         UiDrawTextFit(style == UI_BUTTON_PRIMARY ? UI_TEXT_HEADING : UI_TEXT_LABEL,
@@ -554,7 +826,7 @@ UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
     }
     else
         UiDrawTextFit(style == UI_BUTTON_PRIMARY ? UI_TEXT_HEADING : UI_TEXT_LABEL,
-                      label, bounds, UI_ALIGN_CENTER, text);
+                      label, visual, UI_ALIGN_CENTER, text);
     return r;
 }
 
@@ -562,10 +834,10 @@ UiResponse UiIconButton(UiId id, Rectangle bounds, UiIcon icon, const char *acce
 {
     (void)accessibleLabel;
     UiResponse r = Register(id, bounds, true);
-    const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    UiDrawControlSurface(bounds, r.hovered ? t->hull : t->deck,
-                         (r.focused && g_ui && g_ui->focusVisible) ? t->paper :
-                         (r.hovered ? t->ion : t->line), false);
+    const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
+    UiDrawControlSurface(bounds, r.hovered ? t->blue : t->surface,
+                         (r.focused && g_ui && g_ui->focusVisible) ? t->yellow :
+                         (r.hovered ? t->paper : t->ink), r.hovered);
     UiIconDraw(icon, (Vector2){ bounds.x + bounds.width*0.5f,
                                bounds.y + bounds.height*0.5f },
                fminf(bounds.width, bounds.height)*0.42f, t->paper);
@@ -575,20 +847,19 @@ UiResponse UiIconButton(UiId id, Rectangle bounds, UiIcon icon, const char *acce
 UiResponse UiToggle(UiId id, Rectangle bounds, const char *label, bool value)
 {
     UiResponse r = Register(id, bounds, true);
-    const UiTheme *t = g_ui ? g_ui->theme : UiThemeHelios();
-    UiDrawPanel(bounds, r.hovered ? t->deckRaised : t->deck,
-                (r.focused && g_ui && g_ui->focusVisible) ? t->paper : t->line, false);
+    const UiTheme *t = g_ui ? g_ui->theme : UiThemeArenaInk();
+    UiDrawPanel(bounds, r.hovered ? t->surfaceRaised : t->surface,
+                (r.focused && g_ui && g_ui->focusVisible) ? t->yellow : t->ink, false);
     Rectangle labelBounds = bounds;
     labelBounds.x += UiScale(14);
     labelBounds.width -= UiScale(76);
     UiDrawTextFit(UI_TEXT_BODY, label, labelBounds, UI_ALIGN_LEFT, t->paper);
-    Rectangle state = { bounds.x + bounds.width - UiScale(54),
-                        bounds.y + (bounds.height - UiScale(24))*0.5f,
-                        UiScale(42), UiScale(24) };
-    DrawRectangleRounded(state, 0.9f, 8, value ? t->ion : t->hull);
-    DrawCircle((int)(value ? state.x + state.width - state.height*0.5f
-                          : state.x + state.height*0.5f),
-               (int)(state.y + state.height*0.5f), state.height*0.32f,
-               value ? t->voidBg : t->mist);
+    Rectangle state = { bounds.x + bounds.width - UiScale(62),
+                        bounds.y + (bounds.height - UiScale(30))*0.5f,
+                        UiScale(50), UiScale(30) };
+    UiDrawControlSurface(state, value ? t->yellow : t->surfaceMuted,
+                         t->ink, value);
+    UiDrawTextFit(UI_TEXT_CAPTION, value ? "ON" : "OFF", state,
+                  UI_ALIGN_CENTER, value ? t->ink : t->paper);
     return r;
 }

@@ -1,6 +1,6 @@
 # UI font sources
 
-The Helios Broadcast interface ships these fonts locally so the game renders
+The Arena Ink interface ships these fonts locally so the game renders
 consistently without network access:
 
 - Barlow Regular, Barlow Semibold, and Barlow Condensed Bold are from the
@@ -13,4 +13,3 @@ consistently without network access:
 All files were retrieved on 2026-07-27 from the corresponding `google/fonts`
 `main/ofl` directories. The bundled `OFL-Barlow.txt` and
 `OFL-IBMPlexMono.txt` files contain the licenses that apply to the font files.
-

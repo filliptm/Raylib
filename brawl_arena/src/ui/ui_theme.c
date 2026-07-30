@@ -1,30 +1,30 @@
 #include "ui_theme.h"
 #include <math.h>
 
-static const UiTheme HELIOS = {
-    .voidBg = { 5, 11, 20, 255 },
-    .deepBg = { 7, 17, 31, 255 },
-    .deck = { 14, 27, 46, 255 },
-    .deckRaised = { 18, 35, 58, 255 },
-    .hull = { 26, 48, 73, 255 },
-    .hullBright = { 41, 67, 94, 255 },
-    .line = { 59, 88, 116, 255 },
-    .paper = { 243, 247, 251, 255 },
-    .mist = { 168, 183, 200, 255 },
-    .muted = { 130, 149, 170, 255 },
-    .ion = { 100, 185, 255, 255 },
-    .safety = { 255, 157, 66, 255 },
-    .ready = { 246, 207, 101, 255 },
-    .reactor = { 184, 140, 255, 255 },
-    .ally = { 85, 213, 154, 255 },
-    .enemy = { 255, 101, 119, 255 },
-    .shadow = { 0, 3, 10, 190 },
-    .scrim = { 2, 6, 12, 210 }
+static const UiTheme ARENA_INK = {
+    .ink = { 7, 16, 25, 255 },
+    .inkSoft = { 10, 31, 54, 255 },
+    .surface = { 14, 48, 88, 255 },
+    .surfaceRaised = { 18, 76, 141, 255 },
+    .surfaceMuted = { 38, 82, 124, 255 },
+    .surfaceStrong = { 80, 139, 190, 255 },
+    .border = { 151, 207, 239, 255 },
+    .paper = { 255, 247, 219, 255 },
+    .textSecondary = { 200, 221, 234, 255 },
+    .textMuted = { 142, 173, 194, 255 },
+    .blue = { 7, 108, 213, 255 },
+    .yellow = { 255, 210, 30, 255 },
+    .gold = { 255, 229, 91, 255 },
+    .purple = { 129, 64, 240, 255 },
+    .ally = { 32, 198, 122, 255 },
+    .enemy = { 217, 43, 43, 255 },
+    .shadow = { 0, 0, 0, 220 },
+    .scrim = { 3, 10, 18, 218 }
 };
 
-const UiTheme *UiThemeHelios(void)
+const UiTheme *UiThemeArenaInk(void)
 {
-    return &HELIOS;
+    return &ARENA_INK;
 }
 
 Color UiThemeHighContrast(Color color, bool enabled)

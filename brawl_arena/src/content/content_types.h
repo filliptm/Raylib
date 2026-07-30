@@ -200,6 +200,24 @@ typedef struct AbilityDefinition {
     } data;
 } AbilityDefinition;
 
+// Content-owned visual identity for menu framing and short UI callouts. These values
+// never enter deterministic simulation; they let every brawler carry a recognizable
+// poster motif without teaching the shared UI renderer character names.
+typedef enum CharacterUiMotif {
+    CHARACTER_UI_SAW = 0,
+    CHARACTER_UI_CROSSHAIR,
+    CHARACTER_UI_BLAST,
+    CHARACTER_UI_SHIELD,
+    CHARACTER_UI_GROWTH
+} CharacterUiMotif;
+
+typedef struct CharacterUiStyle {
+    Color primary;
+    Color secondary;
+    CharacterUiMotif motif;
+    const char *impactLabel;
+} CharacterUiStyle;
+
 typedef struct CharacterDefinition {
     char id[32];
     char displayName[48];

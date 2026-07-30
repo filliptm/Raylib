@@ -42,6 +42,9 @@ typedef struct UiSystem {
     bool fontFallback;
     bool interactionsEnabled;
     bool focusOverflow;
+    bool reducedMotion;
+    float frameDt;
+    float elapsed;
 } UiSystem;
 
 bool UiSystemLoad(UiSystem *ui);
@@ -60,6 +63,9 @@ float UiReferenceScaleForViewport(int width, int height, float preferenceScale);
 Rectangle UiReferenceSafeRect(int width, int height, float preferenceScale);
 UiId UiFocusNeighbor(const UiFocusNode *nodes, int count, UiId current, int dx, int dy);
 float UiMotionDuration(float normalDuration, bool reducedMotion);
+float UiEaseOutCubic(float value);
+float UiEaseOutBack(float value);
+float UiMotionProgress(float age, float delay, float duration, bool reducedMotion);
 
 UiId UiHash(const char *text);
 void UiFocus(UiId id);
@@ -75,6 +81,8 @@ void UiDrawTextAligned(UiTextRole role, const char *text, Rectangle bounds,
 void UiDrawTextFit(UiTextRole role, const char *text, Rectangle bounds,
                    UiAlign align, Color color);
 void UiDrawTextShadow(UiTextRole role, const char *text, Vector2 position, Color color);
+void UiDrawTextOutline(UiTextRole role, const char *text, Vector2 position,
+                       Color fill, Color outline, float thickness);
 
 void UiDrawPanel(Rectangle bounds, Color fill, Color edge, bool raised);
 void UiDrawFeaturePanel(Rectangle bounds, Color fill, Color edge, bool raised);
@@ -83,6 +91,10 @@ void UiDrawSignalRail(Rectangle bounds, Color color, bool rightSide);
 void UiDrawKeycap(Rectangle bounds, const char *label, bool active);
 void UiDrawProgress(Rectangle bounds, float value, Color fill, bool segmented, int segments);
 void UiDrawDecoration(UiDecoration decoration, Rectangle bounds, Color tint, float opacity);
+void UiDrawCharacterMotif(CharacterUiMotif motif, Rectangle bounds,
+                          Color primary, Color secondary, float opacity);
+void UiDrawComicBackdrop(void);
+void UiDrawArenaLogo(Rectangle bounds, const char *tagline);
 UiResponse UiInteract(UiId id, Rectangle bounds, bool enabled);
 UiResponse UiButton(UiId id, Rectangle bounds, const char *label,
                     UiButtonStyle style, UiIcon icon);

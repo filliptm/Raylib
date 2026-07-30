@@ -20,6 +20,39 @@ static const CharacterRole CHARACTER_ROLES[CLASS_COUNT] = {
     CHARACTER_ROLE_SUPPORT
 };
 
+static const CharacterUiStyle CHARACTER_UI_STYLES[CLASS_COUNT] = {
+    {
+        .primary = { 8, 120, 232, 255 },
+        .secondary = { 255, 210, 30, 255 },
+        .motif = CHARACTER_UI_SAW,
+        .impactLabel = "RIP IT UP!"
+    },
+    {
+        .primary = { 26, 184, 255, 255 },
+        .secondary = { 255, 247, 219, 255 },
+        .motif = CHARACTER_UI_CROSSHAIR,
+        .impactLabel = "DEAD CENTER!"
+    },
+    {
+        .primary = { 139, 77, 255, 255 },
+        .secondary = { 255, 210, 30, 255 },
+        .motif = CHARACTER_UI_BLAST,
+        .impactLabel = "BOOM!"
+    },
+    {
+        .primary = { 242, 56, 56, 255 },
+        .secondary = { 255, 210, 30, 255 },
+        .motif = CHARACTER_UI_SHIELD,
+        .impactLabel = "HOLD THE LINE!"
+    },
+    {
+        .primary = { 32, 198, 122, 255 },
+        .secondary = { 166, 244, 94, 255 },
+        .motif = CHARACTER_UI_GROWTH,
+        .impactLabel = "BLOOM!"
+    }
+};
+
 static const CharacterShowcaseDefinition SHOWCASE_DEFAULT = {
     .yawDegrees = 180.0f,
     .scale = 0.90f,
@@ -465,6 +498,13 @@ const CharacterDefinition *ContentCharacter(const ContentCatalog *catalog,
 {
     if (!catalog || character < 0 || character >= CLASS_COUNT) return 0;
     return &catalog->characters[character];
+}
+
+const CharacterUiStyle *ContentCharacterUiStyle(BrawlerClass character)
+{
+    if (character < 0 || character >= CLASS_COUNT)
+        character = CLASS_SHOTGUNNER;
+    return &CHARACTER_UI_STYLES[character];
 }
 
 const AbilityDefinition *ContentMainAbility(const ContentCatalog *catalog,

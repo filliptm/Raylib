@@ -4,6 +4,7 @@
 #include "attack_content.h"
 #include "command_widgets.h"
 #include "content_catalog.h"
+#include "ui_system.h"
 #include "vfx_catalog.h"
 #include "raylib.h"
 #include "raymath.h"
@@ -120,8 +121,8 @@ float StudioFrame(App *w, float realDt)
 static void DrawStagePanel(App *w)
 {
     Rectangle panel = { 16, 74, 372, 520 };
-    DrawRectangleRec(panel, COMMAND_PANEL_BG);
-    DrawRectangleLinesEx(panel, 1.0f, COMMAND_PANEL_EDGE);
+    UiDrawFeaturePanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
+    UiDrawSignalRail(panel, COMMAND_WARN, false);
 
     CommandUi ui = { .world = w, .x = (int)panel.x + 14,
                      .y = (int)panel.y + 12, .width = (int)panel.width - 28,
@@ -304,8 +305,8 @@ static void DrawEditorPanel(App *w, Assets *assets)
     float panelWidth = 372.0f;
     Rectangle panel = { GetScreenWidth() - panelWidth - 16.0f, 74.0f,
                         panelWidth, GetScreenHeight() - 100.0f };
-    DrawRectangleRec(panel, COMMAND_PANEL_BG);
-    DrawRectangleLinesEx(panel, 1.0f, COMMAND_PANEL_EDGE);
+    UiDrawFeaturePanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
+    UiDrawSignalRail(panel, COMMAND_ACCENT, true);
 
     int abilityIndex = SelectedAbilityIndex(w);
     static int lastAbility = -2;
@@ -545,10 +546,10 @@ static void DrawTimeline(App *w)
     Rectangle panel = { 404.0f, screenH - 150.0f, screenW - 808.0f, 134.0f };
     if (panel.width < 320.0f) return;
 
-    DrawRectangleRec(panel, COMMAND_PANEL_BG);
-    DrawRectangleLinesEx(panel, 1.0f, COMMAND_PANEL_EDGE);
-    DrawText("TIMELINE  (drag a block to move its delay)",
-             (int)panel.x + 10, (int)panel.y + 6, 10, COMMAND_TEXT_DIM);
+    UiDrawFeaturePanel(panel, COMMAND_PANEL_BG, COMMAND_PANEL_EDGE, true);
+    UiDrawSignalRail(panel, COMMAND_WARN, false);
+    UiDrawText(UI_TEXT_CAPTION, "TIMELINE  //  DRAG A BLOCK TO MOVE ITS DELAY",
+               (Vector2){ panel.x + 12, panel.y + 7 }, COMMAND_TEXT_DIM);
 
     const float window = 2.0f;
     float originX = panel.x + 10.0f;

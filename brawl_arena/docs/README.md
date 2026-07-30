@@ -12,9 +12,9 @@ directory:
   workflows, tests, and interactive verification.
 - [Character pipeline](CHARACTER_PIPELINE.md): Meshy/Tripo conversion, raylib skeleton
   constraints, animation reuse, and model import.
-- [Visual design field guide](visual-design/index.html): implemented Helios Broadcast
+- [Visual design field guide](visual-design/index.html): implemented Arena Ink
   styling and menu/HUD references, with a preserved pre-implementation audit.
-- [Helios Broadcast implementation record](visual-design/IMPLEMENTATION_PLAN.md): UI
+- [Arena Ink implementation record](visual-design/IMPLEMENTATION_PLAN.md): UI
   architecture, state ownership, assets, persistence, screen migrations, milestones,
   verification matrix, risks, and delivered scope.
 - [UI smoke checklist](UI_SMOKE_CHECKLIST.md): repeatable viewport, input, screen,

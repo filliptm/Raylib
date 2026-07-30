@@ -52,6 +52,17 @@ void UiIconDraw(UiIcon icon, Vector2 c, float s, Color color)
             DrawCircle((int)(c.x + h*0.36f), (int)(c.y - h*0.14f), stroke, color);
             DrawCircle((int)(c.x + h*0.58f), (int)(c.y + h*0.14f), stroke, color);
             break;
+        case UI_ICON_STUDIO:
+            DrawCircleLines((int)c.x, (int)c.y, h*0.46f, color);
+            DrawCircle((int)c.x, (int)c.y, fmaxf(1.5f, stroke), color);
+            for (int i = 0; i < 4; i++)
+            {
+                float a = (float)i*PI/2.0f;
+                Line((Vector2){ c.x + cosf(a)*h*0.58f, c.y + sinf(a)*h*0.58f },
+                     (Vector2){ c.x + cosf(a)*h, c.y + sinf(a)*h },
+                     stroke, color);
+            }
+            break;
         case UI_ICON_PRACTICE:
         case UI_ICON_RANGE:
             DrawCircleLines((int)c.x, (int)c.y, h*0.78f, color);

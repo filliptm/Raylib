@@ -48,4 +48,4 @@ done
 
 python3 tools/check_ui_assets.py
 
-printf '%s\n' 'Helios UI policy checks passed'
+printf '%s\n' 'Arena Ink UI policy checks passed'

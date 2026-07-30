@@ -20,7 +20,7 @@ enum {
     TUTORIAL_COMMAND = 1 << 6
 };
 
-static bool g_continueRequested;
+static HudResultAction g_resultAction;
 
 static Color CueColor(const App *w, Color base)
 {
@@ -60,11 +60,87 @@ void HudObservePlayerInput(App *w, const PlayerInput *input)
     if (before != w->uiPreferences.tutorialFlags) ConfigMarkDirty();
 }
 
-bool HudConsumeContinue(void)
+HudResultAction HudConsumeResultAction(void)
 {
-    bool requested = g_continueRequested;
-    g_continueRequested = false;
-    return requested;
+    HudResultAction action = g_resultAction;
+    g_resultAction = HUD_RESULT_NONE;
+    return action;
+}
+
+void HudResetFeedback(void)
+{
+    g_resultAction = HUD_RESULT_NONE;
+}
+
+static void TriggerStamp(App *w, PresentationUiStamp stamp, float duration)
+{
+    UiFeedbackState *feedback = &w->presentation.uiFeedback;
+    feedback->stamp = stamp;
+    feedback->stampAge = 0.0f;
+    feedback->stampDuration = duration;
+}
+
+void HudUpdateFeedback(App *w, float dt)
+{
+    if (!w || w->session.brawlerCount <= 0) return;
+    UiFeedbackState *feedback = &w->presentation.uiFeedback;
+    Brawler *player = &w->session.brawlers[w->session.playerIdx];
+    bool superReady = player->superCharge >= 1.0f;
+    int phase = (int)w->session.match.phase;
+
+    feedback->stampAge += fmaxf(0.0f, dt);
+    feedback->objectivePulse =
+        fmaxf(0.0f, feedback->objectivePulse - fmaxf(0.0f, dt)*2.8f);
+
+    if (!feedback->initialized)
+    {
+        feedback->initialized = true;
+        feedback->wasSuperReady = superReady;
+        feedback->wasAlive = player->alive;
+        feedback->previousShieldBrokenTimer = player->shieldBrokenTimer;
+        feedback->previousMatchPhase = phase;
+        feedback->previousCountdownTeam = w->session.match.countdownTeam;
+        feedback->previousKills = w->session.kills;
+    }
+    else
+    {
+        if (phase == MATCH_COUNTDOWN &&
+            (feedback->previousMatchPhase != MATCH_COUNTDOWN ||
+             feedback->previousCountdownTeam != w->session.match.countdownTeam))
+        {
+            TriggerStamp(w, PRESENTATION_UI_STAMP_TEAM_LOCK, 1.15f);
+            feedback->objectivePulse = 1.0f;
+        }
+        else if (!feedback->wasSuperReady && superReady)
+        {
+            TriggerStamp(w, PRESENTATION_UI_STAMP_SUPER_READY, 0.95f);
+        }
+        else if (w->session.kills > feedback->previousKills)
+        {
+            TriggerStamp(w, PRESENTATION_UI_STAMP_KNOCKOUT, 0.78f);
+        }
+        else if (feedback->previousShieldBrokenTimer <= 0.0f &&
+                 player->shieldBrokenTimer > 0.0f)
+        {
+            TriggerStamp(w, PRESENTATION_UI_STAMP_SHIELD_BROKEN, 0.90f);
+        }
+        else if (feedback->wasAlive && !player->alive)
+        {
+            TriggerStamp(w, PRESENTATION_UI_STAMP_DOWNED, 0.90f);
+        }
+    }
+
+    if (phase == MATCH_OVER && feedback->previousMatchPhase != MATCH_OVER)
+    {
+        UiFocus(UiHash("result.continue"));
+    }
+
+    feedback->wasSuperReady = superReady;
+    feedback->wasAlive = player->alive;
+    feedback->previousShieldBrokenTimer = player->shieldBrokenTimer;
+    feedback->previousMatchPhase = phase;
+    feedback->previousCountdownTeam = w->session.match.countdownTeam;
+    feedback->previousKills = w->session.kills;
 }
 
 void HudDrawBars(App *w)
@@ -103,19 +179,10 @@ void HudDrawBars(App *w)
                 bar.x, bar.y - shellHeight - UiScale(4),
                 bar.width, shellHeight
             };
-            DrawRectangleRec(
-                (Rectangle){ shellBar.x - UiScale(1),
-                             shellBar.y - UiScale(1),
-                             shellBar.width + UiScale(2),
-                             shellBar.height + UiScale(2) },
-                t->shadow);
-            DrawRectangleRec(shellBar, t->hull);
-            Rectangle shellFill = shellBar;
-            shellFill.width *= Clamp(shieldRatio, 0.0f, 1.0f);
-            DrawRectangleRec(
-                shellFill,
-                b->shieldBrokenTimer > 0.0f
-                    ? t->enemy : CueColor(w, t->ion));
+            UiDrawProgress(shellBar, shieldRatio,
+                           b->shieldBrokenTimer > 0.0f
+                               ? t->enemy : CueColor(w, t->blue),
+                           false, 0);
             char shieldPoints[32];
             if (b->shieldBrokenTimer > 0.0f)
             {
@@ -128,13 +195,7 @@ void HudDrawBars(App *w)
             DrawBarText(shellBar, shieldPoints, t->paper);
         }
 
-        DrawRectangleRec((Rectangle){ bar.x - UiScale(2), bar.y - UiScale(2),
-                                      bar.width + UiScale(4), bar.height + UiScale(4) },
-                         t->shadow);
-        DrawRectangleRec(bar, t->hull);
-        Rectangle healthFill = bar;
-        healthFill.width *= Clamp(health, 0.0f, 1.0f);
-        DrawRectangleRec(healthFill, team);
+        UiDrawProgress(bar, health, team, false, 0);
         char healthPoints[24];
         snprintf(healthPoints, sizeof(healthPoints), "%d", b->health);
         DrawBarText(bar, healthPoints, t->paper);
@@ -154,7 +215,7 @@ void HudDrawBars(App *w)
         {
             DrawAmmo((Rectangle){ bar.x, bar.y + bar.height + UiScale(6),
                                   bar.width, UiScale(5) },
-                     b->ammo, ContentCharacter(&w->content, b->cls)->maxAmmo, t->ion);
+                     b->ammo, ContentCharacter(&w->content, b->cls)->maxAmmo, t->blue);
         }
 
         if (b->gems > 0)
@@ -164,7 +225,7 @@ void HudDrawBars(App *w)
             UiIconDraw(UI_ICON_GEM,
                        (Vector2){ screen.x - UiScale(12),
                                   bar.y + bar.height + UiScale(mine ? 25 : 15) },
-                       UiScale(11), t->reactor);
+                       UiScale(11), t->purple);
             UiDrawTextShadow(UI_TEXT_CAPTION, gems,
                              (Vector2){ screen.x, bar.y + bar.height +
                                         UiScale(mine ? 18 : 8) }, t->paper);
@@ -176,14 +237,23 @@ static void DrawObjective(App *w)
 {
     const UiTheme *t = UiSystemActive()->theme;
     Rectangle bounds = UiRefRect(434, 20, 412, 94);
-    UiDrawFeaturePanel(bounds, t->deck, t->line, true);
-    UiDrawDecoration(UI_DECORATION_RADAR_DISC, UiRefRect(594, 25, 84, 84),
-                     t->reactor, 0.055f);
-    UiDrawSignalRail(bounds, t->reactor, false);
+    float pulse = w->uiPreferences.reducedMotion
+                ? 0.0f : w->presentation.uiFeedback.objectivePulse;
+    if (pulse > 0.0f)
+    {
+        float grow = UiScale(8.0f*pulse);
+        bounds = (Rectangle){ bounds.x - grow, bounds.y - grow*0.45f,
+                              bounds.width + grow*2.0f,
+                              bounds.height + grow*0.90f };
+    }
+    UiDrawFeaturePanel(bounds, t->ink, t->paper, true);
+    UiDrawDecoration(UI_DECORATION_HALFTONE, UiRefRect(594, 25, 84, 84),
+                     t->purple, 0.22f);
+    UiDrawSignalRail(bounds, t->purple, false);
     UiDrawTextAligned(UI_TEXT_CAPTION,
                       w->session.sandbox ? "PRACTICE TELEMETRY" :
                       (w->tune.gemGrab ? "GEM GRAB // FIRST TO TARGET" : "SKIRMISH"),
-                      UiRefRect(454, 28, 372, 22), UI_ALIGN_CENTER, t->muted);
+                      UiRefRect(454, 28, 372, 22), UI_ALIGN_CENTER, t->textMuted);
 
     if (w->tune.gemGrab && !w->session.sandbox)
     {
@@ -195,7 +265,7 @@ static void DrawObjective(App *w)
         UiIconDraw(UI_ICON_ALLY, UiRefPoint(492, 73), UiScale(20), CueColor(w, t->ally));
         UiDrawText(UI_TEXT_HEADING, ally, UiRefPoint(516, 53), t->paper);
         UiDrawTextAligned(UI_TEXT_DATA, target, UiRefRect(558, 52, 164, 40),
-                          UI_ALIGN_CENTER, t->ready);
+                          UI_ALIGN_CENTER, t->gold);
         UiDrawTextAligned(UI_TEXT_HEADING, enemy, UiRefRect(728, 52, 44, 40),
                           UI_ALIGN_RIGHT, t->paper);
         UiIconDraw(UI_ICON_ENEMY, UiRefPoint(792, 73), UiScale(20), CueColor(w, t->enemy));
@@ -225,28 +295,94 @@ static void DrawObjective(App *w)
     }
 }
 
+static void DrawImpactStamp(const App *w)
+{
+    const UiFeedbackState *feedback = &w->presentation.uiFeedback;
+    if (feedback->stamp == PRESENTATION_UI_STAMP_NONE ||
+        feedback->stampAge >= feedback->stampDuration)
+        return;
+
+    const UiTheme *t = UiSystemActive()->theme;
+    const char *label = "";
+    Color fill = t->yellow;
+    Color text = t->ink;
+    switch (feedback->stamp)
+    {
+        case PRESENTATION_UI_STAMP_SUPER_READY:
+            label = "ULTIMATE READY!";
+            fill = t->purple;
+            text = t->paper;
+            break;
+        case PRESENTATION_UI_STAMP_SHIELD_BROKEN:
+            label = "SHELL BROKEN!";
+            fill = t->enemy;
+            text = t->paper;
+            break;
+        case PRESENTATION_UI_STAMP_TEAM_LOCK:
+            label = w->session.match.countdownTeam == TEAM_PLAYER
+                  ? "ALLY TEAM LOCK!" : "ENEMY TEAM LOCK!";
+            fill = w->session.match.countdownTeam == TEAM_PLAYER
+                 ? t->ally : t->enemy;
+            text = t->paper;
+            break;
+        case PRESENTATION_UI_STAMP_DOWNED:
+            label = "KNOCKED OUT!";
+            fill = t->enemy;
+            text = t->paper;
+            break;
+        case PRESENTATION_UI_STAMP_KNOCKOUT:
+        {
+            const CharacterUiStyle *style = ContentCharacterUiStyle(
+                w->session.brawlers[w->session.playerIdx].cls);
+            label = style ? style->impactLabel : "K.O.!";
+            fill = style ? style->primary : t->yellow;
+            text = UiThemeContrastRatio(t->ink, fill) >=
+                   UiThemeContrastRatio(t->paper, fill) ? t->ink : t->paper;
+            break;
+        }
+        default:
+            return;
+    }
+
+    float normalized = Clamp(feedback->stampAge/feedback->stampDuration, 0.0f, 1.0f);
+    float scale = w->uiPreferences.reducedMotion
+                ? 1.0f : 0.82f + 0.18f*UiEaseOutBack(
+                    UiMotionProgress(normalized, 0.0f, 0.28f, false));
+    float alpha = 1.0f - Clamp((normalized - 0.72f)/0.28f, 0.0f, 1.0f);
+    Rectangle base = UiRefRect(452, 126, 376, 64);
+    Rectangle panel = {
+        base.x + base.width*(1.0f - scale)*0.5f,
+        base.y + base.height*(1.0f - scale)*0.5f,
+        base.width*scale, base.height*scale
+    };
+    fill.a = (unsigned char)(255.0f*alpha);
+    text.a = fill.a;
+    UiDrawControlSurface(panel, fill, t->ink, true);
+    UiDrawTextFit(UI_TEXT_HEADING, label, panel, UI_ALIGN_CENTER, text);
+}
+
 static void DrawAbilityTile(Rectangle bounds, const char *eyebrow, const char *name,
                             const char *binding, float progress, bool ready,
                             Color accent)
 {
     const UiTheme *t = UiSystemActive()->theme;
-    UiDrawPanel(bounds, ready ? t->deckRaised : t->deck,
-                ready ? accent : t->line, true);
+    UiDrawPanel(bounds, ready ? t->surfaceRaised : t->inkSoft,
+                ready ? accent : t->paper, true);
     if (ready) UiDrawSignalRail(bounds, accent, true);
     UiDrawText(UI_TEXT_CAPTION, eyebrow,
                (Vector2){ bounds.x + UiScale(14), bounds.y + UiScale(9) },
-               ready ? accent : t->muted);
+               ready ? accent : t->textMuted);
     Rectangle nameBounds = { bounds.x + UiScale(14), bounds.y + UiScale(25),
                              bounds.width - UiScale(28), UiScale(28) };
     UiDrawTextFit(UI_TEXT_EMPHASIS, name, nameBounds, UI_ALIGN_LEFT,
-                  ready ? t->paper : t->mist);
+                  ready ? t->paper : t->textSecondary);
     UiDrawKeycap((Rectangle){ bounds.x + UiScale(14),
                               bounds.y + bounds.height - UiScale(34),
                               UiScale(86), UiScale(24) }, binding, ready);
     UiDrawProgress((Rectangle){ bounds.x + UiScale(112),
                                 bounds.y + bounds.height - UiScale(28),
                                 bounds.width - UiScale(126), UiScale(8) },
-                   progress, ready ? accent : t->hullBright, false, 0);
+                   progress, ready ? accent : t->surfaceStrong, false, 0);
     if (ready)
         UiDrawText(UI_TEXT_CAPTION, "READY",
                    (Vector2){ bounds.x + bounds.width - UiScale(58),
@@ -263,7 +399,7 @@ static void DrawAbilities(App *w, const Brawler *player)
     bool superReady = superProgress >= 1.0f;
     DrawAbilityTile(UiRefRect(920, 666, 336, 110), "ULTIMATE", super->name,
                     UiBindingLabel("RMB", "RB"), superProgress, superReady,
-                    CueColor(w, t->ready));
+                    CueColor(w, t->gold));
 
     if (secondary)
     {
@@ -326,7 +462,7 @@ static void DrawAbilities(App *w, const Brawler *player)
                         secondaryName,
                         UiBindingLabel("SHIFT", "LB"), progress,
                         ready,
-                        CueColor(w, t->ion));
+                        CueColor(w, t->blue));
     }
 }
 
@@ -381,7 +517,8 @@ static void DrawTutorial(const App *w, const Brawler *player)
     if (!prompt) return;
     const UiTheme *t = UiSystemActive()->theme;
     Rectangle chip = UiRefRect(430, 700, 420, 58);
-    UiDrawPanel(chip, t->deck, t->hullBright, true);
+    UiDrawPanel(chip, t->ink, t->paper, true);
+    UiDrawSignalRail(chip, t->yellow, false);
     UiDrawKeycap(UiRefRect(444, 711, 104, 36), binding, true);
     UiDrawTextFit(UI_TEXT_BODY, prompt, UiRefRect(566, 710, 266, 38),
                   UI_ALIGN_LEFT, t->paper);
@@ -394,7 +531,8 @@ static void DrawDowned(const Brawler *player, float respawnTotal)
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){ 30, 5, 10, 110 });
     Rectangle panel = UiRefRect(410, 296, 460, 190);
-    UiDrawFeaturePanel(panel, t->deckRaised, t->enemy, true);
+    UiDrawFeaturePanel(panel, t->ink, t->enemy, true);
+    UiDrawDecoration(UI_DECORATION_SPEED_LINES, panel, t->enemy, 0.13f);
     UiDrawSignalRail(panel, t->enemy, false);
     UiDrawTextAligned(UI_TEXT_TITLE, "BRAWLER DOWN", UiRefRect(438, 320, 404, 60),
                       UI_ALIGN_CENTER, t->enemy);
@@ -404,7 +542,7 @@ static void DrawDowned(const Brawler *player, float respawnTotal)
                       UI_ALIGN_CENTER, t->paper);
     UiDrawProgress(UiRefRect(474, 454, 332, 10),
                    1.0f - Clamp(player->respawnTimer/respawnTotal, 0.0f, 1.0f),
-                   t->safety, false, 0);
+                   t->yellow, false, 0);
 }
 
 static void DrawResult(App *w)
@@ -412,41 +550,84 @@ static void DrawResult(App *w)
     const UiTheme *t = UiSystemActive()->theme;
     bool won = w->session.match.winner == TEAM_PLAYER;
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                  (Color){ 2, 6, 12, 225 });
-    Rectangle panel = UiRefRect(330, 142, 620, 516);
+                  (Color){ 2, 6, 12, 236 });
+    Rectangle canvas = UiRefRect(76, 56, 1128, 688);
+    Vector2 left[4] = {
+        { canvas.x, canvas.y },
+        { canvas.x, canvas.y + canvas.height },
+        { canvas.x + canvas.width*0.43f, canvas.y + canvas.height },
+        { canvas.x + canvas.width*0.61f, canvas.y }
+    };
+    Vector2 right[4] = {
+        { canvas.x + canvas.width*0.61f, canvas.y },
+        { canvas.x + canvas.width*0.43f, canvas.y + canvas.height },
+        { canvas.x + canvas.width, canvas.y + canvas.height },
+        { canvas.x + canvas.width, canvas.y }
+    };
+    DrawTriangleFan(left, 4, won ? t->blue : t->enemy);
+    DrawTriangleFan(right, 4, won ? t->yellow : t->surfaceRaised);
+    UiDrawDecoration(UI_DECORATION_HALFTONE, canvas, t->ink, 0.18f);
+
+    Rectangle panel = UiRefRect(124, 84, 1032, 624);
     Color outcome = won ? t->ally : t->enemy;
-    UiDrawFeaturePanel(panel, t->deckRaised, outcome, true);
-    UiDrawDecoration(UI_DECORATION_ORBITAL_RING, UiRefRect(442, 188, 396, 396),
-                     outcome, 0.045f);
+    UiDrawFeaturePanel(panel, t->ink, t->paper, true);
+    UiDrawDecoration(UI_DECORATION_BURST, UiRefRect(414, 148, 452, 452),
+                     won ? t->yellow : t->enemy, 0.24f);
     UiDrawSignalRail(panel, outcome, false);
     UiDrawTextAligned(UI_TEXT_RESULT, won ? "VICTORY" : "DEFEAT",
-                      UiRefRect(372, 174, 536, 108), UI_ALIGN_CENTER, outcome);
-    UiDrawTextAligned(UI_TEXT_CAPTION, "FINAL BROADCAST",
-                      UiRefRect(372, 278, 536, 24), UI_ALIGN_CENTER, t->muted);
+                      UiRefRect(176, 104, 928, 104), UI_ALIGN_CENTER, outcome);
+    const CharacterDefinition *character = ContentCharacter(
+        &w->content, w->session.brawlers[w->session.playerIdx].cls);
+    if (character)
+    {
+        const CharacterUiStyle *style = ContentCharacterUiStyle(
+            w->session.brawlers[w->session.playerIdx].cls);
+        UiDrawCharacterMotif(style->motif,
+                             UiRefRect(430, 190, 420, 310),
+                             style->primary,
+                             style->secondary, 0.32f);
+        UiDrawTextAligned(UI_TEXT_HEADING, character->displayName,
+                          UiRefRect(428, 216, 424, 44),
+                          UI_ALIGN_CENTER, t->paper);
+        UiDrawTextAligned(UI_TEXT_CAPTION, style->impactLabel,
+                          UiRefRect(428, 258, 424, 28),
+                          UI_ALIGN_CENTER, style->secondary);
+    }
 
     char score[48];
     snprintf(score, sizeof(score), "%d  —  %d",
              w->session.match.teamGems[TEAM_PLAYER],
              w->session.match.teamGems[TEAM_ENEMY]);
-    UiDrawTextAligned(UI_TEXT_DISPLAY, score, UiRefRect(394, 310, 492, 80),
+    UiDrawTextAligned(UI_TEXT_DISPLAY, score, UiRefRect(390, 316, 500, 84),
                       UI_ALIGN_CENTER, t->paper);
     char summary[96];
-    snprintf(summary, sizeof(summary), "%d KOs  /  %d downs",
-             w->session.kills, w->session.deaths);
-    UiDrawTextAligned(UI_TEXT_DATA, summary, UiRefRect(394, 398, 492, 38),
-                      UI_ALIGN_CENTER, t->mist);
+    snprintf(summary, sizeof(summary), "%d KOs  //  %d DOWNS  //  %s",
+             w->session.kills, w->session.deaths,
+             won ? "TEAM SECURED" : "TEAM OVERRUN");
+    UiDrawTextAligned(UI_TEXT_DATA, summary, UiRefRect(280, 430, 720, 38),
+                      UI_ALIGN_CENTER, t->textSecondary);
 
     UiResponse continueButton =
-        UiButton(UiHash("result.continue"), UiRefRect(484, 490, 312, 78),
-                 "CONTINUE", UI_BUTTON_PRIMARY, UI_ICON_NEXT);
-    if (continueButton.activated) g_continueRequested = true;
+        UiButton(UiHash("result.continue"), UiRefRect(158, 586, 292, 72),
+                 "CONTINUE", UI_BUTTON_YELLOW, UI_ICON_NEXT);
+    UiResponse rematchButton =
+        UiButton(UiHash("result.rematch"), UiRefRect(494, 586, 292, 72),
+                 "REMATCH", UI_BUTTON_PRIMARY, UI_ICON_PRACTICE);
+    UiResponse changeButton =
+        UiButton(UiHash("result.change"), UiRefRect(830, 586, 292, 72),
+                 "CHANGE BRAWLER", UI_BUTTON_BLUE, UI_ICON_CONTROLS);
+    if (continueButton.activated) g_resultAction = HUD_RESULT_CONTINUE;
+    else if (rematchButton.activated)
+        g_resultAction = HUD_RESULT_REMATCH;
+    else if (changeButton.activated)
+        g_resultAction = HUD_RESULT_CHANGE_BRAWLER;
 
     int remaining = (int)ceilf(w->tune.matchResultHold - w->session.match.overTimer);
     if (remaining < 0) remaining = 0;
     char fallback[80];
     snprintf(fallback, sizeof(fallback), "AUTO RETURN IN %d", remaining);
-    UiDrawTextAligned(UI_TEXT_CAPTION, fallback, UiRefRect(486, 584, 308, 24),
-                      UI_ALIGN_CENTER, t->muted);
+    UiDrawTextAligned(UI_TEXT_CAPTION, fallback, UiRefRect(486, 670, 308, 24),
+                      UI_ALIGN_CENTER, t->textMuted);
 }
 
 void HudDrawPanel(App *w)
@@ -454,6 +635,7 @@ void HudDrawPanel(App *w)
     if (w->session.brawlerCount <= 0) return;
     Brawler *player = &w->session.brawlers[w->session.playerIdx];
     DrawObjective(w);
+    DrawImpactStamp(w);
     DrawAbilities(w, player);
     DrawTutorial(w, player);
 

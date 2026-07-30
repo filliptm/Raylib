@@ -11,6 +11,7 @@ void ContentCatalogResetCharacter(ContentCatalog *catalog, BrawlerClass characte
 
 const CharacterDefinition *ContentCharacter(const ContentCatalog *catalog,
                                             BrawlerClass character);
+const CharacterUiStyle *ContentCharacterUiStyle(BrawlerClass character);
 const AbilityDefinition *ContentMainAbility(const ContentCatalog *catalog,
                                             BrawlerClass character);
 const AbilityDefinition *ContentSuperAbility(const ContentCatalog *catalog,

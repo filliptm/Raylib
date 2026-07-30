@@ -76,9 +76,9 @@ One eleven-key `preview.showcase.*` record frames every non-rotating menu model:
 - `vertical_fov`
 
 The shared project-scoped record is validated with the same all-or-nothing transaction
-as gameplay. Profile-only keys are `profile.ui_scale`,
-`profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,
-`profile.input_glyph_mode`, and `profile.tutorial_flags`.
+as gameplay. Profile-only keys are `profile.ui_scale`, `profile.reduced_motion`,
+`profile.high_contrast`, `profile.tutorial_hints`, `profile.input_glyph_mode`, and
+`profile.tutorial_flags`.
 
 The loader rejects:
 

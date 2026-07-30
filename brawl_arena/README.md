@@ -34,23 +34,32 @@ visible along the bottom. The readouts derive health, attack, range, cooldown, a
 ability descriptions from the live content catalog, so tuned values remain accurate.
 
 Controls and Settings are modal overlays. Settings persist UI scale, reduced motion,
-high-contrast combat cues, tutorial visibility, and keyboard/gamepad glyph preference to
-the ignored player profile. Menu, roster, overlays, result screen, and tuning controls
-support pointer and keyboard focus; player-facing screens also support gamepad focus.
+high-contrast combat cues, tutorial visibility, and keyboard/gamepad glyph preference
+to the ignored player profile. Menu, roster, overlays,
+result screen, and tuning controls support pointer and keyboard focus; player-facing
+screens also support gamepad focus.
 
-The shell and HUD use the **Helios Broadcast** skin. Neutral CC0 hardware from Kenney's
-UI Pack - Sci-Fi supplies scalable bolted panels, buttons, keycaps, and progress frames;
-two cropped CC0 OpenGameArt motifs supply the orbital/radar stage linework. Both are
-tinted through the existing Helios palette, while Barlow/IBM Plex text and code-drawn
-icons remain authoritative. Resources load once through `UiSystem`, and every textured
-primitive retains the previous geometry fallback if a file is unavailable. Source,
-license, curated-runtime, and derivative records live together under `resources/ui/`.
+The shell and HUD use the **Arena Ink** skin: saturated blue, red, and yellow poster
+fields; heavy black contours; paper keylines; clipped corners; hard shadows; halftone;
+and code-drawn bursts and speed lines. The Brawl Arena wordmark and all UI geometry are
+drawn procedurally, so they scale cleanly without a runtime UI texture atlas. Each
+brawler adds a mechanic-derived saw, crosshair, blast, shield, or growth motif around
+the shared vector podium. The logo, character, and launch rail use one short orchestrated
+entrance; reduced motion resolves them immediately. The menu renders each live 3D
+brawler to a transparent target and composites a black-and-paper sticker outline around
+the silhouette. Circular multi-direction sampling and softened thresholds round the
+paper edge instead of producing eight-direction spikes. Barlow/IBM Plex text and
+code-drawn icons remain authoritative, and `UiSystem` owns the shared theme, typography,
+focus, modality, skin, and preferences.
 
 During a match, health and Scrapper shield points are centered inside the bars above
 each brawler. The player and allied bots always use green health fills; opponents always
 use red, even at low health, with ally/enemy shape icons retained as a second cue. The
 player's ammo pips remain beneath the body-anchored bar. There is no duplicate
-bottom-left health/ammo panel.
+bottom-left health/ammo panel. Short comic stamps call out player KOs, ultimate ready,
+Scrapper shell break, downed state, and Gem Grab team lock; the objective panel pulses
+only for the high-priority countdown transition. The result is a full poster with
+**Continue**, **Rematch**, and **Change Brawler** actions plus the existing timeout.
 
 `ESC` closes the nearest overlay or command center first, then steps back a screen:
 roster to menu, match to menu, and menu to quit. raylib's default escape-to-close behavior
@@ -342,13 +351,15 @@ object rather than as a light.
 
 Shadows are soft radial ground decals rather than hard cylinders.
 
-**Helios control hardware.** Player and developer UI surfaces are opaque physical
-controls rather than glass. Nine-slice Kenney textures scale without stretching their
-corners or screws, progress fills preserve their framed edges, and sparse
-OpenGameArt-derived rings sit behind menu characters and real result/objective data.
-`make ui-assets` deterministically rebuilds the two tintable motifs from their retained
-source sheets; `make check-ui` verifies dimensions, hashes, provenance files, ownership,
-and the absence of downloaded archives.
+**Arena Ink interface.** Player surfaces are bold printed shapes rather than glass:
+chamfered panels, heavy ink edges, offset shadows, paper keylines, and vivid state
+colors. Decorative density is concentrated around the logo, character stage, Deploy,
+objectives, and results; long developer-tool lists use the same pigments with quieter
+spacing. `make ui-assets` reports that no runtime atlas is required, while
+`make check-ui` verifies procedural ownership, local fonts, resource provenance, and
+the absence of downloaded archives. Menu motion is concentrated on the wordmark,
+sticker fighter, and launch rail; combat uses brief stamps rather than continuous
+ornament, and the result screen becomes a three-action match poster.
 
 **Ability VFX** are a reusable presentation library rather than art embedded in a
 character model. Stable gameplay events select one of 41 recipes, and each recipe layers
@@ -463,12 +474,12 @@ invisible.
 ## Imported characters
 
 SCRAPPER, LONGSHOT, TANK, and GUARDIAN are played as rigged, animated character models -
-on the menu podium, in character select, and in the arena. Mortar keeps its primitive
+on the menu stage, in character select, and in the arena. Mortar keeps its primitive
 brawler in its accent colour. Menu and character-select previews hold a fixed direction
 while their idle animation continues. Every candidate on both screens uses one
 project-authorable showcase: 180° yaw, 0.90 scale, zero offset, camera
 `(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV. Candidate changes swap
-only the model, so character placement and the hangar background remain stable. In a
+only the model, so character placement and the comic stage remain stable. In a
 match each model
 picks its clip from movement (idle, walking, running or dashing), flashes on hit, ghosts
 in bushes like everything else, and carries a red cast on enemies and a blue one on
@@ -573,9 +584,9 @@ See:
 - [Map packages](docs/MAPS.md)
 - [Development guide](docs/DEVELOPMENT.md)
 - [Ability VFX pipeline](docs/VFX_PIPELINE.md)
-- [Visual design field guide](docs/visual-design/index.html) — implemented Helios
-  Broadcast styling and screen references, plus the historical pre-implementation audit
-- [Helios Broadcast implementation plan](docs/visual-design/IMPLEMENTATION_PLAN.md) —
+- [Visual design field guide](docs/visual-design/index.html) — implemented Arena Ink
+  styling and screen references, plus the historical pre-implementation audit
+- [Arena Ink implementation record](docs/visual-design/IMPLEMENTATION_PLAN.md) —
   implementation record, architecture, milestones, and acceptance gates
 
 ## Gem Grab
@@ -594,9 +605,10 @@ is what makes the last gem tense.
 When the match is decided everything **stops**: no AI, no movement, no shooting, and any
 round still in flight is cleared so nothing hangs frozen in mid-air. Only effects and the
 camera keep running, so the deciding blow finishes playing out. The result is held for a
-few seconds - with the count shown - and then you are returned to the menu, or you can
-activate the explicit **CONTINUE** action. A finished match that carries on playing
-itself reads as a bug, not as a result.
+few seconds with the count shown. **CONTINUE** returns to the launch deck, **REMATCH**
+rebuilds the same mode and selected kit, and **CHANGE BRAWLER** opens the roster. The
+safe timeout still returns to the menu. A finished match that carries on playing itself
+reads as a bug, not as a result.
 
 The reactor ring leaves the vent approachable from the centre or either wide flank. Four
 small L-shaped pylon groups interrupt cross-map fire without subdividing the atrium, while
@@ -622,7 +634,7 @@ sandbox it started as, with the static training bots.
 
 ## Known gaps
 
-- No sound. Raylib's audio module is available but nothing is wired up.
+- No runtime sound effects, ambience, voice, or music are implemented.
 - No shadow mapping: shadows are blob decals, not cast from the key light.
 - Locomotion clips switch without crossfading; explicit action overlays blend in and out.
 - Mortar still uses the primitive fallback character.

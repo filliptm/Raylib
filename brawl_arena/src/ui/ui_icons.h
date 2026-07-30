@@ -8,6 +8,7 @@ typedef enum UiIcon {
     UI_ICON_CLOSE,
     UI_ICON_SETTINGS,
     UI_ICON_CONTROLS,
+    UI_ICON_STUDIO,
     UI_ICON_PRACTICE,
     UI_ICON_QUIT,
     UI_ICON_PREVIOUS,

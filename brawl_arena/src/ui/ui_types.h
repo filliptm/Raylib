@@ -46,7 +46,10 @@ typedef enum UiButtonStyle {
     UI_BUTTON_STANDARD = 0,
     UI_BUTTON_PRIMARY,
     UI_BUTTON_UTILITY,
-    UI_BUTTON_DANGER
+    UI_BUTTON_DANGER,
+    UI_BUTTON_BLUE,
+    UI_BUTTON_YELLOW,
+    UI_BUTTON_PURPLE
 } UiButtonStyle;
 
 typedef struct UiResponse {

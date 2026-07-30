@@ -1,6 +1,6 @@
 # Project Overview
 
-Last code-verified: 2026-07-28
+Last code-verified: 2026-07-29
 
 This is the maintained repository-level guide to the projects in this workspace. It is
 intended for contributors, coding agents, and anyone deciding where a change belongs.
@@ -621,9 +621,9 @@ The headless suite covers:
 - External map catalog loading and runtime construction for Helios-9 and Training Court.
 - Deterministic replay from identical input frames, including identical game events.
 - Isolation between simulation and presentation state.
-- UI layout/focus at four viewports, minimum targets, contrast, reduced motion,
-  nine-slice metadata, curated asset integrity, configuration round trips, and
-  the shared character-showcase contract.
+- UI layout/focus at four viewports, minimum targets, contrast, easing/reduced motion,
+  distinct character motifs, result actions, procedural-skin lifetime/policy, profile
+  preference round trips, and the shared character-showcase contract.
 - Character rig mismatch rejection, bind-relative retargeting math, deterministic GLB
   generation, canonical animation coverage, 1K source/generated texture contracts, and
   presentation-only action-overlay timing.
@@ -700,8 +700,8 @@ It also owns effective `Tuning`, the `ContentCatalog`, and configuration provena
 reduced-motion, contrast, tutorial, and glyph choices.
 `Assets` has process lifetime in `main.c` and owns shaders, meshes, textures, character
 models, animations, station models, and the scene render target.
-The process-lifetime `UiSystem` owns local font handles, the curated UI skin and its
-per-resource fallbacks, semantic theme/text services, reference-canvas layout, input
+The process-lifetime `UiSystem` owns local font handles, the procedural Arena Ink skin,
+theme/text/easing services, reference-canvas layout, reduced-motion state, input
 modality, and focus graphs.
 
 `ResetMatch()` clears only session, controller, and presentation state. Content,
@@ -725,8 +725,8 @@ Startup:
 4. Import legacy `tuning.cfg` once when the new local draft does not exist.
 5. Load and validate `data/maps/manifest.cfg` and every listed map.
 6. Generate procedural fallback assets, then load shaders, optional characters, station
-   models, build-generated ability-VFX atlases, local Helios fonts, and the curated UI
-   skin.
+   models, build-generated ability-VFX atlases, local UI fonts, and the procedural Arena
+   Ink skin.
 7. Build the initial match with the command center closed, then open the main menu.
 
 During an active match:
@@ -738,13 +738,22 @@ During an active match:
 4. Resolve out-of-combat health regeneration after projectile/ability damage, then
    update Gem Grab rules.
 5. Consume simulation events into presentation pools.
-6. Update effects and camera.
+6. Update effects, camera, and presentation-owned HUD feedback transitions.
 7. Autosave the local draft/profile when dirty.
 8. Render the world, optional post pass, HUD, command center, and transition fade.
 
+During a menu frame, `MenuUpdate()` advances the shared showcase, then
+`MenuPrepareDraw()` renders only the current brawler into a window-sized transparent
+target before the backbuffer pass. `MenuDraw()` paints the procedural comic backdrop,
+typed mechanic motif, and flat vector podium; composites the rounded outlined sticker
+through its shader; then draws screen controls, overlays, and the transition fade at
+native UI resolution. The wordmark, sticker, and launch rail share one short entrance,
+with an immediate reduced-motion resolution.
+
 When Gem Grab ends, player/AI/projectile simulation freezes while effects and the camera
-finish presenting the result. The result is banked into the profile once, then the shell
-returns to the menu after the configured hold or the explicit Continue action.
+finish presenting the result. The result is banked into the profile once. Continue
+returns to the menu, Rematch resets the same selected kit/mode, Change Brawler opens the
+roster, and the configured hold still provides an automatic menu fallback.
 
 ## Controls and modes
 
@@ -953,14 +962,21 @@ The presentation layer owns:
   use the procedural fallback, including Scrapper's braced Shell pose, Longshot's
   reach/brace/tuck Grapple, and Mortar's fallback crouched Mine Deploy. The internal
   optional clip names are `guard`, `grapple`, and `mine_deploy`.
-- A Helios-9 hangar/menu scene and non-rotating character previews, retaining idle
-  animation without automatic yaw rotation. Every character and both menu screens use
+- A flat vector arena podium and non-rotating character previews, retaining idle animation
+  without automatic yaw rotation. The live 3D preview renders through a transparent
+  target and a shader adds a black contour plus rounded paper sticker keyline using
+  sixteen circular directions, an intermediate ring, and softened alpha thresholds.
+  Every character and both menu screens use
   the same exact showcase: 180° yaw, 0.90 scale, zero offset, camera
   `(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV. Swapping candidates
   replaces only the model; the stage clock and background continue uninterrupted.
-- Opaque nine-slice Kenney interface hardware and two transparent OpenGameArt-derived
-  orbital/radar motifs, tinted through Helios tokens and independently replaceable by
-  code-drawn fallbacks.
+- The procedural Arena Ink interface: opaque chamfered shapes, thick ink contours,
+  paper keylines, offset shadows, bold blue/red/yellow fields, halftone, bursts, speed
+  lines, a code-drawn Brawl Arena wordmark, and mechanic-derived saw/crosshair/blast/
+  shield/growth character motifs. Short HUD stamps cover KO, ultimate-ready, Shell
+  break, downed, and Gem Grab team-lock transitions; results use a full three-action
+  poster. The former Kenney/OpenGameArt UI packs remain licensed reference material but
+  are not loaded at runtime.
 - Body-anchored health bars with their point values centered inside: the player team
   stays green and opponents stay red at every health level, reinforced by distinct
   ally/enemy icons. Scrapper's shield points or broken countdown occupy its separate
@@ -1021,7 +1037,7 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 
 ## Known limitations and next seams
 
-- No audio is implemented.
+- Runtime sound effects, ambience, voice, and music are not implemented.
 - Locomotion clip changes have no crossfade; explicit action overlays blend in and out
   over the selected locomotion pose.
 - Mortar uses a primitive fallback character.
@@ -1044,7 +1060,7 @@ workflow are in `brawl_arena/docs/CHARACTER_PIPELINE.md`.
 - `brawl_arena/docs/CHARACTER_PIPELINE.md`: rigged model/animation conversion.
 - `brawl_arena/docs/VFX_PIPELINE.md`: curated effect sources, atlas build, recipes,
   rendering rules, and verification.
-- `brawl_arena/docs/visual-design/index.html`: browser-ready Helios Broadcast runtime
+- `brawl_arena/docs/visual-design/index.html`: browser-ready Arena Ink runtime
   reference, linked menu/HUD compositions, and preserved pre-implementation audit.
 - `brawl_arena/docs/visual-design/IMPLEMENTATION_PLAN.md`: implementation record with
   ownership, file structure, persistence, screen migrations, gates, and delivered scope.
@@ -1162,14 +1178,17 @@ Interactive checks should cover the changed system. For broad gameplay changes, 
 - Bush concealment.
 - Crate destruction versus permanent walls.
 - Bot modes.
-- Gem pickup/drop/countdown/result.
+- Gem pickup/drop/countdown stamp and objective pulse, plus Continue/Rematch/Change
+  Brawler result actions.
 - Full restart and menu return.
 - Command-center input capture and persistence.
 - Closed-by-default command-center entry on a fresh launch plus live match-camera
   distance at both slider endpoints.
 - Primitive fallback plus rigged Scrapper, Longshot, Tank, and Guardian rendering.
-- Identical home/roster showcase framing while rapidly changing candidates, without
-  resetting the hangar background.
+- Identical home/roster showcase framing, typed character motifs, and rounded sticker
+  contour while rapidly changing candidates, without resetting the comic stage.
+- Menu entrance/reduced-motion behavior and UI-cue volume/mute plus silent-device
+  fallback.
 
 # Documentation maintenance
 

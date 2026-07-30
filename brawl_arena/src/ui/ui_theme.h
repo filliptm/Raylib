@@ -4,27 +4,27 @@
 #include "raylib.h"
 
 typedef struct UiTheme {
-    Color voidBg;
-    Color deepBg;
-    Color deck;
-    Color deckRaised;
-    Color hull;
-    Color hullBright;
-    Color line;
+    Color ink;
+    Color inkSoft;
+    Color surface;
+    Color surfaceRaised;
+    Color surfaceMuted;
+    Color surfaceStrong;
+    Color border;
     Color paper;
-    Color mist;
-    Color muted;
-    Color ion;
-    Color safety;
-    Color ready;
-    Color reactor;
+    Color textSecondary;
+    Color textMuted;
+    Color blue;
+    Color yellow;
+    Color gold;
+    Color purple;
     Color ally;
     Color enemy;
     Color shadow;
     Color scrim;
 } UiTheme;
 
-const UiTheme *UiThemeHelios(void);
+const UiTheme *UiThemeArenaInk(void);
 Color UiThemeHighContrast(Color color, bool enabled);
 float UiThemeContrastRatio(Color foreground, Color background);
 

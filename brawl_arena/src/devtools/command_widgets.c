@@ -11,14 +11,16 @@
 #define LABEL_W 132
 #define VALUE_W 62
 
-const Color COMMAND_PANEL_BG   = { 7, 17, 31, 255 };
-const Color COMMAND_PANEL_EDGE = { 59, 88, 116, 255 };
-const Color COMMAND_TEXT_MAIN  = { 243, 247, 251, 255 };
-const Color COMMAND_TEXT_DIM   = { 130, 149, 170, 255 };
-const Color COMMAND_ACCENT     = { 100, 185, 255, 255 };
-const Color COMMAND_ACCENT_DIM = { 41, 67, 94, 255 };
-const Color COMMAND_TRACK_BG   = { 26, 48, 73, 255 };
-const Color COMMAND_WARN       = { 255, 157, 66, 255 };
+// Developer tools use the same Arena Ink pigments as player screens, with a
+// quieter density so long parameter lists remain easy to scan.
+const Color COMMAND_PANEL_BG   = { 7, 16, 25, 255 };
+const Color COMMAND_PANEL_EDGE = { 151, 207, 239, 255 };
+const Color COMMAND_TEXT_MAIN  = { 255, 247, 219, 255 };
+const Color COMMAND_TEXT_DIM   = { 142, 173, 194, 255 };
+const Color COMMAND_ACCENT     = { 7, 108, 213, 255 };
+const Color COMMAND_ACCENT_DIM = { 18, 76, 141, 255 };
+const Color COMMAND_TRACK_BG   = { 38, 82, 124, 255 };
+const Color COMMAND_WARN       = { 255, 210, 30, 255 };
 
 static const void *g_activeSlider = NULL;
 
@@ -55,7 +57,7 @@ void CommandUiSection(CommandUi *ui, const char *title)
     ui->y += 8;
     UiDrawText(UI_TEXT_CAPTION, title, (Vector2){ ui->x, ui->y }, COMMAND_ACCENT);
     ui->y += 17;
-    DrawRectangle(ui->x, ui->y, ui->width, 1, (Color){ 48, 60, 80, 255 });
+    DrawRectangle(ui->x, ui->y, ui->width, 2, COMMAND_PANEL_EDGE);
     ui->y += 8;
 }
 
@@ -74,7 +76,7 @@ bool CommandUiButton(CommandUi *ui, const char *label)
     bool clicked = response.activated;
 
     UiDrawControlSurface(bounds,
-                         hover ? COMMAND_ACCENT_DIM : (Color){ 34, 42, 56, 255 },
+                         hover ? COMMAND_ACCENT_DIM : (Color){ 14, 48, 88, 255 },
                          hover ? COMMAND_ACCENT : COMMAND_PANEL_EDGE, false);
 
     if (response.focused && UiSystemActive()->focusVisible)

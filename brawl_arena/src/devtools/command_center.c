@@ -693,8 +693,6 @@ static void TabPreview(CommandUi *ui)
 //------------------------------------------------------------------------------------
 bool CommandCenterIsOpen(void) { return g_open; }
 
-void CommandCenterForceOpen(void) { g_open = true; }
-
 bool CommandCenterConsumeEscape(void)
 {
     if (!g_open) return false;
@@ -728,7 +726,7 @@ void CommandCenterDraw(App *w)
     if (!g_open)
     {
         UiDrawTextAligned(UI_TEXT_CAPTION, "TAB  COMMAND CENTER",
-                          UiRefRect(500, 772, 280, 24), UI_ALIGN_CENTER, theme->muted);
+                          UiRefRect(500, 772, 280, 24), UI_ALIGN_CENTER, theme->textMuted);
         return;
     }
 
@@ -756,7 +754,7 @@ void CommandCenterDraw(App *w)
     UiDrawText(UI_TEXT_CAPTION, source,
                (Vector2){ panel.x + inset, panel.y + UiScale(48) },
                w->config.recoveryDefaults ? COMMAND_WARN :
-               (projectChanges > 0 ? theme->safety : theme->ally));
+               (projectChanges > 0 ? theme->yellow : theme->ally));
     DrawLineEx((Vector2){ panel.x + inset, panel.y + headerHeight },
                (Vector2){ panel.x + panel.width - inset, panel.y + headerHeight },
                UiScale(1), COMMAND_PANEL_EDGE);
@@ -767,9 +765,9 @@ void CommandCenterDraw(App *w)
         railWidth,
         panel.height - headerHeight - footerHeight - UiScale(20)
     };
-    UiDrawPanel(rail, theme->voidBg, theme->hull, false);
+    UiDrawPanel(rail, theme->ink, theme->surfaceMuted, false);
     UiDrawText(UI_TEXT_CAPTION, "GAMEPLAY",
-               (Vector2){ rail.x + UiScale(10), rail.y + UiScale(10) }, theme->muted);
+               (Vector2){ rail.x + UiScale(10), rail.y + UiScale(10) }, theme->textMuted);
 
     float tabY = rail.y + UiScale(34);
     for (int i = 0; i < TAB_COUNT; i++)
@@ -777,13 +775,13 @@ void CommandCenterDraw(App *w)
         if (i == TAB_KIT)
         {
             UiDrawText(UI_TEXT_CAPTION, "CONTENT",
-                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->muted);
+                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->textMuted);
             tabY += UiScale(24);
         }
         if (i == TAB_STYLE)
         {
             UiDrawText(UI_TEXT_CAPTION, "PRESENTATION",
-                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->muted);
+                       (Vector2){ rail.x + UiScale(10), tabY + UiScale(2) }, theme->textMuted);
             tabY += UiScale(24);
         }
         Rectangle r = { rail.x + UiScale(6), tabY, rail.width - UiScale(12), UiScale(38) };
@@ -792,7 +790,7 @@ void CommandCenterDraw(App *w)
         bool active = (g_tab == (PanelTab)i);
         if (response.activated) g_tab = (PanelTab)i;
         DrawRectangleRec(r, active ? COMMAND_ACCENT_DIM :
-                         (hover ? theme->deckRaised : theme->voidBg));
+                         (hover ? theme->surfaceRaised : theme->ink));
         if (active) UiDrawSignalRail(r, COMMAND_ACCENT, false);
         UiDrawTextFit(UI_TEXT_CAPTION, TAB_NAMES[i],
                       (Rectangle){ r.x + UiScale(12), r.y,

@@ -241,7 +241,7 @@ offset, camera position/target, and vertical FOV for every character on both hom
 roster screens. It loads from `config/gameplay.cfg`, can be drafted locally, and is
 promoted with a kit or Save All. The tracked framing is 180° yaw, 0.90 scale, zero
 offset, camera `(0, 2.7, -7.6)`, target `(0, 1.4, 0)`, and 40° vertical FOV.
-Candidate changes do not reset the independently advancing hangar stage clock.
+Candidate changes do not reset the independently advancing comic-stage clock.
 
 Personal presentation choices are never project truth. `profile.ui_scale`,
 `profile.reduced_motion`, `profile.high_contrast`, `profile.tutorial_hints`,

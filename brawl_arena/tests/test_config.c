@@ -100,7 +100,7 @@ int main(int argc, char **argv)
     CHECK(CopyFile("config/gameplay.cfg", project), "could not copy canonical fixture");
     SetPaths(project, local, profile, absent);
 
-    App first = { 0 };
+    static App first;
     CHECK(ConfigInitialize(&first), "canonical configuration did not initialize");
     CHECK(first.config.projectLoaded, "project source was not marked loaded");
     CHECK(first.tune.renderScale == 1.5f,
@@ -174,7 +174,7 @@ int main(int argc, char **argv)
     CHECK(ConfigKitOverrideCount(&first, CLASS_HEALER) == 1,
           "edited Guardian value was not recognized as a draft");
 
-    App draftReload = { 0 };
+    static App draftReload;
     CHECK(ConfigInitialize(&draftReload), "draft reload failed");
     CHECK(draftReload.content.weapons[CLASS_HEALER].damage == 123,
           "draft did not override canonical value");
@@ -196,7 +196,7 @@ int main(int argc, char **argv)
     CHECK(ConfigKitOverrideCount(&draftReload, CLASS_HEALER) == 0,
           "promoted kit still differs from project baseline");
 
-    App promotedReload = { 0 };
+    static App promotedReload;
     CHECK(ConfigInitialize(&promotedReload), "promoted project reload failed");
     CHECK(promotedReload.content.weapons[CLASS_HEALER].damage == 137,
           "promoted value was not reproducible from project config");
@@ -212,7 +212,7 @@ int main(int argc, char **argv)
     ConfigFlush(&promotedReload);
     CHECK(ConfigPromoteAll(&promotedReload), "full project promotion failed");
 
-    App allReload = { 0 };
+    static App allReload;
     CHECK(ConfigInitialize(&allReload), "full promotion reload failed");
     CHECK(allReload.tune.moveSpeed == 12.25f &&
           allReload.tune.healthRegenRatio == 0.18f &&
@@ -233,7 +233,7 @@ int main(int argc, char **argv)
     allReload.uiPreferences.tutorialFlags = 37;
     ConfigMarkDirty();
     ConfigFlush(&allReload);
-    App profileReload = { 0 };
+    static App profileReload;
     CHECK(ConfigInitialize(&profileReload), "profile reload failed");
     CHECK(profileReload.tune.statWins == 9, "profile state was not isolated/persisted");
     CHECK(profileReload.uiPreferences.scale == 1.30f &&
@@ -250,7 +250,7 @@ int main(int argc, char **argv)
         "format_version 3\n"
         "kit.guardian.main.tick_interval 9.0\n"),
         "could not create invalid draft");
-    App rejectedDraft = { 0 };
+    static App rejectedDraft;
     CHECK(ConfigInitialize(&rejectedDraft), "invalid draft damaged canonical startup");
     CHECK(rejectedDraft.content.weapons[CLASS_HEALER].damage == 137 &&
           rejectedDraft.content.weapons[CLASS_HEALER].tickRate == 0.15f,
@@ -297,7 +297,7 @@ int main(int argc, char **argv)
         "kit.scrapper.main.kind projectile\n"),
         "could not create v1 typed migration fixture");
     SetPaths(v1Project, v1Local, v1Profile, absent);
-    App migrated = { 0 };
+    static App migrated;
     CHECK(ConfigInitialize(&migrated), "v1 typed project migration failed");
     CHECK(migrated.tune.moveSpeed == 7.25f &&
           migrated.content.weapons[CLASS_SNIPER].damage == 1111,
@@ -347,7 +347,7 @@ int main(int argc, char **argv)
         "kit.scrapper.secondary.counter_knockback_max 3.000000\n"),
         "could not create v2 typed migration fixture");
     SetPaths(v2Project, v2Local, v2Profile, absent);
-    App migratedV2 = { 0 };
+    static App migratedV2;
     CHECK(ConfigInitialize(&migratedV2), "v2 typed project migration failed");
     CHECK(migratedV2.tune.moveSpeed == 8.50f &&
           migratedV2.content.weapons[CLASS_SNIPER].damage == 1337,
@@ -384,7 +384,7 @@ int main(int argc, char **argv)
         "could not create legacy fixture");
     SetPaths(project, importedLocal, importedProfile, legacy);
 
-    App imported = { 0 };
+    static App imported;
     CHECK(ConfigInitialize(&imported), "legacy import initialization failed");
     CHECK(imported.config.legacyImported, "legacy source was not reported as imported");
     CHECK(imported.content.weapons[CLASS_HEALER].damage == 137,
@@ -403,7 +403,7 @@ int main(int argc, char **argv)
     CHECK(WriteText(staleProject, "format_version 3\ngameplay.move_speed 11\n"),
           "could not create stale project fixture");
     SetPaths(staleProject, staleLocal, staleProfile, absent);
-    App tolerant = { 0 };
+    static App tolerant;
     CHECK(ConfigInitialize(&tolerant),
           "stale project file dropped runtime startup to recovery defaults");
     CHECK(!tolerant.config.recoveryDefaults && tolerant.config.projectLoaded,
@@ -424,7 +424,7 @@ int main(int argc, char **argv)
     CHECK(WriteText(badLegacy, "version 2\nselected_kit 7\n"),
           "could not create out-of-range legacy fixture");
     SetPaths(project, badLocal, badProfile, badLegacy);
-    App guarded = { 0 };
+    static App guarded;
     CHECK(ConfigInitialize(&guarded),
           "out-of-range legacy file broke canonical startup");
     CHECK(!guarded.config.legacyImported,

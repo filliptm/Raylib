@@ -21,7 +21,7 @@
             <a href="index.html">System</a>
             <a href="menus.html" aria-current="page">Menus</a>
             <a href="hud.html">HUD + Tools</a>
-            <a href="audit.html">Audit + Roadmap</a>
+            <a href="audit.html">Audit</a>
         </div>
         <span class="proposal-badge">Runtime reference — implemented July 2026</span>
     </nav>
@@ -47,7 +47,8 @@
                 <p>
                     The open stage sells the active brawler without turning the launch screen
                     into a stat sheet. Title and utilities stay light; brawler, mode, Practice,
-                    and Deploy form one decisive bottom rail.
+                    and Deploy form one decisive bottom rail. The runtime now pops the wordmark,
+                    sticker fighter, and rail in as one short sequence.
                 </p>
             </div>
             <div class="game-frame-wrap">
@@ -92,7 +93,7 @@
                                 <path d="M135 95 L174 120 L159 176 L143 166 Z" fill="#647d95" stroke="#a8b7c8" stroke-width="2"/>
                             </svg>
                         </div>
-                        <span class="model-caption">Active brawler · Tank · home yaw +25°</span>
+                        <span class="model-caption">Active brawler · typed motif · rounded sticker contour</span>
                     </div>
 
                     <div class="home-launch">
@@ -175,7 +176,7 @@
                                 <circle cx="112" cy="54" r="8" fill="#64b9ff"/>
                             </svg>
                         </div>
-                        <span class="model-caption">Centered candidate · model-specific scale and camera target</span>
+                        <span class="model-caption">Centered candidate · mechanic motif · rounded sticker contour</span>
                     </div>
 
                     <article class="select-detail select-detail-right frame-panel">
@@ -213,26 +214,26 @@
         <section class="section">
             <div class="section-heading">
                 <div>
-                    <p class="eyebrow">03 / Presentation profiles</p>
-                    <h2>Frame the model, not the class</h2>
+                    <p class="eyebrow">03 / Shared showcase</p>
+                    <h2>One authored frame</h2>
                 </div>
                 <p>
-                    One global camera and offset cannot reliably frame models with radically
-                    different bounds, shields, silhouettes, and idle stances.
+                    Both player menu screens consume one project-authored showcase so changing
+                    candidates never moves the camera, stage, or protected composition.
                 </p>
             </div>
             <div class="table-scroll">
                 <table class="token-table">
                     <thead>
-                        <tr><th>Profile field</th><th>Purpose</th><th>Tank example</th></tr>
+                        <tr><th>Project field</th><th>Purpose</th><th>Tracked value</th></tr>
                     </thead>
                     <tbody>
-                        <tr><td><code>homeYaw</code></td><td>Intentional home-screen three-quarter pose</td><td>+25°</td></tr>
-                        <tr><td><code>selectYaw</code></td><td>Selector pose independent from the home state</td><td>180° / front</td></tr>
-                        <tr><td><code>homeOffset</code></td><td>Center the silhouette around home panels</td><td>Per imported bounds</td></tr>
-                        <tr><td><code>selectOffset</code></td><td>Center the candidate between detail panels</td><td>0.0 / centered</td></tr>
-                        <tr><td><code>scale</code></td><td>Normalize visible height without changing gameplay size</td><td>Model-specific</td></tr>
-                        <tr><td><code>cameraTargetY</code></td><td>Frame tall, wide, or crouched idle animations</td><td>Measured from pose bounds</td></tr>
+                        <tr><td><code>preview.showcase.yaw_degrees</code></td><td>Fixed menu facing</td><td>180°</td></tr>
+                        <tr><td><code>preview.showcase.scale</code></td><td>Preview-only model scale</td><td>0.90</td></tr>
+                        <tr><td><code>preview.showcase.offset_x/y</code></td><td>Center the silhouette</td><td>0.0 / 0.0</td></tr>
+                        <tr><td><code>preview.showcase.camera_position_*</code></td><td>Shared eye position</td><td>0.0 / 2.7 / -7.6</td></tr>
+                        <tr><td><code>preview.showcase.camera_target_*</code></td><td>Shared look target</td><td>0.0 / 1.4 / 0.0</td></tr>
+                        <tr><td><code>preview.showcase.vertical_fov</code></td><td>Shared perspective</td><td>40°</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -265,7 +266,7 @@
             </div>
             <div class="footer-meta">
                 <a href="hud.html">Open HUD + tool concepts →</a><br>
-                Brawl Arena / Helios Broadcast
+                Brawl Arena / Arena Ink
             </div>
         </footer>
     </main>

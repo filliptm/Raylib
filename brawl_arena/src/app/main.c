@@ -72,6 +72,7 @@ static void ResetMatch(App *w, BrawlerClass playerClass)
     memset(&w->session, 0, sizeof(w->session));
     memset(&w->controller, 0, sizeof(w->controller));
     memset(&w->presentation, 0, sizeof(w->presentation));
+    HudResetFeedback();
     w->session.sandbox = sandbox;
     GameRandomSeed(&w->session.random, 0xB4A71E5u);
     GameContext game = AppGameContext(w);
@@ -201,6 +202,7 @@ int main(void)
                         mapStatus, (int)sizeof(mapStatus)))
     {
         TraceLog(LOG_ERROR, "Map catalog: %s", mapStatus);
+        UiSystemUnload(&ui);
         CloseWindow();
         return 1;
     }
@@ -316,14 +318,23 @@ int main(void)
             CameraUpdate(&world, dt);
 
             BankResult(&world);
+            HudUpdateFeedback(&world, realDt);
 
             // Hand the player back to the menu, either when they have read the result or
             // as soon as they click through it.
             if (decided && !ShellIsTransitioning(&world))
             {
+                HudResultAction resultAction = HudConsumeResultAction();
                 if (world.session.match.overTimer > world.tune.matchResultHold ||
-                    HudConsumeContinue())
+                    resultAction == HUD_RESULT_CONTINUE)
                     ShellRequestScreen(&world, SCREEN_MENU);
+                else if (resultAction == HUD_RESULT_REMATCH)
+                {
+                    world.matchRestartPending = true;
+                    world.flow.matchResultBanked = false;
+                }
+                else if (resultAction == HUD_RESULT_CHANGE_BRAWLER)
+                    ShellRequestScreen(&world, SCREEN_BRAWLERS);
             }
         }
         else if (world.flow.screen == SCREEN_STUDIO)
@@ -397,6 +408,7 @@ int main(void)
         }
         else
         {
+            MenuPrepareDraw(&world);
             BeginDrawing();
                 ClearBackground(BLACK);
                 MenuDraw(&world);
@@ -407,6 +419,7 @@ int main(void)
     }
 
     ConfigFlush(&world);
+    MenuUnload();
     UiSystemUnload(&ui);
     AssetsUnload(&assets);
     CloseWindow();

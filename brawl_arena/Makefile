@@ -169,7 +169,8 @@ $(SECONDARIES_TEST_TARGET): tests/test_secondaries.c $(GAME_CORE_OBJECTS)
 		$(GAME_CORE_OBJECTS) $(RAYLIB_LIBS) $(FRAMEWORKS) -lm
 
 $(UI_TEST_TARGET): tests/test_ui.c $(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o \
-	$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/ui/ui_skin.o $(OBJ_DIR)/content/content_catalog.o
+	$(OBJ_DIR)/ui/ui_icons.o $(OBJ_DIR)/ui/ui_skin.o \
+	$(OBJ_DIR)/content/content_catalog.o
 	$(CC) $(CFLAGS) $(RAYLIB_FLAGS) $(PROJECT_INCLUDES) -o $@ tests/test_ui.c \
 		$(OBJ_DIR)/ui/ui_system.o $(OBJ_DIR)/ui/ui_theme.o $(OBJ_DIR)/ui/ui_icons.o \
 		$(OBJ_DIR)/ui/ui_skin.o \
@@ -281,7 +282,7 @@ check-ui:
 	sh tools/check_ui.sh
 
 ui-assets:
-	python3 tools/build_ui_assets.py
+	@echo "Arena Ink UI graphics are generated procedurally; no runtime atlas build is required."
 
 check-character-assets: character-assets
 	python3 tools/check_character_assets.py $(CHARACTER_MANIFEST)
@@ -297,8 +298,8 @@ help:
 	@echo "  make test   - run headless config and combat tests"
 	@echo "  make sanitize - run headless tests under ASan/UBSan"
 	@echo "  make check-architecture - enforce source dependency boundaries"
-	@echo "  make check-ui - enforce Helios UI ownership and resource policy"
-	@echo "  make ui-assets - rebuild tracked tintable UI motifs from source sheets"
+	@echo "  make check-ui - enforce Arena Ink UI ownership and resource policy"
+	@echo "  make ui-assets - report the procedural Arena Ink asset policy"
 	@echo "  make character-assets - bake shared animations into runtime GLBs"
 	@echo "  make check-character-assets - validate model, animation, and 1K texture contracts"
 	@echo "  make vfx-assets - build the curated ability-VFX atlases"

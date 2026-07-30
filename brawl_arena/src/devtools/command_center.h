@@ -10,9 +10,6 @@ void CommandCenterUpdate(App *w);
 void CommandCenterDraw(App *w);
 
 bool CommandCenterIsOpen(void);
-
-// Opens the panel from elsewhere, e.g. the menu's TUNING card.
-void CommandCenterForceOpen(void);
 bool CommandCenterConsumeEscape(void);
 
 // True when the cursor is over the panel, so the game should ignore mouse input.
